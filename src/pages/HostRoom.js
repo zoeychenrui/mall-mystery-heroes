@@ -17,6 +17,8 @@ const HostRoom = () => {
         const roomRef = await addDoc(collection(db, "rooms"), { 
           hostId: user.uid,
         });
+        const players = await addDoc(collection(roomRef, "players"), {
+        });
         navigate(`/rooms/${roomRef.id}`);
       } else {
         console.error("No user is signed in.");
