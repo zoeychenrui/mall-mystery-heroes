@@ -1,13 +1,19 @@
 import './App.css';
-import './components/HostRoom';
-import HostRoom from './components/HostRoom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { ChakraProvider } from '@chakra-ui/react';
+import HostRoom from './pages/HostRoom';
+import PlayerListPage from './pages/PlayerListPage';
 
 function App() {
   return (
-    <div className="homepage">
-      <h1>Mall Mystery Heroes</h1>
-      <HostRoom/>
-    </div>
+    <ChakraProvider> 
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<HostRoom />} />
+          <Route path="/rooms/:roomID" element={<PlayerListPage />} />
+        </Routes>
+      </BrowserRouter>
+    </ChakraProvider>
   );
 }
 
