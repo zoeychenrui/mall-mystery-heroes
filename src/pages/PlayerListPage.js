@@ -14,7 +14,7 @@ const PlayerListPage = () => {
             Room ID: {roomID}
         </Heading>
         <PlayerAddition roomID = {roomID}/>
-        <PlayerList />
+        <PlayerList roomID = {roomID}/>
         </Flex>
     )
 }
