@@ -16,6 +16,7 @@ const firebaseConfig = {
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
   console.log("Firebase apped:", app);
+  export const functions = getFunctions(app);
 
   if (process.env.NODE_ENV === 'development') {
     connectFunctionsEmulator(getFunctions(app), "localhost", 5001);

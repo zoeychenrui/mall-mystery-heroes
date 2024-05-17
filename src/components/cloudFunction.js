@@ -1,32 +1,45 @@
-import React, { useState, useEffect } from "react";
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import React, { useState } from "react";
+import { functions } from "../utils/firebase";
+import { httpsCallable } from 'firebase/functions';
 import { Flex, Button } from '@chakra-ui/react';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
-const cloudFunction = () => { 
+const CloudFunction = () => {
     const [message, setMessage] = useState("Default Message");
+    const auth = getAuth();
 
     async function callTargetFunction() {
-        const targetFunction = httpsCallable(getFunctions(), 'targetFunction')
+        const user = auth.currentUser;
+    
+        if (!user) {
+            setMessage("User not authenticated");
+            return;
+        }
+    
+        const targetFunction = httpsCallable(functions, 'targetFunction');
         try {
-            const data = {}
-            const result = await targetFunction(data)
-            if(result.data.success) {
-                setMessage('Firebase function called successfully')
+            const data = { sampleKey: "sampleValue" }; // Your data object
+            console.log("Sending data:", data);
+            const result = await targetFunction(data);
+            console.log("Result:", result); // Log the result
+            if (result.data.success) {
+                setMessage(result.data.message);
             } else {
-                setMessage('Firebase function has an error')
+                setMessage('Firebase function has an error');
             }
         } catch (error) {
-            console.error("Error: ", error)
+            console.error("Error:", error);
+            setMessage('Error calling Firebase function');
         }
-    }
-    
+    }    
+
     return (
         <Flex>
-           <Button onClick={() => {callTargetFunction}}>
+            <Button onClick={callTargetFunction}>
                 {message}
-           </Button>
+            </Button>
         </Flex>
     );
 };
 
-export default cloudFunction;
+export default CloudFunction;
