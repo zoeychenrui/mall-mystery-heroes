@@ -55,7 +55,8 @@ const PlayerAddition = (props) => {
                         name: PlayerName,
                         nameLowerCase: PlayerNameLowCase,
                         isAlive: true,
-                        score: 0
+                        score: 0,
+                        targets: {}
                     })
                     //logs player added
                     .then((docRef) => {
