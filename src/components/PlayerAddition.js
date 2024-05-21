@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {Button, 
         Flex, 
         Input,
@@ -11,7 +11,12 @@ import {Button,
         onClose
         } from '@chakra-ui/react';
 
-import { collection, addDoc, query, where, getDocs} from "firebase/firestore"; 
+import {collection, 
+        addDoc, 
+        query, 
+        where, 
+        getDocs,
+        onSnapshot} from "firebase/firestore"; 
 import {db} from '../utils/firebase';
 
 //adds player to database
@@ -20,7 +25,9 @@ const PlayerAddition = (props) => {
     const [PlayerName, setPlayerName] = useState(''); //defines player name
     const [error, setError] = useState(''); //defines the message for error
     const roomID = props.roomID;
+    const onPlayerAdded = props.onPlayerAdded;
     
+    //setes PlayerName to input
     const handleInputChange = (event) => {
         setPlayerName(event.target.value);
     };
@@ -51,7 +58,7 @@ const PlayerAddition = (props) => {
             .then((querySnapshot) => {
                 //adds new doc with player info
                 if (querySnapshot.empty) {
-                    const docRef = addDoc((playerRef), {
+                    addDoc((playerRef), {
                         name: PlayerName,
                         nameLowerCase: PlayerNameLowCase,
                         isAlive: true,
@@ -66,7 +73,13 @@ const PlayerAddition = (props) => {
                         setError("Error while adding player. Check console.");
                         setShowAlert(true);
                         console.error("Error adding player:", error);
+                        return;
                     });
+    
+                    //onPlayerAdded callback called
+                    if (onPlayerAdded) {
+                        onPlayerAdded(PlayerName);
+                    }
                 }
                 //notifies for duplicate player
                 else {
@@ -97,7 +110,7 @@ const PlayerAddition = (props) => {
                     <AlertIcon/>
                     <AlertTitle>Error: </AlertTitle>
                     <AlertDescription>{error}</AlertDescription>
-                    </Box>
+                </Box>
                 <CloseButton
                     alignSelf='flex-start'
                     position='relative'

@@ -1,10 +1,10 @@
-import TargetGenerator from './TargetGenerator';
+import {TargetGenerator} from './TargetGenerator';
 import { Button } from '@chakra-ui/react';
 
 const TargetGeneratorTest = () => {
     const Test = () => {
         let users = ['David', 'Zoey', 'John', 'Min', 'Andy', 'Joey', 'YuRa', 'Robby', 'Ricardo', 'Diegs'];
-        users.push('Matt', 'Will', 'Jordan H', 'Jordan M', 'Hadley', 'Nathan');
+        //users.push('Matt', 'Will', 'Jordan H', 'Jordan M', 'Hadley', 'Nathan');
         const targetMap = TargetGenerator(users);
         console.log('Generated Target Map');
         
@@ -31,9 +31,7 @@ const TargetGeneratorTest = () => {
 
     return (  
         <div>
-            <Button
-            onClick = {Test}
-            >
+            <Button onClick = {Test}>
                 Generate Targets!
             </Button>
         </div>
