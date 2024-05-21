@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
+import { GoogleAuthProvider, connectAuthEmulator, getAuth } from 'firebase/auth';
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
     apiKey: process.env.REACT_APP_APIKEY,
@@ -15,13 +15,17 @@ const firebaseConfig = {
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+  const auth = getAuth(app);
+  const functions = getFunctions(app);
+
   console.log("Firebase apped:", app);
-  export const functions = getFunctions(app);
 
   if (process.env.NODE_ENV === 'development') {
-    connectFunctionsEmulator(getFunctions(app), "localhost", 5001);
+    connectFunctionsEmulator(functions, "localhost", 5001);
+    connectAuthEmulator(auth, "http://localhost:9099");
+    connectFirestoreEmulator(db, "localhost", 8080);
   }
 
-  export const auth = getAuth(app);
   export const googleProvider = new GoogleAuthProvider();
-  export {db};
+  export { auth, db, functions };
+
