@@ -62,5 +62,5 @@ function TargetGenerator(users) {
     console.log("playerData finalized: ", playerData);
     return targetMap;
 };
-
+//Note: playerData important for future targeting
 export {TargetGenerator, playerData};

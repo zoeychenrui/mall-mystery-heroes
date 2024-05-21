@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {Button, 
         Flex, 
         Input,
@@ -11,7 +11,12 @@ import {Button,
         onClose
         } from '@chakra-ui/react';
 
-import { collection, addDoc, query, where, getDocs} from "firebase/firestore"; 
+import {collection, 
+        addDoc, 
+        query, 
+        where, 
+        getDocs,
+        onSnapshot} from "firebase/firestore"; 
 import {db} from '../utils/firebase';
 
 //adds player to database
@@ -20,8 +25,9 @@ const PlayerAddition = (props) => {
     const [PlayerName, setPlayerName] = useState(''); //defines player name
     const [error, setError] = useState(''); //defines the message for error
     const roomID = props.roomID;
-    let InputCounter = 0; //used for deleting blank document
+    const onPlayerAdded = props.onPlayerAdded;
     
+    //setes PlayerName to input
     const handleInputChange = (event) => {
         setPlayerName(event.target.value);
     };
@@ -63,27 +69,16 @@ const PlayerAddition = (props) => {
                     .then((docRef) => {
                         console.log("Player added with ID: ", docRef.id);
                     })
-                    .then (() => {
-                        InputCounter++;
-                    })
                     .catch((error) => {
                         setError("Error while adding player. Check console.");
                         setShowAlert(true);
                         console.error("Error adding player:", error);
+                        return;
                     });
-                    //deletes empty document once the first player is added
-                    if (InputCounter === 2) {
-                        const snapshot = playerRef.get();
-                        for (const doc of snapshot.docs) {
-                            if (Object.keys(doc.data().length === 0)) {
-                               try {
-                                    doc.delete();
-                               }
-                               catch(error) {
-                                console.log("Error deleting player: ", error);
-                               }
-                            }
-                        }
+    
+                    //onPlayerAdded callback called
+                    if (onPlayerAdded) {
+                        onPlayerAdded(PlayerName);
                     }
                 }
                 //notifies for duplicate player
@@ -115,7 +110,7 @@ const PlayerAddition = (props) => {
                     <AlertIcon/>
                     <AlertTitle>Error: </AlertTitle>
                     <AlertDescription>{error}</AlertDescription>
-                    </Box>
+                </Box>
                 <CloseButton
                     alignSelf='flex-start'
                     position='relative'

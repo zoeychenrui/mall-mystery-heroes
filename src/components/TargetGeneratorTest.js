@@ -31,9 +31,7 @@ const TargetGeneratorTest = () => {
 
     return (  
         <div>
-            <Button
-            onClick = {Test}
-            >
+            <Button onClick = {Test}>
                 Generate Targets!
             </Button>
         </div>

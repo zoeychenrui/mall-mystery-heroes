@@ -24,25 +24,8 @@ const PlayerRemove = (props) => {
     const roomID = props.roomID;
     const [showAlert, setShowAlert] = useState(false); //defines state of alert showing
     const [error, setError] = useState(''); //defines the message for error
-    //DELETE LATER
-    const [playerData, setPlayerData] = useState([]);
-    //DELETE LATER
-    useEffect(() => {
-        const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
-
-        // pulls player names from database
-        const unsubscribe = onSnapshot(playerCollectionRef, (snapshot) => {
-            const newPlayerData = [];
-            snapshot.forEach(doc => {
-                newPlayerData.push(doc.data().name);
-            });
-            setPlayerData(newPlayerData);
-        });
-
-        return () => {
-            unsubscribe();
-        };
-    }, [playerData]); 
+    const onPlayerRemoved = props.onPlayerRemoved;
+    const playerData = props.arrayOfPlayers;
 
     //closes Alert
     const onClose = () => {
@@ -66,19 +49,34 @@ const PlayerRemove = (props) => {
             setShowAlert(true);
             return;
         }
+
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const playerQuery = query(playerCollectionRef, where ('name', '==', selectedPlayer));
         const snapshot = await getDocs(playerQuery);
+        
+        if (snapshot.empty) {
+            console.error("Player not found");
+            setError('Player not found');
+            setShowAlert(true);
+            return;
+        }
+
         const docRef = snapshot.docs[0].ref; //ref to player selected
+
         try {
             const playerRefSnapshot = await getDocs(playerCollectionRef);
-            //adds blank doc if only one player exists
+            //adds blank doc if only one player exists. 
+            //required so players subcollection can exist after deleting all players. Safety Measure.
             if (playerRefSnapshot == 1) {
                 addDoc(playerCollectionRef, {});
             }
             //deletes player's document from database
             await deleteDoc(docRef);
+            if (onPlayerRemoved) {
+                onPlayerRemoved(selectedPlayer);
+            }
             console.log(`selected player removed successfully`);
+            
         }
         catch(error) {
             console.error("error removing player: ", error);
@@ -110,6 +108,8 @@ const PlayerRemove = (props) => {
                             value = {selectedPlayer}
                             onChange = {handleChange}
                             size = 'lg'>
+                        <option key = '' value = ''></option>
+
                         {playerData.map((player, index) => (
                             <option key = {index} 
                                     value = {player} >
