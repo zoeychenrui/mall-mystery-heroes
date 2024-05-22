@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState} from 'react';
 import {Button, 
         Flex, 
         Input,
@@ -8,7 +8,6 @@ import {Button,
         AlertDescription,
         CloseButton,
         Box,
-        onClose
         } from '@chakra-ui/react';
 
 import {collection, 
@@ -16,7 +15,7 @@ import {collection,
         query, 
         where, 
         getDocs,
-        onSnapshot} from "firebase/firestore"; 
+        } from "firebase/firestore"; 
 import {db} from '../utils/firebase';
 
 //adds player to database

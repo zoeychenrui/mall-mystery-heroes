@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState} from 'react';
 import { Flex, 
         Button, 
         Select,
@@ -8,7 +8,7 @@ import { Flex,
         AlertTitle,
         AlertDescription,
         CloseButton,
-        option } from '@chakra-ui/react';
+         } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
 import { collection, 
         deleteDoc, 
@@ -16,7 +16,7 @@ import { collection,
         where, 
         getDocs,
         addDoc,
-        onSnapshot} from "firebase/firestore"; 
+        } from "firebase/firestore"; 
 
 //import {playerData} from './PlayerList';
 const PlayerRemove = (props) => {
@@ -67,7 +67,7 @@ const PlayerRemove = (props) => {
             const playerRefSnapshot = await getDocs(playerCollectionRef);
             //adds blank doc if only one player exists. 
             //required so players subcollection can exist after deleting all players. Safety Measure.
-            if (playerRefSnapshot == 1) {
+            if (playerRefSnapshot === 1) {
                 addDoc(playerCollectionRef, {});
             }
             //deletes player's document from database

@@ -1,7 +1,7 @@
 import React from 'react';
 import { auth, db } from "../utils/firebase";
-import { doc, collection, addDoc, setDoc } from 'firebase/firestore';
-import { Button, Flex, Heading, Image } from '@chakra-ui/react';
+import { collection, addDoc } from 'firebase/firestore';
+import { Button, Flex, Heading } from '@chakra-ui/react';
 import Auth from '../components/auth';
 import { useNavigate } from 'react-router-dom';
 
@@ -16,8 +16,6 @@ const HostRoom = () => {
       if (user) {
         const roomRef = await addDoc(collection(db, "rooms"), { 
           hostId: user.uid,
-        });
-        const players = await addDoc(collection(roomRef, "players"), {
         });
         navigate(`/rooms/${roomRef.id}`);
       } else {

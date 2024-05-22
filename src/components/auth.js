@@ -1,6 +1,6 @@
-import { auth, googleProvider } from "../utils/firebase";
+import { auth } from "../utils/firebase";
 import { Button, Input } from '@chakra-ui/react';
-import { createUserWithEmailAndPassword, signInWithPopup, signOut, signInWithEmailAndPassword } from 'firebase/auth'
+import { createUserWithEmailAndPassword, signOut, signInWithEmailAndPassword } from 'firebase/auth'
 import { useState } from 'react';
 
 
@@ -30,15 +30,6 @@ const Auth = () => {
         }
     };
     
-
-    const signInWithGoogle = async () => {
-        try {
-            await signInWithPopup(auth);
-        } catch(err) {
-            console.error(err);
-        }
-    };
-
     const logout = async () => {
         try {
             await signOut(auth);
@@ -62,7 +53,6 @@ const Auth = () => {
             />
             <Button onClick={signIn}> Sign In</Button>
             <Button onClick={signUp}>Create Account</Button>
-            {/* <Button onClick={signInWithGoogle}>Sign in with Google</Button> */}
             <Button onClick={logout}>Logout</Button>
         </div>
     );

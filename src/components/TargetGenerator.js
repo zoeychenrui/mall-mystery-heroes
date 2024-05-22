@@ -43,10 +43,10 @@ function TargetGenerator(users) {
             let targetIndex = (playerData[currPlayer].lastTargetIndex + 1) % users.length;
             const target = targetList[targetIndex];
             const originalDex = targetIndex;
-            while (playerData[target].numOfAssassins == MAXTARGETS 
+            while (playerData[target].numOfAssassins === MAXTARGETS 
                    || target === currPlayer) {
                 targetIndex = (targetIndex + 1) % users.length;
-                if (targetIndex == originalDex) {
+                if (targetIndex === originalDex) {
                     console.log(`had to break for ${currPlayer}`)
                     break;
                 }
