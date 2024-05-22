@@ -8,14 +8,14 @@ import {Button,
         AlertDescription,
         CloseButton,
         Box,
-        } from '@chakra-ui/react';
+} from '@chakra-ui/react';
 
 import {collection, 
         addDoc, 
         query, 
         where, 
         getDocs,
-        } from "firebase/firestore"; 
+} from "firebase/firestore"; 
 import {db} from '../utils/firebase';
 
 //adds player to database
@@ -61,7 +61,7 @@ const PlayerAddition = (props) => {
                         name: PlayerName,
                         nameLowerCase: PlayerNameLowCase,
                         isAlive: true,
-                        score: 0,
+                        score: 10,
                         targets: {}
                     })
                     //logs player added
@@ -104,20 +104,20 @@ const PlayerAddition = (props) => {
     return ( 
         <div>
             {showAlert && (
-            <Alert status='error'>
-                <Box>
-                    <AlertIcon/>
-                    <AlertTitle>Error: </AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
-                </Box>
-                <CloseButton
-                    alignSelf='flex-start'
-                    position='relative'
-                    right={-1}
-                    top={-1}
-                    onClick={onClose}
-                />
-            </Alert>
+                <Alert status='error'>
+                    <Box>
+                        <AlertIcon/>
+                        <AlertTitle>Error: </AlertTitle>
+                        <AlertDescription>{error}</AlertDescription>
+                    </Box>
+                    <CloseButton
+                        alignSelf='flex-start'
+                        position='relative'
+                        right={-1}
+                        top={-1}
+                        onClick={onClose}
+                    />
+                </Alert>
             )}
                 
             <form onSubmit={handleSubmit}>
