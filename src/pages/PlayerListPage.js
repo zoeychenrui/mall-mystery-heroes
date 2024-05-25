@@ -12,6 +12,7 @@ import { Button,
 import PlayerAddition from '../components/PlayerAddition';
 import PlayerList from '../components/PlayerList';
 import PlayerRemove from "../components/PlayerRemove";
+import KillButton from '../components/KillButton';
 import {collection, query, getDocs} from 'firebase/firestore';
 import {db} from '../utils/firebase';
 
@@ -106,6 +107,10 @@ const PlayerListPage = () => {
             setShowAlert(true);
         }
     }
+
+    const handlekill = (PlayerName) => {
+        console.log(`{The player has been killed}`);
+    }
                
     return (
         <Flex>
@@ -133,6 +138,9 @@ const PlayerListPage = () => {
             <Button colorScheme='teal' variant='outline' onClick={handleLobbyRoom}>
                 Begin Game
             </Button>
+            <KillButton arrayOfPlayers = {arrayOfPlayers}
+                        roomID = {roomID}
+                        onPlayerKilled = {handlekill}/>
         </Flex>
     )
 }
