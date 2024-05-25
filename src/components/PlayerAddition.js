@@ -62,7 +62,8 @@ const PlayerAddition = (props) => {
                         nameLowerCase: PlayerNameLowCase,
                         isAlive: true,
                         score: 10,
-                        targets: {}
+                        targets: [],
+                        assassins: []
                     })
                     //logs player added
                     .then((docRef) => {
@@ -92,7 +93,7 @@ const PlayerAddition = (props) => {
                 setShowAlert(true);
                 console.error("Error checking for player: ", error);
             });
-
+            setPlayerName('');
     }
 
     //handles submission

@@ -3,12 +3,12 @@ import {
     Table,
     Thead,
     Tbody,
-    Tfoot,
     Tr,
     Th,
     Td,
     TableCaption,
     TableContainer,
+    Flex,
 } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
 import {
@@ -28,7 +28,7 @@ const AlivePlayersList = (props) => {
     const playerAlivePlayersQuery = query(
         playerCollectionRef,
         where("isAlive", "==", true),
-        orderBy("score", "desc")
+        orderBy("score")
     );
 
     // Initialize state to keep track of the current list of players
@@ -60,11 +60,16 @@ const AlivePlayersList = (props) => {
 
     console.log("players: ", players); // debug
 
+    if (players.length === 0) {
+        return null;
+    }
+    
     return (
         <div>
-            <TableContainer maxWidth='500px'>
-                <Table variant='simple' colorScheme='teal' size='sm'>
-                    <TableCaption placement='top'>Alive Players List</TableCaption>
+            <Flex >
+            <TableContainer >
+                <Table variant='simple' colorScheme='teal' size='md' >
+                    <TableCaption placement='top' >Alive Players List</TableCaption>
                     <Thead>
                         <Tr key='header'>
                             <Th>Name</Th>
@@ -81,6 +86,7 @@ const AlivePlayersList = (props) => {
                     </Tbody>
                 </Table>
             </TableContainer>
+            </Flex>
         </div>
     );
 };
