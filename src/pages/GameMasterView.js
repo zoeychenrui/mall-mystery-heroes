@@ -1,11 +1,18 @@
 import React from 'react';
-const Lobby = () => {
+import { useParams, useLocation } from 'react-router-dom';
+import TargetGenerator from '../components/TargetGenerator';
+
+const GameMasterView = () => {
+    const { roomID } = useParams();
+    const {arrayOfPlayers} = useLocation().state || {arrayOfPlayers: []};
 
     return (
         <div>
-
+            <TargetGenerator arrayOfPlayers={arrayOfPlayers} 
+                             roomID={roomID} 
+            />                
         </div>
     );
 }
 
-export default Lobby;
+export default GameMasterView;

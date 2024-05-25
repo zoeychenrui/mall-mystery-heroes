@@ -48,7 +48,7 @@ const PlayerListPage = () => {
         if (roomID) {
             fetchPlayers();
         }
-    
+        //eslint-disable-next-line
     }, [roomID]);
      
     //logs when new player is added to array
@@ -66,27 +66,27 @@ const PlayerListPage = () => {
                 setShowAlert(true);
                 return;
             }
-        }
+            }
         else {
             console.error("arrayOfPlayers not defined");
             setError("arrayOfPlayers not defined");
             setShowAlert(true);
         }
 
-        try {
-            if (navigate) {
-                navigate(`/rooms/${roomID}/GameMasterView`);
+            try {
+                if (navigate) {
+                    navigate(`/rooms/${roomID}/GameMasterView`, {state: { arrayOfPlayers } });
+                }
+                else {
+                    console.error("navigate not defined");
+                    setError("navigate not defined");
+                    setShowAlert(true);
+                }
             }
-            else {
-                console.error("navigate not defined");
-                setError("navigate not defined");
-                setShowAlert(true);
-            }
-        }
-        catch (error) {
-            console.error("Error navigating to lobby: ", error);
-            setError("Error navigating to lobby: ", error);
-            setShowAlert(true);
+            catch (error) {
+                console.error("Error navigating to lobby: ", error);
+                setError("Error navigating to lobby: ", error);
+                            setShowAlert(true);
         }
     }
     //addes player to arrayOfPlayers when they are added
