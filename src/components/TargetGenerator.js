@@ -74,7 +74,6 @@ const TargetGenerator = (props) => {
     //creates adjacency list with initial targets
     const InitializeTargets = () => {
         const playerList = randomizeArray([...arrayOfPlayers]);
-        const targetList = randomizeArray([...arrayOfPlayers]);
         console.log("playerList created: ", playerList);
         const MAXTARGETS = arrayOfPlayers.length > 15 ? 3 : (arrayOfPlayers.length > 5 ? 2 : 1);
         const newTargetMap = new Map();
@@ -82,7 +81,7 @@ const TargetGenerator = (props) => {
         for (let i = 0; i < arrayOfPlayers.length; i++) {
             const data = {
                 numOfAssassins: 0, 
-                lastTargetIndex: i - 1, 
+                lastTargetIndex: playerList.indexOf(arrayOfPlayers[i]), 
                 prevTargets: [],
                 assassins: []
             };
@@ -98,14 +97,15 @@ const TargetGenerator = (props) => {
             //assigns MAXTARGETS targets to each player
             for (let targetCount = 0; targetCount < MAXTARGETS; targetCount++) {
                 let targetIndex = (newPlayerData[currPlayer].lastTargetIndex + 1) % arrayOfPlayers.length;
-                let target = targetList[targetIndex];
+                let target = playerList[targetIndex];
                 const originalDex = targetIndex;
                 //skips player if they already have MAXTARGETS targgets 
                 //or if they are targeting themself
                 while (newPlayerData[target].numOfAssassins === MAXTARGETS 
-                       || target === currPlayer) {
+                       || target === currPlayer 
+                       || newPlayerData[currPlayer].assassins.includes(target)) {
                     targetIndex = (targetIndex + 1) % arrayOfPlayers.length;
-                    target = targetList[targetIndex];
+                    target = playerList[targetIndex];
                     console.log(`looping for ${currPlayer}`);
                     //stops loop if it loops through the full array
                     if (targetIndex === originalDex) {
