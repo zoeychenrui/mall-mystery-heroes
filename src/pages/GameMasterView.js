@@ -1,10 +1,13 @@
 import React from 'react';
 import { useState } from 'react';
 import AlivePlayersList from '../components/AlivePlayersList';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, 
+         useLocation } from 'react-router-dom';
 import TargetGenerator from '../components/TargetGenerator';
 import DeadPlayersList from '../components/DeadPlayersList';
-import { Flex, Heading } from '@chakra-ui/react';
+import { Flex, 
+         Heading,
+         Spacer } from '@chakra-ui/react';
 import KillButton from '../components/KillButton';
 import AssasinsSelection from '../components/AssasinsSelection';
 
@@ -27,7 +30,7 @@ const GameMasterView = () => {
     return (
         <div>
             <Heading>Game Master View</Heading>
-            <Flex direction="row" justifyContent="center">
+            <Flex direction="row" justifyContent="center" gap='20'>
                 <AlivePlayersList roomID={roomID} />
                 <DeadPlayersList roomID={roomID} />
             </Flex>
