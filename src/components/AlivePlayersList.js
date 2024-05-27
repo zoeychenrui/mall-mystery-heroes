@@ -46,6 +46,8 @@ const AlivePlayersList = (props) => {
             const updatedPlayers = snapshot.docs.map((doc) => ({
                 name: doc.data().name,
                 score: doc.data().score,
+                targets: doc.data().targets,
+                assassins: doc.data().assassins
             }));
 
             console.log("updatedPlayers: ", updatedPlayers);
@@ -74,6 +76,8 @@ const AlivePlayersList = (props) => {
                         <Tr key='header'>
                             <Th>Name</Th>
                             <Th>Score</Th>
+                            <Th>Targets</Th>
+                            <Th>Assassins</Th>
                         </Tr>
                     </Thead>
                     <Tbody>
@@ -81,6 +85,8 @@ const AlivePlayersList = (props) => {
                             <Tr key={index}>
                                 <Td>{player.name}</Td>
                                 <Td>{player.score}</Td>
+                                <Td>{player.targets.join(", ")}</Td>
+                                <Td>{player.assassins.join(", ")}</Td>
                             </Tr>
                         ))}
                     </Tbody>
