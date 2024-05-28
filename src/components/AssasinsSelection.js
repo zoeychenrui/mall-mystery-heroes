@@ -43,9 +43,9 @@ const AssasinsSelection = (props) => {
             const querySnapshot = await getDocs(assassinQuery);
             const assassinData = querySnapshot.docs[0].data();
             const assassinRef = querySnapshot.docs[0].ref;
-            setEditableArray([...assassinData.targets]);
-            const index = editableArray.indexOf(killedPlayerNamed);
-            const spliced = editableArray.slice();
+            const targetArray = [...assassinData.targets];
+            const index = targetArray.indexOf(killedPlayerNamed);
+            const spliced = targetArray.slice();
             spliced.splice(index, 1);
             setEditableArray(spliced);
             await updateDoc(assassinRef, {
