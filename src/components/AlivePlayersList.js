@@ -28,7 +28,7 @@ const AlivePlayersList = (props) => {
     const playerAlivePlayersQuery = query(
         playerCollectionRef,
         where("isAlive", "==", true),
-        orderBy("score")
+        orderBy("score", "desc")
     );
 
     // Initialize state to keep track of the current list of players
@@ -36,11 +36,9 @@ const AlivePlayersList = (props) => {
 
     // When the component mounts, subscribe to the query and update the state whenever it changes
     useEffect(() => {
-        console.log("Running useEffect in AlivePlayersList");
 
         // subscribe to changes in the query results
         const unsubscribe = onSnapshot(playerAlivePlayersQuery, (snapshot) => {
-            console.log("snapshot: ", snapshot);
 
             // Get the updated list of players from the snapshot
             const updatedPlayers = snapshot.docs.map((doc) => ({
@@ -49,9 +47,6 @@ const AlivePlayersList = (props) => {
                 targets: doc.data().targets,
                 assassins: doc.data().assassins
             }));
-
-            console.log("updatedPlayers: ", updatedPlayers);
-
             // Update the state with the new values
             setPlayers(updatedPlayers);
         });
@@ -60,7 +55,6 @@ const AlivePlayersList = (props) => {
         return () => unsubscribe();
     }, []); // empty dependency array means this effect will only run when the component mounts
 
-    console.log("players: ", players); // debug
 
     if (players.length === 0) {
         return null;

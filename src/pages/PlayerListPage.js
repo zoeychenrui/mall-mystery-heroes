@@ -12,7 +12,6 @@ import { Button,
 import PlayerAddition from '../components/PlayerAddition';
 import PlayerList from '../components/PlayerList';
 import PlayerRemove from "../components/PlayerRemove";
-import KillButton from '../components/KillButton';
 import {collection, query, getDocs} from 'firebase/firestore';
 import {db} from '../utils/firebase';
 
@@ -108,9 +107,6 @@ const PlayerListPage = () => {
         }
     }
 
-    const handlekill = (PlayerName) => {
-        console.log(`{The player has been killed}`);
-    }
                
     return (
         <Flex>
@@ -132,15 +128,18 @@ const PlayerListPage = () => {
             <Heading as="h2" size="xl" mb={4}>
                 Room ID: {roomID}
             </Heading>
-            <PlayerAddition roomID = {roomID} onPlayerAdded = {handlePlayerAdded}/>
+            <PlayerAddition roomID = {roomID} 
+                            onPlayerAdded = {handlePlayerAdded}/>
             <PlayerList arrayOfPlayers = {arrayOfPlayers}/>        
-            <PlayerRemove roomID = {roomID} arrayOfPlayers = {arrayOfPlayers} onPlayerRemoved = {handlePlayerRemoved}/>
-            <Button colorScheme='teal' variant='outline' onClick={handleLobbyRoom}>
+            <PlayerRemove roomID = {roomID} 
+                            arrayOfPlayers = {arrayOfPlayers} 
+                            onPlayerRemoved = {handlePlayerRemoved}/>
+            <Button colorScheme='teal' 
+                    variant='outline' 
+                    onClick={handleLobbyRoom}>
                 Begin Game
             </Button>
-            <KillButton arrayOfPlayers = {arrayOfPlayers}
-                        roomID = {roomID}
-                        onPlayerKilled = {handlekill}/>
+            
         </Flex>
     )
 }
