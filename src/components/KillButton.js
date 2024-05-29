@@ -31,9 +31,12 @@ const KillButton = (props) => {
             const playerdoc = querySnapshot.docs[0].ref;
             const playerData = querySnapshot.docs[0].data();
             props.killedPlayerPoints(playerData.score);
-            await updateDoc(playerdoc, { score: 0 });
-            await updateDoc(playerdoc, { isAlive: false });
-            props.onPlayerKilled(selectedPlayer);
+            await updateDoc(playerdoc, { 
+                score: 0,
+                isAlive: false,
+                targets: [],
+            });
+            onPlayerKilled(selectedPlayer);
         } catch (error) {
             console.error('Error fetching player documents:', error);
         }
