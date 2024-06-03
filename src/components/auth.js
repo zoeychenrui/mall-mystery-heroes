@@ -26,7 +26,7 @@ const Auth = (props) => {
   const [password2, setPassword2] = useState("");
   const [show, setShow] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [passRules, setPassRules] = useState(false);
+  const [passRules, setPassRules] = useState(true);
   const isLoginPage = props.isLoginPage;
   const navigate = useNavigate();
 
@@ -78,15 +78,13 @@ const Auth = (props) => {
 
 
   useEffect(() => {
-    if (password.length >= 6) {
-      setPassRules(false);
-    }
-    else if (password.length > 0) {
+    if (password.length < 6 && password.length > 0) {
       setPassRules(true);
     }
     else {
       setPassRules(false);
     }
+
 
   }, [password]);
 
@@ -127,7 +125,7 @@ const Auth = (props) => {
               </Button>
             </InputRightElement>
           </InputGroup>
-          {passRules && (
+          {passRules && !isLoginPage &&(
             <Text color="red.500" size = "sm" fontStyle='italic'>Password needs to be at least 6 characters long.</Text>
           )}
           {!isLoginPage && (
