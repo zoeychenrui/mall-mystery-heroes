@@ -7,7 +7,7 @@ import GameMasterView from './pages/GameMasterView';
 import Homepage from './pages/Homepage';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
-import PasswordReset from './components/PasswordReset';
+import PasswordReset from './pages/PasswordReset';
 function App() {
   return (
     <ChakraProvider> 
