@@ -156,8 +156,7 @@ const PlayerListPage = () => {
                 variant='solid' 
                 onClick={logout}>
               Log Out
-        </Button>
-            
+        </Button> 
         </Flex>
     )
 }

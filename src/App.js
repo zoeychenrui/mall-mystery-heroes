@@ -22,7 +22,6 @@ function App() {
           <Route path="/rooms/:roomID/GameMasterView" element={<GameMasterView />} />
         </Routes>
       </BrowserRouter>
-      <PasswordReset />
     </ChakraProvider>
   );
 }
