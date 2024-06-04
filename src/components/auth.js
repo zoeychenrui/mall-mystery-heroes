@@ -79,10 +79,10 @@ const Auth = (props) => {
 
   useEffect(() => {
     if (password.length < 6 && password.length > 0) {
-      setPassRules(true);
+      setPassRules(false);
     }
     else {
-      setPassRules(false);
+      setPassRules(true);
     }
 
 
@@ -125,7 +125,7 @@ const Auth = (props) => {
               </Button>
             </InputRightElement>
           </InputGroup>
-          {passRules && !isLoginPage &&(
+          {!passRules && !isLoginPage &&(
             <Text color="red.500" size = "sm" fontStyle='italic'>Password needs to be at least 6 characters long.</Text>
           )}
           {!isLoginPage && (
