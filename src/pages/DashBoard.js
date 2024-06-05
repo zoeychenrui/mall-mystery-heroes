@@ -1,11 +1,12 @@
 import React from 'react';
 import { auth, db } from "../utils/firebase";
 import { collection, addDoc } from 'firebase/firestore';
-import { Button, Flex, Heading } from '@chakra-ui/react';
+import { Button, ButtonGroup, Flex, Heading } from '@chakra-ui/react';
 import Auth from '../components/auth';
 import { useNavigate } from 'react-router-dom';
+import {signOut} from 'firebase/auth';
 
-const HostRoom = () => {
+const DashBoard = () => {
 
   const navigate = useNavigate();
 
@@ -26,18 +27,38 @@ const HostRoom = () => {
     }
   };
 
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      console.log("User successfully logged out");
+      navigate('/');
+
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <Flex direction="column" align="center" justify="center" h="100vh">
       <Heading as="h1" size="xl" mb={4}>
-        Mall Mystery Heroes
+        Mall Mystery Heroes DashBoard
       </Heading>
-      <Auth />
-      <Button colorScheme='teal' variant='outline' onClick={handleHostRoom}>
-        Host Room
-      </Button>
+      <div>OLD LOBBY DATA maybe?</div>
+      <ButtonGroup mt={4}>
+        <Button colorScheme='teal' 
+                variant='outline' 
+                onClick={handleHostRoom}>
+              Host Room
+        </Button>
+        <Button colorScheme='teal' 
+                variant='solid' 
+                onClick={logout}>
+              Log Out
+        </Button>
+      </ButtonGroup>
     </Flex>
     
   );
 }
 
-export default HostRoom;
+export default DashBoard;

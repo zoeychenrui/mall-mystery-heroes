@@ -8,12 +8,14 @@ import { Button,
          AlertTitle, 
          AlertDescription, 
          CloseButton, 
-         Box } from '@chakra-ui/react';
+         Box, } from '@chakra-ui/react';
 import PlayerAddition from '../components/PlayerAddition';
 import PlayerList from '../components/PlayerList';
 import PlayerRemove from "../components/PlayerRemove";
 import {collection, query, getDocs} from 'firebase/firestore';
 import {db} from '../utils/firebase';
+import { auth} from "../utils/firebase";
+import { signOut } from "firebase/auth";
 
 const PlayerListPage = () => {
     const navigate = useNavigate();
@@ -27,6 +29,17 @@ const PlayerListPage = () => {
     const onClose = () => {
         setShowAlert(false);
     }
+
+    const logout = async () => {
+        try {
+          await signOut(auth);
+          console.log("User successfully logged out");
+          navigate('/');
+    
+        } catch (err) {
+          console.error(err);
+        }
+      };
 
     //fetches players when roomID or playerCollectionRef changes
     useEffect (() => {
@@ -139,7 +152,11 @@ const PlayerListPage = () => {
                     onClick={handleLobbyRoom}>
                 Begin Game
             </Button>
-            
+            <Button colorScheme='teal' 
+                variant='solid' 
+                onClick={logout}>
+              Log Out
+        </Button> 
         </Flex>
     )
 }
