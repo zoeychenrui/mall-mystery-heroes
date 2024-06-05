@@ -8,12 +8,12 @@ import {Button,
         AlertTitle,
         AlertDescription,
     } from '@chakra-ui/react';
-import { updateDoc } from 'firebase/firestore';
 import {db} from '../utils/firebase';
 import {collection, 
         query,  
         where, 
-        getDocs 
+        getDocs,
+        updateDoc
     } from "firebase/firestore";
 const PlayerRevive = (props) => {
     const [selectedPlayer, setSelectedPlayer] = useState('');
