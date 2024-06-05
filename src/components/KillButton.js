@@ -6,6 +6,9 @@ import { query, updateDoc, collection, getDocs, where } from "firebase/firestore
 const KillButton = (props) => {
     const [selectedPlayer, setSelectedPlayer] = useState('');
     const [showAlert, setShowAlert] = useState(false); // State to control the alert visibility
+    const [editableArray, setEditableArray] = useState([]);
+    const [editableArray2, setEditableArray2] = useState([]);
+
     const roomID = props.roomID;
     const playerData = props.arrayOfPlayers;
     const onPlayerKilled = props.onPlayerKilled;
@@ -30,6 +33,38 @@ const KillButton = (props) => {
             const querySnapshot = await getDocs(playerQuery); // Fetch the documents that match the query
             const playerdoc = querySnapshot.docs[0].ref;
             const playerData = querySnapshot.docs[0].data();
+            console.log(`assasins: ${playerData.assassins}`);
+            for (let i = 0; i < playerData.assassins.length; i++) {
+                let tempPlayer = playerData.assassins[i];
+                console.log(`tempPlayer: ${tempPlayer}`);
+                const newQuery = query(playerCollectionRef, where('name', '==', tempPlayer)); // get the players with this name
+                const newSnapshot = await getDocs(newQuery); // Fetch the documents that match the query
+                const targetArray = [...newSnapshot.docs[0].data().targets];
+                const index = targetArray.indexOf(selectedPlayer);
+                const spliced = targetArray.slice();
+                spliced.splice(index, 1);
+                console.log(spliced);
+                setEditableArray(spliced);
+                await updateDoc(newSnapshot.docs[0].ref, {
+                    targets: spliced,
+                });
+            }
+            for (let i = 0; i < playerData.targets.length; i++) {
+                let tempPlayer = playerData.targets[i];//a
+                const newQuery = query(playerCollectionRef, where('name', '==', tempPlayer)); // get the players with this name
+                const newSnapshot = await getDocs(newQuery); // Fetch the documents that match the query
+                const targetArray = [...newSnapshot.docs[0].data().assassins];
+                console.log(`targetArray: ${targetArray}`);
+                const index = targetArray.indexOf(selectedPlayer);
+                const spliced = targetArray.slice();
+                spliced.splice(index, 1);
+                console.log(spliced);
+                setEditableArray2(spliced);
+                await updateDoc(newSnapshot.docs[0].ref, {
+                    assassins: spliced,
+                });
+            }
+
             props.killedPlayerPoints(playerData.score);
             await updateDoc(playerdoc, { 
                 score: 0,

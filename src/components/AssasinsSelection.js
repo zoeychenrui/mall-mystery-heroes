@@ -49,7 +49,7 @@ const AssasinsSelection = (props) => {
             spliced.splice(index, 1);
             setEditableArray(spliced);
             await updateDoc(assassinRef, {
-                targets: spliced,
+
                 score: assassinData.score + newPoints 
             });
         } catch (error) {
