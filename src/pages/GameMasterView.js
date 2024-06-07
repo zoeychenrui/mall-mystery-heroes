@@ -15,16 +15,22 @@ import { collection,
          getDocs,
          query
         } from "firebase/firestore";
+import RegenerateTargets from '../components/RegenerateTargets';
+import TaskCreation from '../components/TaskCreation';
+import TaskList from '../components/TaskList';
 
 const GameMasterView = () => {
-    const { roomID } = useParams();    
+    const { roomID } = useParams(); 
     const { arrayOfPlayers } = useLocation().state || { arrayOfPlayers: [] };
     const [killedPlayerNamed, setKilledPlayerNamed] = useState('');
     const [killedPlayerPointed, setKilledPlayerPointed] = useState(0);
     const [triggerAS, setTriggerAS] = useState(false);
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players'); //reference to players subcollection
     const [arrayOfDeadPlayers, setArrayOfDeadPlayers] = useState([]);
+    const [arrayOfAlivePlayers, setArrayOfAlivePlayers] = useState([]);
+    const [arrayOfTasks, setArrayOfTasks] = useState([]);
 
+    //updates arrayOfAlivePlayers, arrayOfDeadPlayers, and arrayOfTasks when roomID is updated
     useEffect (() => {
         const fetchPlayers = async () => {
             try {
@@ -37,12 +43,36 @@ const GameMasterView = () => {
                 console.log(arrayOfDeadPlayers.length);
             }
             catch (error) {
-                console.error("Error updating arrayOfPlayers: ", error);
+                console.error("Error updating arrayOfDeadPlayers: ", error);
+            }
+            try {
+                const playerQuery = query(playerCollectionRef);
+                const playerSnapshot = await getDocs(playerQuery);
+                const players = playerSnapshot.docs
+                                    .filter(doc => doc.data().isAlive === true)
+                                    .map(doc => doc.data().name);
+                setArrayOfAlivePlayers(players);
+                console.log(arrayOfDeadPlayers.length);
+            }
+            catch (error) {
+                console.error("Error updating arrayOfAlivePlayers: ", error);
             }
         }
-        
+        const fetchTasks = async () => {
+            try {
+                const taskRef = collection(db, 'rooms', roomID, 'tasks');
+                const taskSnapshot = await getDocs(taskRef);
+                const tasks = taskSnapshot.docs.map(doc => doc.data());
+                setArrayOfTasks(tasks);
+            }
+            catch (error) {
+                console.error("Error updating arrayOfTasks: ", error);
+            }
+        }
+
         if (roomID) {
             fetchPlayers();
+            fetchTasks();
         }
         //eslint-disable-next-line
     }, [roomID]);
@@ -53,12 +83,20 @@ const GameMasterView = () => {
         setArrayOfDeadPlayers(arrayOfDeadPlayers => [...arrayOfDeadPlayers, killedPlayerName]);
     };
 
+    //updates killedPlayerPointed
     const handleKillPlayerPoints = (killedPlayerPoints) => {
         setKilledPlayerPointed(killedPlayerPoints);
     };
 
+    //updates ArrayOfDeadPlayers and adds player to arrayOfAlivePlayers
     const handlePlayerRevive = (revivedPlayerName) => {
         setArrayOfDeadPlayers(arrayOfDeadPlayers.filter((name) => name !== revivedPlayerName));
+        setArrayOfAlivePlayers(arrayOfAlivePlayers => [...arrayOfAlivePlayers, revivedPlayerName]);
+    };
+
+    //updates arrayOfTasks when new task is added to db
+    const handleNewTaskAdded = (newTask) => {
+        setArrayOfTasks(arrayOfTasks => [...arrayOfTasks, newTask]);
     };
 
     return (
@@ -67,6 +105,10 @@ const GameMasterView = () => {
             <TargetGenerator 
                 arrayOfPlayers={arrayOfPlayers} 
                 roomID={roomID} 
+            />
+            <RegenerateTargets
+                arrayOfAlivePlayers={arrayOfAlivePlayers}
+                roomID = {roomID}
             />
             <Flex direction="row" justifyContent="center" gap='20'>
                 <AlivePlayersList roomID={roomID} />
@@ -90,6 +132,15 @@ const GameMasterView = () => {
                 roomID = {roomID}
                 onPlayerRevived = {handlePlayerRevive}
                 arrayOfDeadPlayers = {arrayOfDeadPlayers}
+            />
+            <TaskCreation
+                roomID = {roomID}
+                onNewTaskAdded = {handleNewTaskAdded}
+            />
+            <TaskList 
+                arrayOfTasks = {arrayOfTasks}
+                roomID = {roomID}
+                arrayOfPlayers = {arrayOfPlayers}
             />
         </div>
     );

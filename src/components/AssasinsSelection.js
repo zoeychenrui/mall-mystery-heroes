@@ -53,7 +53,7 @@ const AssasinsSelection = (props) => {
                 score: assassinData.score + newPoints 
             });
         } catch (error) {
-            console.error("Error removing player: ", error);
+            console.error("Error removing player: ",  error);
         }
         setTriggerAS(false); // Use the passed callback to update the state in the parent component
     };
