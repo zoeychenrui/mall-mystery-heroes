@@ -6,8 +6,7 @@ import { query, updateDoc, collection, getDocs, where } from "firebase/firestore
 const KillButton = (props) => {
     const [selectedPlayer, setSelectedPlayer] = useState('');
     const [showAlert, setShowAlert] = useState(false); // State to control the alert visibility
-    const [editableArray, setEditableArray] = useState([]);
-    const [editableArray2, setEditableArray2] = useState([]);
+
 
     const roomID = props.roomID;
     const playerData = props.arrayOfPlayers;
