@@ -9,7 +9,6 @@ const AssasinsSelection = (props) => {
     const [selectedAssassin, setSelectedAssassin] = useState('');
     const [showAlert, setShowAlert] = useState(false); // State to control the alert visibility
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
-    const [editableArray, setEditableArray] = useState([]);
     let newPoints = killedPlayerPoints;
 
     const handleChange = (event) => {
@@ -43,13 +42,7 @@ const AssasinsSelection = (props) => {
             const querySnapshot = await getDocs(assassinQuery);
             const assassinData = querySnapshot.docs[0].data();
             const assassinRef = querySnapshot.docs[0].ref;
-            const targetArray = [...assassinData.targets];
-            const index = targetArray.indexOf(killedPlayerNamed);
-            const spliced = targetArray.slice();
-            spliced.splice(index, 1);
-            setEditableArray(spliced);
             await updateDoc(assassinRef, {
-                targets: spliced,
                 score: assassinData.score + newPoints 
             });
         } catch (error) {
