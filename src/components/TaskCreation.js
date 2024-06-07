@@ -7,13 +7,7 @@ import {Input,
         NumberDecrementStepper,
         NumberIncrementStepper,
         NumberInputStepper,
-        useToast,
-        Alert,
-        AlertIcon,
-        AlertTitle,
-        AlertDescription,
-        CloseButton,
-        Box
+        useToast
     } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
 import { collection, 
@@ -26,17 +20,12 @@ import { collection,
 const TaskCreation = (props) => {
     const [TaskTitle, setTaskTitle] = useState('');
     const [TaskDescription, setTaskDescription] = useState('');
-    const [PointValue, setPointValue] = useState('');
+    const [PointValue, setPointValue] = useState('15');
     const roomID = props.roomID;
     const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
     const toast = useToast();
     const time = new Date();
-    const [showAlert, setShowAlert] = useState(false);
     const [error, setError] = useState('');
-
-    const onClose = () => {
-        setShowAlert(false);
-    } 
 
     const handleDescriptionChange = (event) => {
         setTaskDescription(event.target.value);
@@ -57,8 +46,33 @@ const TaskCreation = (props) => {
             pointValue: PointValue,
             dateCreated: time.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
             isComplete: false,
-            completedBy: null
+            completedBy: []
         };
+        if (newTask.title === '') {
+            setError("Task title cannot be blank");
+            toast ({
+                title: 'Error',
+                description: error,
+                status: 'error',
+                duration: 1500,
+                isClosable: true,
+            });
+            return;
+        }
+        if (newTask.pointValue === 0) {
+            setError("Task cannot have 0 points");
+            toast ({
+                title: 'Error',
+                description: error,
+                status: 'error',
+                duration: 1500,
+                isClosable: true,
+            });
+            return;
+        }
+        if (newTask.description === '') {
+            newTask.description = 'No description provided';
+        }
         const checkTaskQuery = query(taskCollectionRef, where('title', '==', newTask.title));
         const checkTaskSnapshot = await getDocs(checkTaskQuery);
         if (checkTaskSnapshot.empty) {
@@ -67,7 +81,13 @@ const TaskCreation = (props) => {
         else {
             console.error("Error adding task: title already exists");
             setError("Error adding task: title already exists");
-            setShowAlert(true);
+            toast ({
+                title: 'Error',
+                description: error,
+                status: 'error',
+                duration: 1500,
+                isClosable: true,
+            });
             return;
         }
         props.onNewTaskAdded(newTask);
@@ -82,22 +102,6 @@ const TaskCreation = (props) => {
 
     return (  
         <Flex>
-            {showAlert && (
-                <Alert status='error'>
-                    <Box>
-                        <AlertIcon/>
-                        <AlertTitle>Error: </AlertTitle>
-                        <AlertDescription>{error}</AlertDescription>
-                    </Box>
-                    <CloseButton
-                        alignSelf='flex-start'
-                        position='relative'
-                        right={-1}
-                        top={-1}
-                        onClick={onClose}
-                    />
-                </Alert>
-            )}
             <Input size = 'lg'
                    placeholder = 'Enter Task Title'
                    value = {TaskTitle}

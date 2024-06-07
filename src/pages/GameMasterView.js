@@ -20,7 +20,7 @@ import TaskCreation from '../components/TaskCreation';
 import TaskList from '../components/TaskList';
 
 const GameMasterView = () => {
-    const { roomID } = useParams();    
+    const { roomID } = useParams(); 
     const { arrayOfPlayers } = useLocation().state || { arrayOfPlayers: [] };
     const [killedPlayerNamed, setKilledPlayerNamed] = useState('');
     const [killedPlayerPointed, setKilledPlayerPointed] = useState(0);
