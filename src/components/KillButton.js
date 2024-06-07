@@ -34,6 +34,7 @@ const KillButton = (props) => {
             const playerdoc = querySnapshot.docs[0].ref;
             const playerData = querySnapshot.docs[0].data();
             console.log(`assasins: ${playerData.assassins}`);
+            
             for (let i = 0; i < playerData.assassins.length; i++) {
                 let tempPlayer = playerData.assassins[i];
                 console.log(`tempPlayer: ${tempPlayer}`);
@@ -70,6 +71,7 @@ const KillButton = (props) => {
                 score: 0,
                 isAlive: false,
                 targets: [],
+                assassins: []
             });
             onPlayerKilled(selectedPlayer);
         } catch (error) {
