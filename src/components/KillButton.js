@@ -44,7 +44,6 @@ const KillButton = (props) => {
                 const spliced = targetArray.slice();
                 spliced.splice(index, 1);
                 console.log(spliced);
-                setEditableArray(spliced);
                 await updateDoc(newSnapshot.docs[0].ref, {
                     targets: spliced,
                 });
@@ -59,7 +58,6 @@ const KillButton = (props) => {
                 const spliced = targetArray.slice();
                 spliced.splice(index, 1);
                 console.log(spliced);
-                setEditableArray2(spliced);
                 await updateDoc(newSnapshot.docs[0].ref, {
                     assassins: spliced,
                 });
