@@ -42,8 +42,7 @@ const TaskAccordion = (props) => {
 
 
     useEffect(() => {
-        console.log('usingEffect')
-        console.log(task.completedBy);
+        console.log(`usingEffect setCheckedPlayers: ${task.completedBy}`);
         setCheckedPlayers(task.completedBy);
         // eslint-disable-next-line
     }, [roomID])
@@ -230,6 +229,9 @@ const TaskAccordion = (props) => {
                 </AccordionPanel>
                 <AccordionPanel>
                     Points: {task.pointValue}
+                </AccordionPanel>
+                <AccordionPanel>
+                    Task Type: {task.taskType}
                 </AccordionPanel>
                 <AccordionPanel>
                     {task.isComplete ? (

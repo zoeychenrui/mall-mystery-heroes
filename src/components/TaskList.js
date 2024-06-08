@@ -25,12 +25,11 @@ const TaskList = (props) => {
         setTasks(taskArray);
     }
 
-    // Fetch tasks on component mount
     useEffect(() => {
+        console.log(`fetching tasks in useEffect: ${roomID}`);
         fetchTasks();
-    // eslint-disable-next-line
-    }, [arrayOfActiveTasks]);
-    
+    }, [arrayOfPlayers]);
+
     //makes an array where each item contains an accordion item of an active task object
     const listOfActiveTasks = arrayOfActiveTasks.map(eachTask => {
        return (
@@ -57,7 +56,6 @@ const TaskList = (props) => {
         );
     });
 
-    
      return (  
         <Flex>
             <Flex flexDirection='column'>
