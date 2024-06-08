@@ -40,7 +40,7 @@ const TaskAccordion = (props) => {
     const [error, setError] = useState('');
     const toast = useToast();
 
-
+    //saves checked players when page is refreshed
     useEffect(() => {
         console.log(`usingEffect setCheckedPlayers: ${task.completedBy}`);
         setCheckedPlayers(task.completedBy);
@@ -147,8 +147,6 @@ const TaskAccordion = (props) => {
             return;
         }
         handleSaveChanges();
-        await props.refresh();
-
         try { 
             const title = task.title;
             const taskQuery = query(taskCollectionRef, where('title', '==', title));
@@ -158,6 +156,7 @@ const TaskAccordion = (props) => {
                 isComplete: true,
                 completedBy: checkedPlayers
             });
+            await props.refresh();
         } catch(error) {
             console.error("Error in handlePressedCompletedButton: ", error);
         }

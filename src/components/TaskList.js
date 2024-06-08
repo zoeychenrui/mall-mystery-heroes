@@ -25,10 +25,11 @@ const TaskList = (props) => {
         setTasks(taskArray);
     }
 
+    //updates tasklists when task is added
     useEffect(() => {
         console.log(`fetching tasks in useEffect: ${roomID}`);
         fetchTasks();
-    }, [arrayOfPlayers]);
+    }, [props.arrayOfTasks]);
 
     //makes an array where each item contains an accordion item of an active task object
     const listOfActiveTasks = arrayOfActiveTasks.map(eachTask => {
