@@ -142,6 +142,7 @@ const GameMasterView = () => {
                 arrayOfTasks = {arrayOfTasks}
                 roomID = {roomID}
                 arrayOfPlayers = {arrayOfPlayers}
+                arrayOfDeadPlayers = {arrayOfDeadPlayers}
             />
         </div>
     );

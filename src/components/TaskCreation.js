@@ -7,7 +7,6 @@ import {Input,
         NumberDecrementStepper,
         NumberIncrementStepper,
         NumberInputStepper,
-        useToast,
         Select
     } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
@@ -17,6 +16,7 @@ import { collection,
          where,
          query
     } from 'firebase/firestore';
+import CreateAlert from './CreateAlert';
 
 const TaskCreation = (props) => {
     const [TaskTitle, setTaskTitle] = useState('');
@@ -24,10 +24,9 @@ const TaskCreation = (props) => {
     const [PointValue, setPointValue] = useState('0');
     const roomID = props.roomID;
     const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
-    const toast = useToast();
     const time = new Date();
-    const [error, setError] = useState('');
     const [selectedTaskType, setSelectedTaskType] = useState('');
+    const createAlert = CreateAlert();
 
     //stores task description
     const handleDescriptionChange = (event) => {
@@ -61,32 +60,20 @@ const TaskCreation = (props) => {
             isComplete: false,
             completedBy: []
         };
+        
+        //error handling for no task type selected
+        if (newTask.taskType === '') {
+            return createAlert('error', 'Error', 'Task type must be selected', 1500);
+        }
 
         //error handling for blank title
         if (newTask.title === '') {
-            setError("Task title cannot be blank");
-            toast ({
-                title: 'Error',
-                description: error,
-                status: 'error',
-                duration: 1500,
-                isClosable: true,
-            });
-            return;
+            return createAlert('error', 'Error', 'Task title cannot be blank', 1500);
         }
 
         //error handling for task with 0 points
-        console.log (`before Testing: ${newTask.taskType}`);
-        if (newTask.pointValue === 0 && newTask.taskType === 'Task') {
-            setError("Task cannot have 0 points");
-            toast ({
-                title: 'Error',
-                description: error,
-                status: 'error',
-                duration: 1500,
-                isClosable: true,
-            });
-            return;
+        if (newTask.pointValue === '0' && newTask.taskType === 'Task') {
+            return createAlert('error', 'Error', 'Task cannot have 0 points', 1500);
         }
         
         //handling for blank description
@@ -110,26 +97,11 @@ const TaskCreation = (props) => {
         }
         //error handling for duplicate titles
         else {
-            console.error("Error adding task: title already exists");
-            setError("Error adding task: title already exists");
-            toast ({
-                title: 'Error',
-                description: error,
-                status: 'error',
-                duration: 1500,
-                isClosable: true,
-            });
-            return;
+            return createAlert('error', 'Error', 'Task title already exists', 1500);
         }
 
         props.onNewTaskAdded(newTask);
-        toast ({
-            title: 'Task Added',
-            description: 'Your task has been created.',
-            status: 'success',
-            duration: 1500,
-            isClosable: true,
-        });
+        createAlert('success', 'Task Added', 'Your task has been created', 1500);
     }
 
     useEffect(() => {
