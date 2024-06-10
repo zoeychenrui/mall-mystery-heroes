@@ -13,8 +13,7 @@ import { Checkbox,
          AlertDialogContent,
          AlertDialogOverlay,
          AlertDialogCloseButton,
-         useDisclosure,         
-         useToast
+         useDisclosure         
     } from '@chakra-ui/react';
 import React, { useEffect, useState } from 'react';
 import { collection, 
@@ -24,11 +23,10 @@ import { collection,
          getDocs
     } from 'firebase/firestore';
 import { db } from '../utils/firebase'
+import CreateAlert from './CreateAlert';
 
 const TaskAccordion = (props) => {
-    const task = props.task;
-    const players = props.players;
-    const roomID = props.roomID;
+    const {task, players, roomID, arrayOfDeadPlayers } = props;
     const [checkedPlayers, setCheckedPlayers] = useState([]);
     const [playersAdded, setPlayersAdded] = useState([]);
     const [playersRemoved, setPlayersRemoved] = useState([]);
@@ -37,35 +35,33 @@ const TaskAccordion = (props) => {
     const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
     const cancelRef = React.useRef();
     const {isOpen, onOpen, onClose} = useDisclosure();
-    const [error, setError] = useState('');
-    const toast = useToast();
+    const createAlert = CreateAlert();
+    let listOfPlayers = null;
 
-
+    //saves checked players when page is refreshed
     useEffect(() => {
-        console.log('usingEffect')
-        console.log(task.completedBy);
+        console.log(`usingEffect setCheckedPlayers: ${task.completedBy}`);
         setCheckedPlayers(task.completedBy);
-        // eslint-disable-next-line
-    }, [roomID])
+    }, [roomID, task.completedBy])
 
    //updates checkedplayers when a checkbox is clicked
     const handleCheckedPlayers = (player) => {
-        console.log(players);
-        console.log(`handleCheckedPlayers: ${player}`);
-        setCheckedPlayers(checkedPlayers => {
-            if (checkedPlayers.includes(player)) { //if player is already checked
-                setPlayersRemoved(playersRemoved => [...playersRemoved, player]);
-                setPlayersAdded(playersAdded => playersAdded.filter(addedPlayer => addedPlayer !== player));
-                return checkedPlayers.filter(checkedPlayer => checkedPlayer !== player);
-            }
-            else { //if player is not already checked
-                setPlayersAdded(playersAdded => [...playersAdded, player]);
-                setPlayersRemoved(playersRemoved => playersRemoved.filter(removedPlayer => removedPlayer !== player));
-                return [...checkedPlayers, player];
-                
-            }
-        });  
-        console.log(`checkedPlayers AFTER: ${checkedPlayers}`);      
+        //handling for task and revival mission types
+        if (task.taskType === 'Task' || task.taskType === 'Revival Mission') {
+            setCheckedPlayers(checkedPlayers => {
+                if (checkedPlayers.includes(player)) { //if player is already checked
+                    setPlayersRemoved(playersRemoved => [...playersRemoved, player]);
+                    setPlayersAdded(playersAdded => playersAdded.filter(addedPlayer => addedPlayer !== player));
+                    return checkedPlayers.filter(checkedPlayer => checkedPlayer !== player);
+                }
+                else { //if player is not already checked
+                    setPlayersAdded(playersAdded => [...playersAdded, player]);
+                    setPlayersRemoved(playersRemoved => playersRemoved.filter(removedPlayer => removedPlayer !== player));
+                    return [...checkedPlayers, player];
+                    
+                }
+            }); 
+        }
     }
 
     //saves changes but does not make task inactive
@@ -79,57 +75,95 @@ const TaskAccordion = (props) => {
         await updateDoc(taskDoc, {
             completedBy: checkedPlayers
         });
-        //adds points to player if they are not already added
-        if (playersAdded.length > 0) {
-            console.log(`players added: ${playersAdded}`);
-            try {
+
+        //updates points for tasks
+        if (task.taskType === 'Task') {
+            //adds points to player for tasks
+            if (playersAdded.length > 0) {
+                console.log(`players added: ${playersAdded}`);
+                try {
+                    const playerQuery = query(playerCollectionRef, where('name', 'in', playersAdded));
+                    const playerSnapshot = await getDocs(playerQuery);
+                    const playerDocs = playerSnapshot.docs;
+                    let updatePlayersAdded = playersAdded;
+                    for (const player of playerDocs) {
+                        const playerDoc = player.ref;
+                        let currScore = parseInt(player.data().score);
+                        let pointVal = parseInt(points);
+                        let total = currScore + pointVal;
+                        console.log(total);
+                        await updateDoc(playerDoc, {
+                            score: total
+                        });
+                        updatePlayersAdded = updatePlayersAdded.filter(addedPlayer => addedPlayer !== player.data().name);
+                        console.log(updatePlayersAdded);
+                    }
+                    setPlayersAdded(updatePlayersAdded);
+                }
+                catch(error) {
+                    console.error('error adding player points', error);
+                }
+                console.log(`playersadded after: ${playersAdded}`);
+            }
+            //removes points from player for tasks
+            if (playersRemoved.length > 0) {
+                console.log(`players removed: ${playersRemoved}`);
+                try {
+                    const playerQuery = query(playerCollectionRef, where('name', 'in', playersRemoved));
+                    const playerSnapshot = await getDocs(playerQuery);
+                    const playerDocs = playerSnapshot.docs;
+                    let updatedPlayersRemoved = playersRemoved;
+                    for (const player of playerDocs) {
+                        const playerDoc = player.ref;
+                        let currScore = parseInt(player.data().score);
+                        let pointVal = parseInt(points);
+                        let total = currScore - pointVal;
+                        console.log(total);
+                        await updateDoc(playerDoc, {
+                            score: total
+                        });
+                        updatedPlayersRemoved = updatedPlayersRemoved.filter(removedPlayer => removedPlayer !== player.data().name);
+                    }
+                    setPlayersRemoved(updatedPlayersRemoved);
+                    console.log(`playersremoved after: ${playersRemoved}`);
+                }
+                catch(error) {
+                    console.error('error removing player points', error);
+                }
+            }            
+        }
+
+        //updates isAlive for revival missions
+        if (task.taskType === 'Revival Mission') {
+            //revives player if checkmarked
+            if (playersAdded.length > 0) {
                 const playerQuery = query(playerCollectionRef, where('name', 'in', playersAdded));
                 const playerSnapshot = await getDocs(playerQuery);
                 const playerDocs = playerSnapshot.docs;
                 let updatePlayersAdded = playersAdded;
                 for (const player of playerDocs) {
                     const playerDoc = player.ref;
-                    let currScore = parseInt(player.data().score);
-                    let pointVal = parseInt(points);
-                    let total = currScore + pointVal;
-                    console.log(total);
                     await updateDoc(playerDoc, {
-                        score: total
+                        isAlive: true
                     });
                     updatePlayersAdded = updatePlayersAdded.filter(addedPlayer => addedPlayer !== player.data().name);
-                    console.log(updatePlayersAdded);
                 }
                 setPlayersAdded(updatePlayersAdded);
             }
-            catch(error) {
-                console.error('error adding player points', error);
-            }
-            console.log(`playersadded after: ${playersAdded}`);
-        }
-        //removes points if not already removed
-        if (playersRemoved.length > 0) {
-            console.log(`players removed: ${playersRemoved}`);
-            try {
+            //kills play if uncheckmarked
+            if (playersRemoved.length > 0) {
                 const playerQuery = query(playerCollectionRef, where('name', 'in', playersRemoved));
                 const playerSnapshot = await getDocs(playerQuery);
                 const playerDocs = playerSnapshot.docs;
                 let updatedPlayersRemoved = playersRemoved;
                 for (const player of playerDocs) {
                     const playerDoc = player.ref;
-                    let currScore = parseInt(player.data().score);
-                    let pointVal = parseInt(points);
-                    let total = currScore - pointVal;
-                    console.log(total);
                     await updateDoc(playerDoc, {
-                        score: total
+                        isAlive: false
                     });
                     updatedPlayersRemoved = updatedPlayersRemoved.filter(removedPlayer => removedPlayer !== player.data().name);
                 }
                 setPlayersRemoved(updatedPlayersRemoved);
-                console.log(`playersremoved after: ${playersRemoved}`);
-            }
-            catch(error) {
-                console.error('error removing player points', error);
             }
         }
     }
@@ -137,19 +171,10 @@ const TaskAccordion = (props) => {
     //actions for pressing complete button
     const handlePressedCompletedButton = async () => {
         if (checkedPlayers.length === 0) {
-            setError('Please select at least one player');
-            toast ({
-                title: 'Error',
-                description: error,
-                status: 'error',
-                duration: 1500,
-                isClosable: true,
-            });
+            createAlert('error', 'Error', 'Please select at least one player', 1500);
             return;
         }
         handleSaveChanges();
-        await props.refresh();
-
         try { 
             const title = task.title;
             const taskQuery = query(taskCollectionRef, where('title', '==', title));
@@ -159,11 +184,42 @@ const TaskAccordion = (props) => {
                 isComplete: true,
                 completedBy: checkedPlayers
             });
+            await props.refresh();
         } catch(error) {
             console.error("Error in handlePressedCompletedButton: ", error);
         }
 
     }
+
+    //creates checkboxes of all players for task
+    if (task.taskType === 'Task')  {
+        listOfPlayers = players.map(player => (
+            <Checkbox
+                key = {player}
+                value = {player}
+                isChecked = {checkedPlayers.includes(player)}
+                onChange = {() => handleCheckedPlayers(player)}
+            >
+                {player}
+            </Checkbox>
+        ));
+    }
+
+    //creates checkboxes of dead players for revival missions
+    else if (task.taskType === 'Revival Mission') {
+        console.log(`array1:`, arrayOfDeadPlayers);
+        listOfPlayers = arrayOfDeadPlayers?.map(player => (
+            <Checkbox
+                key = {player}
+                value = {player}
+                isChecked = {checkedPlayers.includes(player)}
+                onChange = {() => handleCheckedPlayers(player)}
+            >
+                {player}
+            </Checkbox>
+        ) || []);
+    }
+
 
     return (
         <Flex>
@@ -183,16 +239,7 @@ const TaskAccordion = (props) => {
                         </AlertDialogBody>
                         <AlertDialogBody>
                             <Flex flexDirection = 'column'>
-                                {players.map(player => (
-                                    <Checkbox
-                                        key = {player}
-                                        value = {player}
-                                        isChecked = {checkedPlayers.includes(player)}
-                                        onChange = {() => handleCheckedPlayers(player)}
-                                    >
-                                        {player}
-                                    </Checkbox>
-                                ))}                            
+                                {listOfPlayers}                     
                             </Flex>
                         </AlertDialogBody>
                         <AlertDialogFooter>
@@ -230,6 +277,9 @@ const TaskAccordion = (props) => {
                 </AccordionPanel>
                 <AccordionPanel>
                     Points: {task.pointValue}
+                </AccordionPanel>
+                <AccordionPanel>
+                    Task Type: {task.taskType}
                 </AccordionPanel>
                 <AccordionPanel>
                     {task.isComplete ? (

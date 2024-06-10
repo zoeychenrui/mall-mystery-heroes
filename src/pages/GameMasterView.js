@@ -33,6 +33,7 @@ const GameMasterView = () => {
     //updates arrayOfAlivePlayers, arrayOfDeadPlayers, and arrayOfTasks when roomID is updated
     useEffect (() => {
         const fetchPlayers = async () => {
+            console.log(`fetching players and tasks in useEffect: ${roomID}`);
             try {
                 const playerQuery = query(playerCollectionRef);
                 const playerSnapshot = await getDocs(playerQuery);
@@ -141,6 +142,7 @@ const GameMasterView = () => {
                 arrayOfTasks = {arrayOfTasks}
                 roomID = {roomID}
                 arrayOfPlayers = {arrayOfPlayers}
+                arrayOfDeadPlayers = {arrayOfDeadPlayers}
             />
         </div>
     );

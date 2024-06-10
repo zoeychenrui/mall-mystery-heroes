@@ -11,12 +11,12 @@ import { collection,
 import TaskAccordion from './TaskAccordion';
 
 const TaskList = (props) => {
-    const roomID = props.roomID;
+    const {roomID, arrayOfPlayers} = props;
     const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
-    const arrayOfPlayers = props.arrayOfPlayers;
     const [tasks, setTasks] = useState([]);
     const arrayOfActiveTasks = tasks.filter(eachTask => eachTask.isComplete === false); //filters active tasks
     const arrayOfInactiveTasks = tasks.filter(eachTask => eachTask.isComplete === true); //filters inactive tasks
+    console.log(`arrayOfDeadPlayers TaskList:`, props.arrayOfDeadPlayers);
 
     // Fetch tasks from Firestore
     const fetchTasks = async () => {
@@ -25,12 +25,13 @@ const TaskList = (props) => {
         setTasks(taskArray);
     }
 
-    // Fetch tasks on component mount
+    //updates tasklists when task is added
     useEffect(() => {
+        console.log(`fetching tasks in useEffect: ${roomID}`);
         fetchTasks();
-    // eslint-disable-next-line
-    }, [arrayOfActiveTasks]);
-    
+        // eslint-disable-next-line
+    }, [props.arrayOfTasks]);
+
     //makes an array where each item contains an accordion item of an active task object
     const listOfActiveTasks = arrayOfActiveTasks.map(eachTask => {
        return (
@@ -40,6 +41,7 @@ const TaskList = (props) => {
                 players = {arrayOfPlayers}
                 roomID = {roomID}
                 refresh = {fetchTasks}
+                arrayOfDeadPlayers = {props.arrayOfDeadPlayers}
             />
        );
     });
@@ -47,17 +49,17 @@ const TaskList = (props) => {
     //makes an array where each item contains an accordion item of an inactive task object
     const listOfInactiveTasks = arrayOfInactiveTasks.map(eachTask => {
         return (
-             <TaskAccordion
+            <TaskAccordion
                  key = {eachTask.title}
                  task = {eachTask}
                  players = {arrayOfPlayers}
                  roomID = {roomID}
                  refresh = {fetchTasks}
+                 arrayOfDeadPlayers = {props.arrayOfDeadPlayers}
             />
         );
     });
 
-    
      return (  
         <Flex>
             <Flex flexDirection='column'>
