@@ -16,7 +16,6 @@ const TaskList = (props) => {
     const [tasks, setTasks] = useState([]);
     const arrayOfActiveTasks = tasks.filter(eachTask => eachTask.isComplete === false); //filters active tasks
     const arrayOfInactiveTasks = tasks.filter(eachTask => eachTask.isComplete === true); //filters inactive tasks
-    console.log(`arrayOfDeadPlayers TaskList:`, props.arrayOfDeadPlayers);
 
     // Fetch tasks from Firestore
     const fetchTasks = async () => {
