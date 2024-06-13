@@ -121,6 +121,7 @@ const GameMasterView = () => {
                 roomID={roomID}
                 onPlayerKilled={handleKillPlayer}
                 killedPlayerPoints={handleKillPlayerPoints}
+                arrayOfAlivePlayers={arrayOfAlivePlayers}
             />
             <AssasinsSelection  
                 roomID={roomID}
@@ -134,6 +135,7 @@ const GameMasterView = () => {
                 roomID = {roomID}
                 onPlayerRevived = {handlePlayerRevive}
                 arrayOfDeadPlayers = {arrayOfDeadPlayers}
+                arrayOfAlivePlayers = {arrayOfAlivePlayers}
             />
             <TaskCreation
                 roomID = {roomID}
