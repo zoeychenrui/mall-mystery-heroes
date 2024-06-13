@@ -41,6 +41,7 @@ const TaskList = (props) => {
                 roomID = {roomID}
                 refresh = {fetchTasks}
                 arrayOfDeadPlayers = {props.arrayOfDeadPlayers}
+                arrayOfPlayers = {props.arrayOfPlayers}
             />
        );
     });
@@ -55,6 +56,7 @@ const TaskList = (props) => {
                  roomID = {roomID}
                  refresh = {fetchTasks}
                  arrayOfDeadPlayers = {props.arrayOfDeadPlayers}
+                 arrayOfPlayers = {props.arrayOfPlayers}
             />
         );
     });

@@ -1,17 +1,19 @@
 import React from 'react';
-import {Button} from '@chakra-ui/react';
-import { db } from '../utils/firebase';
-import { getDocs,
+import { Flex } from '@chakra-ui/react';
+import { query, 
          updateDoc,
          where,
-         query,
+         getDocs,
          collection
-       } from 'firebase/firestore';
+    } from 'firebase/firestore';
+import { db } from '../utils/firebase';
+import { Button } from '@chakra-ui/react';
+
 const RegenerateTargets = (props) => {
     const arrayOfAlivePlayers = props.arrayOfAlivePlayers;
     const roomID = props.roomID;
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
-
+    
     //randomizes order of array
     const randomizeArray = (array) => {
         for (let i = 0; i < array.length; i++) {
@@ -20,92 +22,154 @@ const RegenerateTargets = (props) => {
         }
         return array;
     }
-    
-    //regenerate targets for players
+
+
     const handleRegeneration = async () => {
-        let playersNeedingUpdate = [];
-        console.log(`arrayOfAlivePlayers for handleRegeneration: ${arrayOfAlivePlayers}`);
+        let playersNeedingTarget = [];
         const MAXTARGETS = arrayOfAlivePlayers.length > 15 ? 3 : (arrayOfAlivePlayers.length > 5 ? 2 : 1); //defines what max targets each player should be assigned
         
-        //makes an array of players that need more targets
-        for (let i = 0; i < arrayOfAlivePlayers.length; i++) {
-            const playerName = arrayOfAlivePlayers[i];
-            const playerQuery = query(playerCollectionRef, where('name', '==', playerName));
-            const snapshot = await getDocs(playerQuery);
-            //checks if player is in db
-            if (snapshot.empty) {
-                console.error("Error finding player: ", playerName);
-                return;
-            }
-            const playerTargetRef = snapshot.docs[0].data().targets;
+        //loops through all alive players to find players needing more targets
+        for (const player of arrayOfAlivePlayers) {
+            const playerQuery = query(playerCollectionRef, where('name', '==', player));
+            const playerSnapshot = await getDocs(playerQuery);
+            const playerTargetRef = playerSnapshot.docs[0].data().targets;
+            //adds player to playersNeedingTarget if player does not have enough targets
             if (playerTargetRef.length < MAXTARGETS) {
-                playersNeedingUpdate = [...playersNeedingUpdate, playerName];
+                playersNeedingTarget = [...playersNeedingTarget, player];
             }
         }
-        console.log("Players needing update: ", playersNeedingUpdate);
-        
+        console.log(`playersNeedingTarget: ${playersNeedingTarget}`);
+
         //updates targets for players that need to update targets
-        for (const player of playersNeedingUpdate) {
+        for (const player of playersNeedingTarget) {
             const randomizedAlivePlayers = randomizeArray(arrayOfAlivePlayers);
-            console.log(`randomizedAlivePlayers for ${player}: ${randomizedAlivePlayers}`);
-            const playerTargetsQuery = query(playerCollectionRef, where('name', '==', player));
-            const playerTargetsSnapshot = await getDocs(playerTargetsQuery);
-            const playerDoc = playerTargetsSnapshot.docs[0];
+            
+            //finds player in db and retrieves targets
+            const playerQuery = query(playerCollectionRef, where('name', '==', player));
+            const playerSnapshot = await getDocs(playerQuery);
+            const playerDoc = playerSnapshot.docs[0];
             const playerData = playerDoc.data();
             let newTargetArray = [...playerData.targets];
-            console.log(`Assigning targets for ${player}`);
             
-            //assigns target to player if meets criteria
-            for (const playerTarget of randomizedAlivePlayers) {
-                const targetQuery = query(playerCollectionRef, where('name', '==', playerTarget));
-                const targetSnapshot = await getDocs(targetQuery);
-                const targetDoc = targetSnapshot.docs[0];
-                const targetData = targetDoc.data();
+            //finds possible targets for player
+            for (const possibleTarget of randomizedAlivePlayers) {
+                const possibleTargetQuery = query(playerCollectionRef, where('name', '==', possibleTarget));
+                const possibleTargetSnapshot = await getDocs(possibleTargetQuery);
+                const possibleTargetDoc = possibleTargetSnapshot.docs[0];
+                const possibleTargetData = possibleTargetDoc.data();
                 
-                //target is assigned if criteria met 
-                if (
-                    targetData.assassins.length < MAXTARGETS + 1 && //checks if target has max assassins
-                    !targetData.targets.includes(player) && //checks if target is targeting player
-                    newTargetArray.length < MAXTARGETS && //checks if player already has max targets
-                    !newTargetArray.includes(playerTarget) && //checks if target is already assigned
-                    !targetData.assassins.includes(player) && //checks if target is an assassin
-                    playerTarget !== player //checks if target is the same as player
+                if ( possibleTargetData.assassins.length < MAXTARGETS && //checks if possible target has max assassins
+                     !possibleTargetData.targets.includes(player) && //checks if possible target is targeting player
+                     !newTargetArray.includes(possibleTarget) && //checks if player is already targeting possible target
+                     possibleTarget !== player //checks if target is the same as player
                 ) {
-                    newTargetArray.push(playerTarget);
-                    console.log(`Assigned ${playerTarget} to ${player}`);
-                    
-                    //updates Target's assassins array
-                    await updateDoc(targetDoc.ref, {
-                        assassins: [...targetData.assassins, player]
-                    });
+                    //adds possible target to targets
+                    newTargetArray.push(possibleTarget);
 
-                    //breaks if player has max targets
+                    //updates target's assassins in db
+                    await updateDoc(possibleTargetDoc.ref, {
+                        assassins: [...possibleTargetData.assassins, player]
+                    });
+                    console.log(`Assassins updated for ${possibleTarget} in database (loop1): ${possibleTargetData.assassins}`);
+
+                    //breaks loop if player has max targets
                     if (newTargetArray.length >= MAXTARGETS) {
-                        console.log(`breaking for ${player} with ${newTargetArray.length} targets`);
                         break;
                     }
                 }
-                else {
-                    console.log(`no new targets found for ${player}`);
+                else if ( possibleTargetData.assassins.length < MAXTARGETS + 1 && //checks if possible target has max assassins + 1
+                         !possibleTargetData.targets.includes(player) && //checks if possible target is targeting player
+                         !newTargetArray.includes(possibleTarget) && //checks if player is already targeting possible target
+                         possibleTarget !== player //checks if target is the same as player
+                ) {
+                    newTargetArray.push(possibleTarget);
+
+                    await updateDoc(possibleTargetDoc.ref, {
+                        assassins: [...possibleTargetData.assassins, player]
+                    })
+                    console.log(`Assassins updated for ${possibleTarget} in database (loop2): ${possibleTargetData.assassins}`);
+
+                    //breaks loop if player has max targets
+                    if (newTargetArray.length >= MAXTARGETS) {
+                        break;
+                    }
                 }
-                console.log(`Targets for ${player}: ${newTargetArray}`);
             }
             await updateDoc(playerDoc.ref, {
                 targets: [...newTargetArray]
             });
+            console.log(`Targets updated for ${player} in database: ${newTargetArray}`);
         }
 
+        let playersNeedingAssassins = [];
+
+        //loops through all alive players to find players needing more assassins
+        for (const player of arrayOfAlivePlayers) {
+            const playerQuery = query(playerCollectionRef, where('name', '==', player));
+            const playerSnapshot = await getDocs(playerQuery);
+            const playerAssassinRef = playerSnapshot.docs[0].data().assassins;
+            if (playerAssassinRef.length < MAXTARGETS) {
+                playersNeedingAssassins = [...playersNeedingAssassins, player];
+            }
+        }
+        console.log(`playersNeedingAssassins: ${playersNeedingAssassins}`);
+
+        for (const player of playersNeedingAssassins) {
+            const randomizedAlivePlayers = randomizeArray(arrayOfAlivePlayers);
+            
+            //finds player in db and retrieves assassins
+            const playerQuery = query(playerCollectionRef, where('name', '==', player));
+            const playerSnapshot = await getDocs(playerQuery);
+            const playerDoc = playerSnapshot.docs[0];
+            const playerData = playerDoc.data();
+            let newAssassinArray = [...playerData.assassins];
+
+            //finds possible assassins for player
+            for (const possibleAssassin of randomizedAlivePlayers) {
+                const possibleAssassinQuery = query(playerCollectionRef, where('name', '==', possibleAssassin));
+                const possibleAssassinSnapshot = await getDocs(possibleAssassinQuery);
+                const possibleAssassinDoc = possibleAssassinSnapshot.docs[0];
+                const possibleAssassinData = possibleAssassinDoc.data();
+
+                if ( possibleAssassinData.targets.length < MAXTARGETS + 1 && //checks if possible assassin has max targets + 1
+                     !possibleAssassinData.targets.includes(player) && //checks if possible assassin is targeting player
+                     !newAssassinArray.includes(possibleAssassin) && //checks if player is already targeting possible target
+                     possibleAssassin !== player //checks if target is the same as player
+                ) {
+                    //adds possible target to targets
+                    newAssassinArray.push(possibleAssassin);
+
+                    //updates assassin's targets in db
+                    await updateDoc(possibleAssassinDoc.ref, {
+                        targets: [...possibleAssassinData.targets, player]
+                    });
+                    console.log(`Targets updated for ${possibleAssassin} in database (loop3): ${possibleAssassinData.targets}`);
+
+                    //breaks loop if player has max targets
+                    if (newAssassinArray.length >= MAXTARGETS) {
+                        break;
+                    }
+                }
+            }
+
+            //updates player's assassins in db
+            await updateDoc(playerDoc.ref, {
+                assassins: [...newAssassinArray]
+            });
+            console.log(`Assassins updated for ${player} in database: ${newAssassinArray}`);
+        }
     }
 
     return (  
-        <div>
+        <Flex>
             <Button 
-                onClick={handleRegeneration}
-                m='5px'
+                onClick = {handleRegeneration}
+                m = '5px'
             >
                 Regenerate Targets
             </Button>
-        </div>
+            
+        </Flex>
     );
 }
  

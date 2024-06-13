@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {Input, 
         Button, 
         Flex,
@@ -7,7 +7,14 @@ import {Input,
         NumberDecrementStepper,
         NumberIncrementStepper,
         NumberInputStepper,
-        Select
+        Select,
+        AlertDialog,
+        AlertDialogFooter,
+        Checkbox,
+        AlertDialogOverlay,
+        AlertDialogContent,
+        AlertDialogHeader,
+        AlertDialogBody
     } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
 import { collection, 
@@ -27,6 +34,11 @@ const TaskCreation = (props) => {
     const time = new Date();
     const [selectedTaskType, setSelectedTaskType] = useState('');
     const createAlert = CreateAlert();
+    const [isOpen, setIsOpen] = useState(false);
+    const onClose = () => setIsOpen(false);
+    const cancelRef = useRef();
+    const [checkedPlayers, setCheckedPlayers] = useState([]);
+    const arrayOfPlayers = props.arrayOfPlayers;
 
     //stores task description
     const handleDescriptionChange = (event) => {
@@ -56,6 +68,7 @@ const TaskCreation = (props) => {
             description: TaskDescription,
             pointValue: PointValue,
             taskType: selectedTaskType,
+            openSeasonTargets: checkedPlayers,
             dateCreated: time.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
             isComplete: false,
             completedBy: []
@@ -81,11 +94,8 @@ const TaskCreation = (props) => {
             newTask.description = 'No description provided';
         }
         
-        if (newTask.taskType === 'Revival Mission') {
-            newTask.pointValue = 0;
-        }
-
-        if (newTask.taskType === 'Open Season') {
+        //makes point value for revival and open season tasks 0
+        if (newTask.taskType === 'Revival Mission' || newTask.taskType === 'Open Season') {
             newTask.pointValue = 0;
         }
 
@@ -104,9 +114,47 @@ const TaskCreation = (props) => {
         createAlert('success', 'Task Added', 'Your task has been created', 1500);
     }
 
+    const handleConfirmOpenSeason = async () => {
+        setIsOpen(false);
+        await handleAddTask();
+        setCheckedPlayers([]);
+    };
+
+    const handleCheckedPlayers = (player) => {
+        setCheckedPlayers(checkedPlayers => {
+            if (checkedPlayers.includes(player)) { //if player is already checked
+                return checkedPlayers.filter(checkedPlayer => checkedPlayer !== player);
+            }
+            else { //if player is not already checked
+                return [...checkedPlayers, player];  
+            }
+        }); 
+    };
+
+    // const listOfPlayers = [];
+    const listOfPlayers = arrayOfPlayers.map(eachPlayer => (
+        <Checkbox
+            key={eachPlayer}
+            value={eachPlayer}
+            isChecked = {checkedPlayers.includes(eachPlayer)}
+            onChange={ () => handleCheckedPlayers(eachPlayer)}
+        >
+            {eachPlayer}
+        </Checkbox>
+    ));
+
+    const handleAddTaskPressed = async () => {
+        if (selectedTaskType === 'Task' || selectedTaskType === 'Revival Mission') {
+            await handleAddTask();
+        }
+        else if (selectedTaskType === 'Open Season') {
+            setIsOpen(true);
+        }
+    }
     useEffect(() => {
         console.log(`usingEffect selectedTaskType: ${selectedTaskType}`);
     }, [selectedTaskType]);
+
     return (  
         <Flex margin = '5px'>
             <Input size = 'lg'
@@ -142,11 +190,41 @@ const TaskCreation = (props) => {
                 </NumberInputStepper>
             </NumberInput>
             <Button size = 'lg'
-                    onClick = {handleAddTask}
+                    onClick = {handleAddTaskPressed}
                     colorScheme= 'blue'
             >
                 Add Task
             </Button>
+
+            <AlertDialog
+                isOpen = {isOpen}
+                leastDestructiveRef = {cancelRef}
+                onClose = {onClose}
+            >
+                <AlertDialogOverlay>
+                    <AlertDialogContent>
+                        <AlertDialogHeader fontSize = 'lg' fontWeight = 'bold'>
+                            Select Open Season Targets
+                        </AlertDialogHeader>
+                        <AlertDialogBody>
+                            Select the players you want to target:
+                        </AlertDialogBody>
+                        <AlertDialogBody>
+                            <Flex flexDirection = 'column'>
+                                {listOfPlayers}
+                            </Flex>
+                        </AlertDialogBody>
+                        <AlertDialogFooter>
+                            <Button ref = {cancelRef} onClick = {onClose}>
+                                Cancel
+                            </Button>
+                            <Button colorScheme='green' onClick = {handleConfirmOpenSeason} ml = '3px'>
+                                Confirm
+                            </Button>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialogOverlay>
+            </AlertDialog>
         </Flex>
     );
 }

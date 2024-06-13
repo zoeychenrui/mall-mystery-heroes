@@ -138,6 +138,7 @@ const GameMasterView = () => {
             <TaskCreation
                 roomID = {roomID}
                 onNewTaskAdded = {handleNewTaskAdded}
+                arrayOfPlayers = {arrayOfPlayers}
             />
             <TaskList 
                 arrayOfTasks = {arrayOfTasks}
