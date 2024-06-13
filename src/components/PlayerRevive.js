@@ -1,12 +1,7 @@
 import React, { useState } from 'react';
 import {Button,
         Select,
-        Flex,
-        Box,
-        Alert,
-        AlertIcon,
-        AlertTitle,
-        AlertDescription,
+        Flex
     } from '@chakra-ui/react';
 import {db} from '../utils/firebase';
 import {collection, 
@@ -15,12 +10,14 @@ import {collection,
         getDocs,
         updateDoc
     } from "firebase/firestore";
+import CreateAlert from './CreateAlert';
+import RemapPlayers from './RemapPlayers';
+
 const PlayerRevive = (props) => {
     const [selectedPlayer, setSelectedPlayer] = useState('');
-    const [showAlert, setShowAlert] = useState(false); // State to control the alert visibility
     const roomID = props.roomID;
-    const [ErrorMessage, setErrorMessage] = useState('');
     const arrayOfDeadPlayers = props.arrayOfDeadPlayers;
+    const createAlert = CreateAlert();
 
     const handleChange = (event) => {
         setSelectedPlayer(event.target.value);
@@ -28,29 +25,23 @@ const PlayerRevive = (props) => {
 
     const handleRevivePlayer = async () => {   
         if (selectedPlayer === '') {
-            setShowAlert(true);
-            setErrorMessage("Please select a player to revive.");
-            return;
+            return createAlert('error', 'Error', 'Please select a player to revive', 1500);
         }
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const playerQuery = query(playerCollectionRef, where('name', '==', selectedPlayer));
         const playerSnapshot = await getDocs(playerQuery);
         const playerdoc = playerSnapshot.docs[0].ref;
         await updateDoc(playerdoc, { isAlive: true });
-        props.onPlayerRevived(selectedPlayer);
+        await props.onPlayerRevived(selectedPlayer);
+        const handleRegeneration = RemapPlayers();
+        await handleRegeneration(selectedPlayer, selectedPlayer, props.arrayOfAlivePlayers, roomID);
+        setSelectedPlayer('');
     }
+
+    
 
     return (  
         <Flex>
-            {showAlert && (
-                <Box mb={4} width="100%">
-                    <Alert status="error">
-                        <AlertIcon />
-                        <AlertTitle>Error: </AlertTitle>
-                        <AlertDescription>{ErrorMessage}</AlertDescription>
-                    </Alert>
-                </Box>
-            )}
             <Select placeholder='Select player to revive'
                     onChange={handleChange}
                     value={selectedPlayer}>

@@ -1,5 +1,3 @@
-import React from 'react';
-import { Flex } from '@chakra-ui/react';
 import { query, 
          updateDoc,
          where,
@@ -7,12 +5,8 @@ import { query,
          collection
     } from 'firebase/firestore';
 import { db } from '../utils/firebase';
-import { Button } from '@chakra-ui/react';
 
-const RegenerateTargets = (props) => {
-    const arrayOfAlivePlayers = props.arrayOfAlivePlayers;
-    const roomID = props.roomID;
-    const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
+const RemapPlayers = () => {
     
     //randomizes order of array
     const randomizeArray = (array) => {
@@ -23,22 +17,9 @@ const RegenerateTargets = (props) => {
         return array;
     }
 
-
-    const handleRegeneration = async () => {
-        let playersNeedingTarget = [];
+    const handleRegeneration = async (playersNeedingTarget, playersNeedingAssassins, arrayOfAlivePlayers, roomID) => {
+        const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const MAXTARGETS = arrayOfAlivePlayers.length > 15 ? 3 : (arrayOfAlivePlayers.length > 5 ? 2 : 1); //defines what max targets each player should be assigned
-        
-        //loops through all alive players to find players needing more targets
-        for (const player of arrayOfAlivePlayers) {
-            const playerQuery = query(playerCollectionRef, where('name', '==', player));
-            const playerSnapshot = await getDocs(playerQuery);
-            const playerTargetRef = playerSnapshot.docs[0].data().targets;
-            //adds player to playersNeedingTarget if player does not have enough targets
-            if (playerTargetRef.length < MAXTARGETS) {
-                playersNeedingTarget = [...playersNeedingTarget, player];
-            }
-        }
-        console.log(`playersNeedingTarget: ${playersNeedingTarget}`);
 
         //updates targets for players that need to update targets
         for (const player of playersNeedingTarget) {
@@ -83,7 +64,7 @@ const RegenerateTargets = (props) => {
                          !newTargetArray.includes(possibleTarget) && //checks if player is already targeting possible target
                          possibleTarget !== player && //checks if target is the same as player
                          newTargetArray.length < MAXTARGETS //checks if player has max targets
-                    ) {
+                ) {
                     newTargetArray.push(possibleTarget);
 
                     await updateDoc(possibleTargetDoc.ref, {
@@ -102,19 +83,6 @@ const RegenerateTargets = (props) => {
             });
             console.log(`Targets updated for ${player} in database: ${newTargetArray}`);
         }
-
-        let playersNeedingAssassins = [];
-
-        //loops through all alive players to find players needing more assassins
-        for (const player of arrayOfAlivePlayers) {
-            const playerQuery = query(playerCollectionRef, where('name', '==', player));
-            const playerSnapshot = await getDocs(playerQuery);
-            const playerAssassinRef = playerSnapshot.docs[0].data().assassins;
-            if (playerAssassinRef.length < MAXTARGETS) {
-                playersNeedingAssassins = [...playersNeedingAssassins, player];
-            }
-        }
-        console.log(`playersNeedingAssassins: ${playersNeedingAssassins}`);
 
         for (const player of playersNeedingAssassins) {
             const randomizedAlivePlayers = randomizeArray(arrayOfAlivePlayers);
@@ -136,8 +104,9 @@ const RegenerateTargets = (props) => {
                 if ( possibleAssassinData.targets.length < MAXTARGETS + 1 && //checks if possible assassin has max targets + 1
                      !possibleAssassinData.targets.includes(player) && //checks if possible assassin is targeting player
                      !newAssassinArray.includes(possibleAssassin) && //checks if player is already targeting possible target
-                     possibleAssassin !== player && //checks if target is the same as player
+                     possibleAssassin !== player &&//checks if target is the same as player
                      newAssassinArray.length < MAXTARGETS //checks if player has max assassins
+
                 ) {
                     //adds possible target to targets
                     newAssassinArray.push(possibleAssassin);
@@ -163,17 +132,7 @@ const RegenerateTargets = (props) => {
         }
     }
 
-    return (  
-        <Flex>
-            <Button 
-                onClick = {handleRegeneration}
-                m = '5px'
-            >
-                Regenerate Targets
-            </Button>
-            
-        </Flex>
-    );
+    return handleRegeneration;
 }
  
-export default RegenerateTargets;
+export default RemapPlayers;

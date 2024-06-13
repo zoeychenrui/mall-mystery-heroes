@@ -2,15 +2,16 @@ import React, { useState } from 'react';
 import { Flex, Button, Select, Box, Alert, AlertIcon, AlertTitle, AlertDescription } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
 import { query, updateDoc, collection, getDocs, where } from "firebase/firestore";
+import RemapPlayers from './RemapPlayers';
 
 const KillButton = (props) => {
     const [selectedPlayer, setSelectedPlayer] = useState('');
     const [showAlert, setShowAlert] = useState(false); // State to control the alert visibility
 
-
     const roomID = props.roomID;
     const playerData = props.arrayOfPlayers;
     const onPlayerKilled = props.onPlayerKilled;
+    const handleRemapping = RemapPlayers();
 
     // Define a function to handle changes to the select element
     const handleChange = (event) => {
@@ -33,6 +34,10 @@ const KillButton = (props) => {
             const playerdoc = querySnapshot.docs[0].ref;
             const playerData = querySnapshot.docs[0].data();
             console.log(`assasins: ${playerData.assassins}`);
+            const prevAssassins = playerData.assassins; //stores player's prev assassins
+            const prevTargets = playerData.targets; //stores player's prev targets
+            console.log(`prevTargets: ${prevTargets}`);
+            console.log(`prevAssassins: ${prevAssassins}`);
             
             for (let i = 0; i < playerData.assassins.length; i++) {
                 let tempPlayer = playerData.assassins[i];
@@ -71,6 +76,8 @@ const KillButton = (props) => {
                 assassins: []
             });
             onPlayerKilled(selectedPlayer);
+            console.log(`checkpoint reached 1`);
+            await handleRemapping(prevAssassins, prevTargets, props.arrayOfAlivePlayers, roomID); //remaps targets and assassins
         } catch (error) {
             console.error('Error fetching player documents:', error);
         }

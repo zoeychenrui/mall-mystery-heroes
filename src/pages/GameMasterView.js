@@ -82,6 +82,7 @@ const GameMasterView = () => {
         setKilledPlayerNamed(killedPlayerName); // sets the name of the player to be killed 
         setTriggerAS(true);
         setArrayOfDeadPlayers(arrayOfDeadPlayers => [...arrayOfDeadPlayers, killedPlayerName]);
+        setArrayOfAlivePlayers(arrayOfAlivePlayers.filter((name) => name !== killedPlayerName));
     };
 
     //updates killedPlayerPointed
@@ -120,6 +121,7 @@ const GameMasterView = () => {
                 roomID={roomID}
                 onPlayerKilled={handleKillPlayer}
                 killedPlayerPoints={handleKillPlayerPoints}
+                arrayOfAlivePlayers={arrayOfAlivePlayers}
             />
             <AssasinsSelection  
                 roomID={roomID}
@@ -133,10 +135,12 @@ const GameMasterView = () => {
                 roomID = {roomID}
                 onPlayerRevived = {handlePlayerRevive}
                 arrayOfDeadPlayers = {arrayOfDeadPlayers}
+                arrayOfAlivePlayers = {arrayOfAlivePlayers}
             />
             <TaskCreation
                 roomID = {roomID}
                 onNewTaskAdded = {handleNewTaskAdded}
+                arrayOfPlayers = {arrayOfPlayers}
             />
             <TaskList 
                 arrayOfTasks = {arrayOfTasks}

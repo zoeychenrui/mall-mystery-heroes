@@ -85,10 +85,6 @@ const TaskCreation = (props) => {
             newTask.pointValue = 0;
         }
 
-        if (newTask.taskType === 'Open Season') {
-            newTask.pointValue = 0;
-        }
-
         const checkTaskQuery = query(taskCollectionRef, where('title', '==', newTask.title));
         const checkTaskSnapshot = await getDocs(checkTaskQuery); 
         //adds new document for new tasks
@@ -127,7 +123,6 @@ const TaskCreation = (props) => {
             >
                 <option value = 'Task'>Task</option>
                 <option value = 'Revival Mission'>Revival Mission</option>
-                <option value = 'Open Season'>Open Season</option>
             </Select>
             <NumberInput value = {PointValue}
                          onChange = {handlePointChange}
