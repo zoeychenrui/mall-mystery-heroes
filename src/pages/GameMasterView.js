@@ -5,7 +5,8 @@ import { useParams,
          useLocation } from 'react-router-dom';
 import TargetGenerator from '../components/TargetGenerator';
 import DeadPlayersList from '../components/DeadPlayersList';
-import { Flex, 
+import { HStack,   
+         Flex, 
          Heading,} from '@chakra-ui/react';
 import KillButton from '../components/KillButton';
 import AssasinsSelection from '../components/AssasinsSelection';
@@ -29,6 +30,7 @@ const GameMasterView = () => {
     const [arrayOfDeadPlayers, setArrayOfDeadPlayers] = useState([]);
     const [arrayOfAlivePlayers, setArrayOfAlivePlayers] = useState([]);
     const [arrayOfTasks, setArrayOfTasks] = useState([]);
+    const [assassinPlayerNamed, setAssassinPlayerNamed] = useState('');
 
     //updates arrayOfAlivePlayers, arrayOfDeadPlayers, and arrayOfTasks when roomID is updated
     useEffect (() => {
@@ -85,9 +87,8 @@ const GameMasterView = () => {
         setArrayOfAlivePlayers(arrayOfAlivePlayers.filter((name) => name !== killedPlayerName));
     };
 
-    //updates killedPlayerPointed
-    const handleKillPlayerPoints = (killedPlayerPoints) => {
-        setKilledPlayerPointed(killedPlayerPoints);
+    const getAssassinPlayerName = (assassinName) => { //this gets the assassins from the dropdown
+        setAssassinPlayerNamed(assassinName);
     };
 
     //updates ArrayOfDeadPlayers and adds player to arrayOfAlivePlayers
@@ -116,21 +117,18 @@ const GameMasterView = () => {
                 <AlivePlayersList roomID={roomID} />
                 <DeadPlayersList roomID={roomID} />
             </Flex>
-            <KillButton 
-                arrayOfPlayers={arrayOfPlayers}
-                roomID={roomID}
-                onPlayerKilled={handleKillPlayer}
-                killedPlayerPoints={handleKillPlayerPoints}
-                arrayOfAlivePlayers={arrayOfAlivePlayers}
-            />
-            <AssasinsSelection  
-                roomID={roomID}
-                arrayOfPlayers={arrayOfPlayers} 
-                killedPlayerPoints={killedPlayerPointed}
-                killedPlayerNamed={killedPlayerNamed}
-                triggerAS={triggerAS}
-                setTriggerAS={setTriggerAS} // Pass the setter function as a prop
-            />         
+            <HStack spacing='1px'>
+                <AssasinsSelection
+                    roomID={roomID}
+                    getAssassinPlayerName={getAssassinPlayerName}
+                    arrayOfAlivePlayers = {arrayOfAlivePlayers}
+                />    
+                <KillButton  
+                    roomID={roomID}
+                    handleKillPlayer={handleKillPlayer}
+                    assassinPlayerNamed = {assassinPlayerNamed}
+                />
+            </HStack>    
             <PlayerRevive 
                 roomID = {roomID}
                 onPlayerRevived = {handlePlayerRevive}
