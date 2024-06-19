@@ -20,7 +20,6 @@ import {
 import { useEffect, useState } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import FilledEnterButton from "./FilledEnterButton";
-import logo from '../assets/mall-logo-white.svg';
 
 const Auth = (props) => {
   const [email, setEmail] = useState("");
@@ -89,19 +88,19 @@ const Auth = (props) => {
 
   return (
     
-    <Stack spacing={4}>
+    <Stack spacing={4} >
       {errorMessage && (
         <Alert status="error">
           <AlertIcon />
           {errorMessage}
         </Alert>
-      )}
-      
+      )} 
       <Input
         placeholder="Email"
         type="email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
+        borderWidth= "3px"//until theme is fixed
       />
       <Box position="relative">
         <InputGroup size="md">
@@ -111,6 +110,7 @@ const Auth = (props) => {
             placeholder="Enter password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            borderWidth= "3px"//until theme is fixed
           />
           <InputRightElement width="4.5rem">
             <Button
@@ -118,8 +118,8 @@ const Auth = (props) => {
               size="sm"
               onClick={handleClick}
               variant="ghost"
-              color="white"
-              _hover={{ bg: 'rgba(159, 240, 171, 1)', color: 'black' }} // Change background and text color on hover
+              color="brand.100"
+              _hover={{ bg: 'brand.500', color: 'black' }} // Change background and text color on hover
             >
               {show ? 'Hide' : 'Show'}
             </Button>
@@ -142,6 +142,7 @@ const Auth = (props) => {
             placeholder="Confirm password"
             value={password2}
             onChange={(e) => setPassword2(e.target.value)}
+            borderWidth= "3px"//until theme is fixed
           />
         </InputGroup>
       )}
@@ -155,11 +156,18 @@ const Auth = (props) => {
           </Link>
         </>
       ) : (
-        <Button colorScheme="green" onClick={checkPass}>Submit</Button>
+         <Box position="relative" 
+              bottom='63px'
+              left="100%" 
+              width="50px" 
+              height="50px"
+              mb={-10}>
+            <FilledEnterButton send={checkPass} />
+          </Box>
       )}
       {!isLoginPage && (
-        <Link as={RouterLink} to="/login" align="center">
-          <Text as="i" fontSize={12} colorScheme="teal">
+        <Link as={RouterLink} to="/login" align="center" >
+          <Text as="i" fontSize={12} >
             Already have an account? Log in
           </Text>
         </Link>

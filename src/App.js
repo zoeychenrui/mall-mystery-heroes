@@ -8,9 +8,11 @@ import Homepage from './pages/Homepage';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import PasswordReset from './pages/PasswordReset';
+import theme from './theme'; // Import your custom theme
+
 function App() {
   return (
-    <ChakraProvider> 
+    <ChakraProvider theme={theme}> 
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Homepage />} />

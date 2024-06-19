@@ -8,8 +8,6 @@ import DeadPlayersList from '../components/DeadPlayersList';
 import { HStack,   
          Flex, 
          Heading,} from '@chakra-ui/react';
-import KillButton from '../components/KillButton';
-import AssasinsSelection from '../components/AssasinsSelection';
 import PlayerRevive from '../components/PlayerRevive';
 import { db } from '../utils/firebase';
 import { collection,
@@ -19,6 +17,7 @@ import { collection,
 import RegenerateTargets from '../components/RegenerateTargets';
 import TaskCreation from '../components/TaskCreation';
 import TaskList from '../components/TaskList';
+import Execution from '../components/Execution';
 
 const GameMasterView = () => {
     const { roomID } = useParams(); 
@@ -81,14 +80,8 @@ const GameMasterView = () => {
     }, [roomID]);
 
     const handleKillPlayer = (killedPlayerName, setAS) => {
-        setKilledPlayerNamed(killedPlayerName); // sets the name of the player to be killed 
-        setTriggerAS(true);
         setArrayOfDeadPlayers(arrayOfDeadPlayers => [...arrayOfDeadPlayers, killedPlayerName]);
         setArrayOfAlivePlayers(arrayOfAlivePlayers.filter((name) => name !== killedPlayerName));
-    };
-
-    const getAssassinPlayerName = (assassinName) => { //this gets the assassins from the dropdown
-        setAssassinPlayerNamed(assassinName);
     };
 
     //updates ArrayOfDeadPlayers and adds player to arrayOfAlivePlayers
@@ -118,16 +111,13 @@ const GameMasterView = () => {
                 <DeadPlayersList roomID={roomID} />
             </Flex>
             <HStack spacing='1px'>
-                <AssasinsSelection
+            <HStack spacing='1px'>
+                <Execution
                     roomID={roomID}
-                    getAssassinPlayerName={getAssassinPlayerName}
-                    arrayOfAlivePlayers = {arrayOfAlivePlayers}
-                />    
-                <KillButton  
-                    roomID={roomID}
+                    arrayOfAlivePlayers={arrayOfAlivePlayers}
                     handleKillPlayer={handleKillPlayer}
-                    assassinPlayerNamed = {assassinPlayerNamed}
                 />
+            </HStack>
             </HStack>    
             <PlayerRevive 
                 roomID = {roomID}

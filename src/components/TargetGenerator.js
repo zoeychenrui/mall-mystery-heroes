@@ -157,11 +157,11 @@ const TargetGenerator = (props) => {
                 <AlertDialogOverlay/>
                     <AlertDialogContent>
 
-                        <AlertDialogHeader>
+                        <AlertDialogHeader color = 'black'>
                             Generate Targets?
                         </AlertDialogHeader>
 
-                        <AlertDialogBody>
+                        <AlertDialogBody color = 'black'>
                             The following will be the initial targets for the the round:
                             <TableContainer>
                                 <Table>
@@ -172,7 +172,7 @@ const TargetGenerator = (props) => {
                                             <Th>Assassins</Th>
                                         </Tr>
                                     </Thead>
-                                    <Tbody>
+                                    <Tbody color = 'black'>
                                         {tableOfPlayers}
                                     </Tbody>
                                 </Table>
