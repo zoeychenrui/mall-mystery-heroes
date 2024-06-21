@@ -5,10 +5,9 @@ import { useParams,
          useLocation } from 'react-router-dom';
 import TargetGenerator from '../components/TargetGenerator';
 import DeadPlayersList from '../components/DeadPlayersList';
-import { Flex, 
+import { HStack,   
+         Flex, 
          Heading,} from '@chakra-ui/react';
-import KillButton from '../components/KillButton';
-import AssasinsSelection from '../components/AssasinsSelection';
 import PlayerRevive from '../components/PlayerRevive';
 import { db } from '../utils/firebase';
 import { collection,
@@ -18,13 +17,11 @@ import { collection,
 import RegenerateTargets from '../components/RegenerateTargets';
 import TaskCreation from '../components/TaskCreation';
 import TaskList from '../components/TaskList';
+import Execution from '../components/Execution';
 
 const GameMasterView = () => {
     const { roomID } = useParams(); 
     const { arrayOfPlayers } = useLocation().state || { arrayOfPlayers: [] };
-    const [killedPlayerNamed, setKilledPlayerNamed] = useState('');
-    const [killedPlayerPointed, setKilledPlayerPointed] = useState(0);
-    const [triggerAS, setTriggerAS] = useState(false);
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players'); //reference to players subcollection
     const [arrayOfDeadPlayers, setArrayOfDeadPlayers] = useState([]);
     const [arrayOfAlivePlayers, setArrayOfAlivePlayers] = useState([]);
@@ -79,15 +76,8 @@ const GameMasterView = () => {
     }, [roomID]);
 
     const handleKillPlayer = (killedPlayerName, setAS) => {
-        setKilledPlayerNamed(killedPlayerName); // sets the name of the player to be killed 
-        setTriggerAS(true);
         setArrayOfDeadPlayers(arrayOfDeadPlayers => [...arrayOfDeadPlayers, killedPlayerName]);
         setArrayOfAlivePlayers(arrayOfAlivePlayers.filter((name) => name !== killedPlayerName));
-    };
-
-    //updates killedPlayerPointed
-    const handleKillPlayerPoints = (killedPlayerPoints) => {
-        setKilledPlayerPointed(killedPlayerPoints);
     };
 
     //updates ArrayOfDeadPlayers and adds player to arrayOfAlivePlayers
@@ -116,21 +106,15 @@ const GameMasterView = () => {
                 <AlivePlayersList roomID={roomID} />
                 <DeadPlayersList roomID={roomID} />
             </Flex>
-            <KillButton 
-                arrayOfPlayers={arrayOfPlayers}
-                roomID={roomID}
-                onPlayerKilled={handleKillPlayer}
-                killedPlayerPoints={handleKillPlayerPoints}
-                arrayOfAlivePlayers={arrayOfAlivePlayers}
-            />
-            <AssasinsSelection  
-                roomID={roomID}
-                arrayOfPlayers={arrayOfPlayers} 
-                killedPlayerPoints={killedPlayerPointed}
-                killedPlayerNamed={killedPlayerNamed}
-                triggerAS={triggerAS}
-                setTriggerAS={setTriggerAS} // Pass the setter function as a prop
-            />         
+            <HStack spacing='1px'>
+            <HStack spacing='1px'>
+                <Execution
+                    roomID={roomID}
+                    arrayOfAlivePlayers={arrayOfAlivePlayers}
+                    handleKillPlayer={handleKillPlayer}
+                />
+            </HStack>
+            </HStack>    
             <PlayerRevive 
                 roomID = {roomID}
                 onPlayerRevived = {handlePlayerRevive}

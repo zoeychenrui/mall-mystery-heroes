@@ -19,6 +19,7 @@ import {
 } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import FilledEnterButton from "./FilledEnterButton";
 
 const Auth = (props) => {
   const [email, setEmail] = useState("");
@@ -76,7 +77,6 @@ const Auth = (props) => {
     }
   };
 
-
   useEffect(() => {
     if (password.length < 6 && password.length > 0) {
       setPassRules(false);
@@ -84,85 +84,95 @@ const Auth = (props) => {
     else {
       setPassRules(true);
     }
-
-
   }, [password]);
 
   return (
-    <Flex width="100%" align="center" justify="center" p={4}>
-      <Box
-        p={8}
-        bg="white"
-        borderRadius="md"
-        boxShadow="md"
-        width="100%"
-        maxWidth="400px"
-      >
-        <Stack spacing={4}>
-          {errorMessage && (
-            <Alert status="error">
-              <AlertIcon />
-              {errorMessage}
-            </Alert>
-          )}
+    
+    <Stack spacing={4} >
+      {errorMessage && (
+        <Alert status="error">
+          <AlertIcon />
+          {errorMessage}
+        </Alert>
+      )} 
+      <Input
+        placeholder="Email"
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        borderWidth= "3px"//until theme is fixed
+      />
+      <Box position="relative">
+        <InputGroup size="md">
           <Input
-            placeholder="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            pr="4.5rem"
+            type={show ? 'text' : 'password'}
+            placeholder="Enter password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            borderWidth= "3px"//until theme is fixed
           />
-          <InputGroup size="md">
-            <Input
-              pr="4.5rem"
-              type={show ? 'text' : 'password'}
-              placeholder="Enter password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <InputRightElement width="4.5rem">
-              <Button h="1.75rem" size="sm" onClick={handleClick}>
-                {show ? 'Hide' : 'Show'}
-              </Button>
-            </InputRightElement>
-          </InputGroup>
-          {!passRules && !isLoginPage &&(
-            <Text color="red.500" size = "sm" fontStyle='italic'>Password needs to be at least 6 characters long.</Text>
-          )}
-          {!isLoginPage && (
-            <InputGroup size="md">
-              <Input
-                pr="4.5rem"
-                type={'password'}
-                placeholder="Confirm password"
-                value={password2}
-                onChange={(e) => setPassword2(e.target.value)}
-              />
-            </InputGroup>
-            
-          )}
-          {isLoginPage ? (
-            <>
-              <Button colorScheme="blue" onClick={signIn}>Continue</Button>
-              <Button variant="link" onClick={goToForgetPassword}>Forgot Password?</Button>
-              <Link as={RouterLink} to="/signup" align="center">
-                <Text as="i" fontSize={12} colorScheme="teal">
-                  Don't have an account? Create an account
-                </Text>
-              </Link>
-            </>
-          ) : (
-            <Button colorScheme="green" onClick={checkPass}>Submit</Button>
-            
-          )}
-          {!isLoginPage && (<Link as={RouterLink} to="/login" align="center">
-                    <Text as="i" fontSize={12} colorScheme="teal">
-                    Already have an account? Log in
-                    </Text>
-                </Link>)}
-        </Stack>
-        
+          <InputRightElement width="4.5rem">
+            <Button
+              h="1.75rem"
+              size="sm"
+              onClick={handleClick}
+              variant="ghost"
+              color="brand.100"
+              _hover={{ bg: 'brand.500', color: 'black' }} // Change background and text color on hover
+            >
+              {show ? 'Hide' : 'Show'}
+            </Button>
+          </InputRightElement>
+        </InputGroup>
+        {isLoginPage && (
+          <Box position="absolute" top="50%" right="-3rem" transform="translateY(-50%)" width="50px" height="50px">
+            <FilledEnterButton send={signIn} />
+          </Box>
+        )}
       </Box>
-    </Flex>
+      {!passRules && !isLoginPage && (
+        <Text color="red.500" size="sm" fontStyle='italic'>Password needs to be at least 6 characters long.</Text>
+      )}
+      {!isLoginPage && (
+        <InputGroup size="md">
+          <Input
+            pr="4.5rem"
+            type="password"
+            placeholder="Confirm password"
+            value={password2}
+            onChange={(e) => setPassword2(e.target.value)}
+            borderWidth= "3px"//until theme is fixed
+          />
+        </InputGroup>
+      )}
+      {isLoginPage ? (
+        <>
+          <Button variant="link" onClick={goToForgetPassword}>Forgot Password?</Button>
+          <Link as={RouterLink} to="/signup" align="center">
+            <Text as="i" fontSize={12} color="white">
+              Don't have an account? Create an account
+            </Text>
+          </Link>
+        </>
+      ) : (
+         <Box position="relative" 
+              bottom='63px'
+              left="100%" 
+              width="50px" 
+              height="50px"
+              mb={-10}>
+            <FilledEnterButton send={checkPass} />
+          </Box>
+      )}
+      {!isLoginPage && (
+        <Link as={RouterLink} to="/login" align="center" >
+          <Text as="i" fontSize={12} >
+            Already have an account? Log in
+          </Text>
+        </Link>
+      )}
+    </Stack>
   );
 };
 

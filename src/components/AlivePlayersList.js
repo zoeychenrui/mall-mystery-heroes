@@ -65,7 +65,7 @@ const AlivePlayersList = (props) => {
             <Flex >
             <TableContainer >
                 <Table variant='simple' colorScheme='teal' size='md' >
-                    <TableCaption placement='top' >Alive Players List</TableCaption>
+                    <TableCaption placement='top'color = 'brand.100' >Alive Players List</TableCaption>
                     <Thead>
                         <Tr key='header'>
                             <Th>Name</Th>
@@ -77,7 +77,7 @@ const AlivePlayersList = (props) => {
                     <Tbody>
                         {players.map((player, index) => (
                             <Tr key={index}>
-                                <Td>{player.name}</Td>
+                                <Td >{player.name}</Td>
                                 <Td>{player.score}</Td>
                                 <Td>{player.targets.join(", ")}</Td>
                                 <Td>{player.assassins.join(", ")}</Td>

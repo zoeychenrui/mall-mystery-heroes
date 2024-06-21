@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { Heading, Button, Stack, Input, Flex, Box, useToast } from '@chakra-ui/react';
 import { getAuth, sendPasswordResetEmail } from "firebase/auth";
+import bgimg from '../assets/logo-3.png'; // Ensure this path is correct
+import FilledEnterButton from '../components/FilledEnterButton';
+
 
 const PasswordReset = () => {
     const [email, setEmail] = useState("");
@@ -31,36 +34,45 @@ const PasswordReset = () => {
     };
 
     return (
-        <Flex
-            direction="column"
-            align="center"
-            justify="center"
-            height="100vh"
-            bg="gray.50"
-            p={4}
+        <Box 
+            w="100vw"
+            h="100vh"
+            bgImage={`url(${bgimg})`}
+            backgroundPosition="center"
+            backgroundRepeat="no-repeat"
+            backgroundSize="cover"
         >
-            <Box
-                p={8}
-                bg="white"
-                borderRadius="md"
-                boxShadow="md"
-                width="100%"
-                maxWidth="400px"
+            <Flex
+                direction="column"
+                align="center"
+                justify="center"
+                height="100vh"
+                p={4}
             >
-                <Heading as="h1" size="xl" mb={4}>Password Reset</Heading>
-                <Stack spacing={4}>
-                    <Input
-                        placeholder="Email"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                    />
-                    <Button colorScheme='teal' variant='outline' onClick={handleReset}>
-                        Submit
-                    </Button>
-                </Stack>
-            </Box>
-        </Flex>
+                <Box
+                    p={8}
+                    borderRadius="md"
+                    width="100%"
+                    maxWidth="400px"
+                >
+                    <Heading as="h1" size="xl" mb={4}>Password Reset</Heading>
+                    <Stack spacing={4}>
+                        <Input
+                            placeholder="Email"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            borderWidth= "3px" //until theme is fixed
+                        />
+                        <Box position="relative" bottom="60px" left="100%"  width="50px" height="50px" >
+                            <FilledEnterButton send={handleReset} />
+                        </Box>
+                    </Stack>
+                    
+                    {/* I need to link this back to the login maybe or let them go to the email and then come back */}
+                </Box>
+            </Flex>
+        </Box>
     );
 };
 
