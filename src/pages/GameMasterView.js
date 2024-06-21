@@ -22,14 +22,11 @@ import Execution from '../components/Execution';
 const GameMasterView = () => {
     const { roomID } = useParams(); 
     const { arrayOfPlayers } = useLocation().state || { arrayOfPlayers: [] };
-    const [killedPlayerNamed, setKilledPlayerNamed] = useState('');
-    const [killedPlayerPointed, setKilledPlayerPointed] = useState(0);
-    const [triggerAS, setTriggerAS] = useState(false);
+
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players'); //reference to players subcollection
     const [arrayOfDeadPlayers, setArrayOfDeadPlayers] = useState([]);
     const [arrayOfAlivePlayers, setArrayOfAlivePlayers] = useState([]);
     const [arrayOfTasks, setArrayOfTasks] = useState([]);
-    const [assassinPlayerNamed, setAssassinPlayerNamed] = useState('');
 
     //updates arrayOfAlivePlayers, arrayOfDeadPlayers, and arrayOfTasks when roomID is updated
     useEffect (() => {
@@ -111,13 +108,11 @@ const GameMasterView = () => {
                 <DeadPlayersList roomID={roomID} />
             </Flex>
             <HStack spacing='1px'>
-            <HStack spacing='1px'>
                 <Execution
                     roomID={roomID}
                     arrayOfAlivePlayers={arrayOfAlivePlayers}
                     handleKillPlayer={handleKillPlayer}
                 />
-            </HStack>
             </HStack>    
             <PlayerRevive 
                 roomID = {roomID}

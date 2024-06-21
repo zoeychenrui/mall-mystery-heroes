@@ -4,15 +4,13 @@ import { collection, query, getDocs, where, onSnapshot, updateDoc } from "fireba
 import { Select, Flex, Alert, AlertIcon, AlertTitle, AlertDescription, Box, HStack } from '@chakra-ui/react';
 import killImage from '../assets/kill.png'; // Adjust the path according to your project structure
 
-const KillButton = (props) => {
-    const { roomID, assassinPlayerNamed, handleKillPlayer } = props;
+const KillButton = (roomID, assassinPlayerNamed, handleKillPlayer) => {
     const [selectedTargetPlayer, setSelectedTargetPlayer] = useState('');
     const [showAlert, setShowAlert] = useState(false);
     const [possibleTargets, setPossibleTargets] = useState([]);
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
 
     const handleChange = (event) => {
-        setSelectedTargetPlayer(event.target.value);
         setShowAlert(false);
     };
 
