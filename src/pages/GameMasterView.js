@@ -22,7 +22,6 @@ import Execution from '../components/Execution';
 const GameMasterView = () => {
     const { roomID } = useParams(); 
     const { arrayOfPlayers } = useLocation().state || { arrayOfPlayers: [] };
-
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players'); //reference to players subcollection
     const [arrayOfDeadPlayers, setArrayOfDeadPlayers] = useState([]);
     const [arrayOfAlivePlayers, setArrayOfAlivePlayers] = useState([]);
@@ -108,11 +107,13 @@ const GameMasterView = () => {
                 <DeadPlayersList roomID={roomID} />
             </Flex>
             <HStack spacing='1px'>
+            <HStack spacing='1px'>
                 <Execution
                     roomID={roomID}
                     arrayOfAlivePlayers={arrayOfAlivePlayers}
                     handleKillPlayer={handleKillPlayer}
                 />
+            </HStack>
             </HStack>    
             <PlayerRevive 
                 roomID = {roomID}
