@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Table,
-    Thead,
-    Tbody,
-    Tr,
-    Th,
-    Td,
-    TableCaption,
-    TableContainer,
-    Flex,
+    Accordion,
+    AccordionItem,
+    AccordionButton,
+    AccordionPanel,
+    AccordionIcon,
+    Box,
+    VStack,
+    Flex
 } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
 import {
@@ -61,33 +60,32 @@ const AlivePlayersList = (props) => {
     }
     
     return (
-        <div>
-            <Flex >
-            <TableContainer >
-                <Table variant='simple' colorScheme='teal' size='md' >
-                    <TableCaption placement='top'color = 'brand.100' >Alive Players List</TableCaption>
-                    <Thead>
-                        <Tr key='header'>
-                            <Th>Name</Th>
-                            <Th>Score</Th>
-                            <Th>Targets</Th>
-                            <Th>Assassins</Th>
-                        </Tr>
-                    </Thead>
-                    <Tbody>
-                        {players.map((player, index) => (
-                            <Tr key={index}>
-                                <Td >{player.name}</Td>
-                                <Td>{player.score}</Td>
-                                <Td>{player.targets.join(", ")}</Td>
-                                <Td>{player.assassins.join(", ")}</Td>
-                            </Tr>
-                        ))}
-                    </Tbody>
-                </Table>
-            </TableContainer>
-            </Flex>
-        </div>
+        <Flex background = 'transparent' justifyContent = 'center'>
+            <VStack width = '100%'>
+                 <Accordion width = '100%' >
+                    {players.map((player) => (
+                        <AccordionItem>
+                            <Box textOverflow = 'ellipsis' marginTop = '2px' marginBottom = '2px'>
+                                <AccordionButton fontSize = '25px'>
+                                    <Box as = 'span' flex='1' textAlign='left'>
+                                        {player.name}
+                                    </Box>
+                                    <Box as = 'span' flex='1' textAlign='right'>
+                                        {player.score}
+                                    </Box>
+                                    <AccordionIcon/>
+                                </AccordionButton>
+                            </Box>
+                            <AccordionPanel pb = '3' fontSize = '20px'>
+                                Targets: {player.targets.join(', ')}
+                                <br/>
+                                Assassins: {player.assassins.join(', ')}
+                            </AccordionPanel>
+                        </AccordionItem>
+                    ))}
+                </Accordion>
+            </VStack>
+        </Flex>
     );
 };
 

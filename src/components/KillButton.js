@@ -3,16 +3,16 @@ import { db } from '../utils/firebase';
 import { collection, query, getDocs, where, onSnapshot, updateDoc } from "firebase/firestore";
 import { Select, Flex, Alert, AlertIcon, AlertTitle, AlertDescription, Box, HStack } from '@chakra-ui/react';
 import killImage from '../assets/kill.png'; // Adjust the path according to your project structure
+import CreateAlert from './CreateAlert';
 
-const KillButton = ({ roomID, assassinPlayerNamed, handleKillPlayer }) => {
+const KillButton = ({ roomID, assassinPlayerNamed, onPlayerKilled }) => {
     const [selectedTargetPlayer, setSelectedTargetPlayer] = useState('');
-    const [showAlert, setShowAlert] = useState(false);
     const [possibleTargets, setPossibleTargets] = useState([]);
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
+    const createAlert = CreateAlert();
 
     const handleChange = (event) => {
         setSelectedTargetPlayer(event.target.value);
-        setShowAlert(false);
     };
 
     useEffect(() => {
@@ -30,8 +30,7 @@ const KillButton = ({ roomID, assassinPlayerNamed, handleKillPlayer }) => {
 
     const handleKill = async () => {
         if (selectedTargetPlayer === '') {
-            setShowAlert(true);
-            return;
+            return createAlert('error', 'Error', 'Must Select Target', 1500);
         }
 
         console.log("The following player will be killed: ", selectedTargetPlayer);
@@ -94,47 +93,32 @@ const KillButton = ({ roomID, assassinPlayerNamed, handleKillPlayer }) => {
             console.error("Error updating assassin's score: ", error);
         }
         setPossibleTargets([]);
-        handleKillPlayer(selectedTargetPlayer);
+        onPlayerKilled(selectedTargetPlayer);
     };
 
     return (
-        <>
-            <form>
-                <Flex padding='10px' direction="column" align="center">
-                    {showAlert && (
-                        <Box mb={4} width="100%">
-                            <Alert status="error">
-                                <AlertIcon />
-                                <AlertTitle>Please select a target</AlertTitle>
-                                <AlertDescription>You need to choose a target to proceed.</AlertDescription>
-                            </Alert>
-                        </Box>
-                    )}
-                    <Flex width="100%" justifyContent="center">
-                    <HStack spacing='40px'>
-                        <img 
-                                src={killImage} 
-                                alt="Kill Button" 
-                                onClick={handleKill} 
-                                style={{ cursor: 'pointer', marginLeft: '1rem', width: '50px', height: '50px' }}
-                            />
-                            <Select 
-                                id='killTarget'
-                                placeholder='Player Name'
-                                value={selectedTargetPlayer}
-                                onChange={handleChange}
-                            >
-                                {possibleTargets.map((player, index) => (
-                                    <option key={index} value={player}>
-                                        {player}
-                                    </option>
-                                ))}
-                            </Select>
-                    </HStack>
-                    </Flex>
-                </Flex>
-            </form>
-        </>
+        <form>
+            <HStack spacing='40px'>
+                <img 
+                        src={killImage} 
+                        alt="Kill Button" 
+                        onClick={handleKill} 
+                        style={{ cursor: 'pointer', marginLeft: '1rem', width: '50px', height: '50px' }}
+                    />
+                    <Select 
+                        id='killTarget'
+                        placeholder='Player Name'
+                        value={selectedTargetPlayer}
+                        onChange={handleChange}
+                    >
+                        {possibleTargets.map((player, index) => (
+                            <option key={index} value={player}>
+                                {player}
+                            </option>
+                        ))}
+                    </Select>
+            </HStack>
+        </form>
     );
 };
 

@@ -104,44 +104,56 @@ const TaskCreation = (props) => {
         console.log(`usingEffect selectedTaskType: ${selectedTaskType}`);
     }, [selectedTaskType]);
     return (  
-        <Flex margin = '5px'>
-            <Input size = 'lg'
-                   placeholder = 'Enter Task Title'
-                   value = {TaskTitle}
-                   onChange = {handleTitleChange}
-            />
-            <Input size = 'lg'
-                   placeholder='Enter Task Description'
-                   value = {TaskDescription}
-                   onChange= {handleDescriptionChange}
-            />
-            <Select size='lg'
-                    placeholder = 'Select Task Type'
-                    value = {selectedTaskType}
-                    onChange = {handleChangeTaskType}
+        <Flex m = '6px' direction = 'column'>
+            <Flex mb = '4px'>
+                <Input size = 'md'
+                        borderRadius = '2xl'
+                        placeholder = 'Task Title'
+                        value = {TaskTitle}
+                        onChange = {handleTitleChange}
+                    />
+                    <Input size = 'md'
+                        borderRadius = '2xl'
+                        placeholder='Description'
+                        value = {TaskDescription}
+                        onChange= {handleDescriptionChange}
+                    />
+            </Flex>
 
-            >
-                <option value = 'Task'>Task</option>
-                <option value = 'Revival Mission'>Revival Mission</option>
-            </Select>
-            <NumberInput value = {PointValue}
-                         onChange = {handlePointChange}
-                         defaultValue = '15'
-                         min= '0'
-                         size = 'lg'           
-            >
-                <NumberInputField />
-                <NumberInputStepper>
-                    <NumberIncrementStepper />
-                    <NumberDecrementStepper />
-                </NumberInputStepper>
-            </NumberInput>
-            <Button size = 'lg'
-                    onClick = {handleAddTask}
-                    colorScheme= 'blue'
-            >
-                Add Task
-            </Button>
+            <Flex>
+                <Select size='md'
+                        borderRadius = '2xl'
+                        placeholder = 'Select Task Type'
+                        value = {selectedTaskType}
+                        onChange = {handleChangeTaskType}
+                        m = '2px'
+
+                >
+                    <option value = 'Task'>Task</option>
+                    <option value = 'Revival Mission'>Revival Mission</option>
+                </Select>
+                <NumberInput value = {PointValue}
+                             onChange = {handlePointChange}
+                             defaultValue = '15'
+                             min= '0'
+                             size = 'md'
+                             m = '2px'
+                >
+                    <NumberInputField />
+                    <NumberInputStepper>
+                        <NumberIncrementStepper />
+                        <NumberDecrementStepper />
+                    </NumberInputStepper>
+                </NumberInput>
+                <Button size = 'md'
+                        onClick = {handleAddTask}
+                        colorScheme= 'blue'
+                        width = '20%'
+                        m = '2px'
+                >
+                    Add
+                </Button>
+        </Flex>
         </Flex>
     );
 }
