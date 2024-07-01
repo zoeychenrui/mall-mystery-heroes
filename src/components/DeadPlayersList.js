@@ -2,21 +2,15 @@ import React, { useState, useEffect } from 'react';
 import {
     ListItem,
     Box,
-    VStack,
     List,
-    Image
 } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
 import {
-    orderBy,
     query,
     collection,
     where,
     onSnapshot,
 } from "firebase/firestore";
-import revive from '../assets/revive-gray.png';
-import reviveHover from '../assets/revive-white.png';
-import PlayerRevive from './PlayerRevive';
 import DeadPlayerReviveButton from './DeadPlayerReviveButton';
 
 
@@ -56,7 +50,7 @@ const DeadPlayersList = ({roomID, handlePlayerRevive, arrayOfAlivePlayers}) => {
         <Box background = 'transparent' width = '100%' display = 'flex' flexDirection = 'column'>
             <List styleType = 'none' fontSize = '25px' width = '90%'>
                     {players.map((player) => (
-                    <ListItem>
+                    <ListItem key = {player.name}>
                         <Box display = 'flex' flexDirection = 'row' alignItems = 'center'>
                             <Box mt = '2px' mb = '2px' flex = '1' textAlign = 'center'>
                                 {player.name}

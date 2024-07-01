@@ -16,6 +16,7 @@ import { Menu,
 import mission from '../assets/mission.png';
 import kill from '../assets/kill.png';
 import openseason from '../assets/openseason.png';
+import TaskCompletion from './TaskCompletion';
     
 const Execution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) => {
     const [assassinPlayerNamed, setAssassinPlayerNamed] = useState('');
@@ -109,7 +110,11 @@ const Execution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) => {
                 </Flex>
             }
             {action === 'completeMission' && 
-                <Flex></Flex>
+                <Flex>
+                    <TaskCompletion 
+                        roomID = {roomID}
+                    />
+                </Flex>
             }
             {action === 'openSeason' && 
                 <Flex></Flex>

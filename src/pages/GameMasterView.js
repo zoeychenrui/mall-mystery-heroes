@@ -105,7 +105,7 @@ const GameMasterView = () => {
 
     return (
         <div>
-            <HStack justifyContent = 'left' p = '5px' ml = '16px'>
+            <HStack justifyContent = 'left' p = '5px' ml = '16px' size = ''>
                 <Image objectFit = 'cover'
                        src = {whiteLogo}
                        alt = 'Logo'
@@ -162,6 +162,7 @@ const GameMasterView = () => {
                          overflow = 'auto' p = '4px' display = 'flex' flexDirection = 'column'
                     >
                         <Box flex = '1' overflow = 'auto'>
+                            <Heading size = 'lg' textAlign = 'center'>Missions</Heading>
                             <TaskList 
                                 arrayOfTasks = {arrayOfTasks}
                                 roomID = {roomID}

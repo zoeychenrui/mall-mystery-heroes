@@ -62,9 +62,9 @@ const AlivePlayersList = (props) => {
     return (
         <Flex background = 'transparent' justifyContent = 'center'>
             <VStack width = '100%'>
-                 <Accordion width = '100%' >
+                 <Accordion width = '100%' allowToggle>
                     {players.map((player) => (
-                        <AccordionItem>
+                        <AccordionItem key = {player.name}>
                             <Box textOverflow = 'ellipsis' marginTop = '2px' marginBottom = '2px'>
                                 <AccordionButton fontSize = '25px'>
                                     <Box as = 'span' flex='1' textAlign='left'>

@@ -141,8 +141,8 @@ const TaskCreation = (props) => {
                 >
                     <NumberInputField />
                     <NumberInputStepper>
-                        <NumberIncrementStepper />
-                        <NumberDecrementStepper />
+                        <NumberIncrementStepper color = 'white'/>
+                        <NumberDecrementStepper color = 'white'/>
                     </NumberInputStepper>
                 </NumberInput>
                 <Button size = 'md'
