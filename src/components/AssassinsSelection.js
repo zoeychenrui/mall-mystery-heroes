@@ -35,17 +35,8 @@ const AssassinSelection = (props) => {
 
     return (
         <form>
-            <Flex padding='10px' direction="column" align="center">
-                {showAlert && (
-                    <Box mb={4} width="100%">
-                        <Alert status="error">
-                            <AlertIcon />
-                            <AlertTitle>Please select an Assassin</AlertTitle>
-                            <AlertDescription>You need to choose an Assassin to proceed.</AlertDescription>
-                        </Alert>
-                    </Box>
-                )}
-                <Flex width="100%" justifyContent="center">
+            <Flex direction="column" align="center" mt = '6px' >
+                <Flex justifyContent="center">
                     <Select 
                         id='assassin'
                         placeholder='Player Name'

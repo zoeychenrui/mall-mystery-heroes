@@ -167,7 +167,10 @@ const RegenerateTargets = (props) => {
         <Flex>
             <Button 
                 onClick = {handleRegeneration}
-                m = '5px'
+                lm = '5px'
+                size= 'lg'
+                color = 'teal'
+                variant = 'solid'
             >
                 Regenerate Targets
             </Button>

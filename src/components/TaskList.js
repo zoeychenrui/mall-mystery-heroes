@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
-    Flex,
+    Tabs,
+    Tab,
     Accordion,
-    
+    TabPanels,
+    TabPanel,
+    TabList
     } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
 import { collection, 
@@ -62,24 +65,24 @@ const TaskList = (props) => {
     });
 
      return (  
-        <Flex>
-            <Flex flexDirection='column'>
-                <Flex flexDirection= "column" margin= '5'>
-                    <h1>Active Tasks</h1>
-                    <Accordion>
+        <Tabs>
+            <TabList>
+                <Tab fontSize = 'md' fontWeight = 'bold'>Active Tasks</Tab>
+                <Tab fontSize = 'md' fontWeight = 'bold'>Completed Tasks</Tab>
+            </TabList>
+            <TabPanels>
+                <TabPanel>
+                    <Accordion allowToggle>
                         {listOfActiveTasks}
                     </Accordion>
-                </Flex>
-
-                <Flex flexDirection= "column" margin = '5'>
-                    <h1>Inactive Tasks</h1>
-                    <Accordion>
+                </TabPanel>
+                <TabPanel>
+                    <Accordion allowToggle>
                         {listOfInactiveTasks}
                     </Accordion>
-                </Flex>
-            </Flex>    
-        </Flex>
-
+                </TabPanel>
+            </TabPanels>
+        </Tabs> 
     );
 }
  
