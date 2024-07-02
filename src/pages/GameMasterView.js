@@ -33,7 +33,6 @@ const GameMasterView = () => {
     const [arrayOfDeadPlayers, setArrayOfDeadPlayers] = useState([]);
     const [arrayOfAlivePlayers, setArrayOfAlivePlayers] = useState([]);
     const [arrayOfTasks, setArrayOfTasks] = useState([]);
-    const [action, setAction] = useState('completeKill');
 
     //updates arrayOfAlivePlayers, arrayOfDeadPlayers, and arrayOfTasks when roomID is updated
     useEffect (() => {
@@ -98,10 +97,6 @@ const GameMasterView = () => {
     const handleNewTaskAdded = (newTask) => {
         setArrayOfTasks(arrayOfTasks => [...arrayOfTasks, newTask]);
     };
-    
-    const handleActionChange = (actionType) => {
-        setAction(actionType);
-    }
 
     return (
         <div>
