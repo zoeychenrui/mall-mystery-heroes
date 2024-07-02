@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Flex, Select } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
-import { collection, getDocs, where, query } from 'firebase/firestore';
+import { collection, getDocs, where, query, onSnapshot } from 'firebase/firestore';
 import TaskButton from './TaskButton';
-
 
 const TaskCompletion = (props) => {
     const [taskList, setTaskList] = useState([]);
@@ -19,10 +18,10 @@ const TaskCompletion = (props) => {
             <option key = {doc.data().title}
                     value = {doc.id}
             >
-                {doc.data().title}
-            </option>
-        ));
-        setTaskList(tempTaskList);
+                 {doc.data().title}
+             </option>
+         ));
+         setTaskList(tempTaskList);
     }
 
     //changes selected Task to the task selected
@@ -30,16 +29,15 @@ const TaskCompletion = (props) => {
         setSelectedTask(event.target.value);
     }
 
-    //updates taskList when taskSelection is changed.
-    useEffect(() => {
-        fetchTasks()
-        console.log('useEfffect on: TaskCompletion')
-    }, [roomID])
-
     //logs when selectedTask is changed.
     useEffect(() => {
         console.log(selectedTask);
     }, [selectedTask]);
+
+    useEffect(() => {
+        fetchTasks();
+        console.log('fetched tasks');
+    },[]);
 
     return (  
         <Flex alignItems= 'center'>

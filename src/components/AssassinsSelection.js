@@ -39,7 +39,7 @@ const AssassinSelection = (props) => {
                 <Flex justifyContent="center">
                     <Select 
                         id='assassin'
-                        placeholder='Player Name'
+                        placeholder='Select Assassin'
                         value={selectedAssassin}
                         onChange={handleChange}
                     >

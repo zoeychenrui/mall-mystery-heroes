@@ -17,8 +17,9 @@ import { collection,
          getDoc, 
          getDocs, 
          query, 
-         where ,
-         doc
+         where,
+         doc,
+         updateDoc
     } from 'firebase/firestore';
 import CreateAlert from './CreateAlert';
 import enter from '../assets/enter-green.png';
@@ -32,32 +33,89 @@ const TaskButton = ({ taskID, roomID }) => {
     const [isHovering, setIsHovering] = useState(false);
     const [newCheckedPlayers, setNewCheckedPlayers] = useState([]);
     const [newRemovedPlayers, setNewRemovedPlayers] = useState([]);
-
+    
     //cancels actions made in modal when cancel button is clicked
     const handleCancel = () => {
-        for (const player of newCheckedPlayers) {
-            setCheckedPlayers(checkedPlayers.filter(p => p !== player));
-        }
-        for (const player of newRemovedPlayers) {
-            setCheckedPlayers([...checkedPlayers, player]);
-        }
+        setCheckedPlayers(prevCheckedPlayers => {
+            let tempCheckedPlayers = [...prevCheckedPlayers];
+            for (const player of newCheckedPlayers) {
+                tempCheckedPlayers = tempCheckedPlayers.filter(p => p !== player);
+            }
+            for (const player of newRemovedPlayers) {
+                tempCheckedPlayers.push(player);
+            }
+            return tempCheckedPlayers;
+        });
         setNewCheckedPlayers([]);
         setNewRemovedPlayers([]);
         onClose();
     }
 
-    //handles when save button is clicked
-    const handleSave = () => {
+    //updates scores/live status when save button is clicked
+    const handleSave = async () => {
         const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
-        const taskDocRef = doc(taskCollectionRef, taskID);
-        const taskSnapshot = getDoc(taskDocRef);
+        const taskRef = doc(taskCollectionRef, taskID);
+        const taskSnapshot = await getDoc(taskRef);
         const task = taskSnapshot.data();
+        const taskDocRef = taskSnapshot.ref;
+        const points = parseInt(task.pointValue);
+        const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
 
+        //updates player scores for task types
+        if (task.taskType === 'Task') {
+            //adds points to new updated players
+            for (const player of newCheckedPlayers) {
+                const playerQuery = query(playerCollectionRef, where('name', '==', player));
+                const playerSnapshot = await getDocs(playerQuery);
+                const playerDoc = playerSnapshot.docs[0].ref;
+                const playerScore = parseInt(playerSnapshot.docs[0].data().score);
+                console.log('points: ' + points);
+                console.log('playerScore: ' + playerScore);
+                const newPoints = points + playerScore;
+                await updateDoc(playerDoc, { score: newPoints });
+            }
+            //removes points for those that were initially checked, but now removed
+            for (const player of newRemovedPlayers) {
+                const playerQuery = query(playerCollectionRef, where('name', '==', player));
+                const playerSnapshot = await getDocs(playerQuery);
+                const playerdoc = playerSnapshot.docs[0].ref;
+                const playerScore = parseInt(playerSnapshot.docs[0].data().score);
+                const newPoints = playerScore - points;
+                await updateDoc(playerdoc, { score: newPoints });
+            }
+        }
+        //updates player live status for revival missions
+        else if (task.taskType === 'Revival Mission') {
+            //revives newly checked players
+            for (const player of newCheckedPlayers) {
+                const playerQuery = query(playerCollectionRef, where('name', '==', player));
+                const playerSnapshot = await getDocs(playerQuery);
+                const playerdoc = playerSnapshot.docs[0].ref;
+                await updateDoc(playerdoc, { isAlive: true });
+            }
+            //kills those that were initially checked, but now removed
+            for (const player of newRemovedPlayers) {
+                const playerQuery = query(playerCollectionRef, where('name', '==', player));
+                const playerSnapshot = await getDocs(playerQuery);
+                const playerdoc = playerSnapshot.docs[0].ref;
+                await updateDoc(playerdoc, { isAlive: false });
+            }
+        }
+        
+        //updates task to be completed by checkedplayers
+        await updateDoc(taskDocRef, { completedBy: checkedPlayers });
+        setNewCheckedPlayers([]);
+        setNewRemovedPlayers([]);
         onClose();
     }
 
     //handles when complete button is clicked
-    const handleComplete = () => {
+    const handleComplete = async() => {
+        await handleSave();
+        createAlert('info', 'Completed', 'Task has been saved as completed', 1500);
+        const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
+        const taskDocRef = doc(taskCollectionRef, taskID);
+        await updateDoc(taskDocRef, { isComplete: true });
         onClose();
     }
 
@@ -65,7 +123,9 @@ const TaskButton = ({ taskID, roomID }) => {
     const handleCheckedPlayers = (player) => {
         if (checkedPlayers.includes(player)) {
             setCheckedPlayers(checkedPlayers.filter(p => p !== player));
-            setNewRemovedPlayers([...newRemovedPlayers, player]);
+            if (!newCheckedPlayers.includes(player)) {
+                setNewRemovedPlayers([...newRemovedPlayers, player]);   
+            }
             setNewCheckedPlayers(newCheckedPlayers.filter(p => p !== player));
         }
         else {
@@ -127,6 +187,12 @@ const TaskButton = ({ taskID, roomID }) => {
         console.log('task changed. List of choices updated');
     }, [taskID])
 
+    useEffect(() => {
+        console.log('checkedPlayers:', checkedPlayers);
+        console.log('newCheckedPlayers:', newCheckedPlayers);
+        console.log('newRemovedPlayers:', newRemovedPlayers);
+    }, [checkedPlayers, newCheckedPlayers, newRemovedPlayers])
+
     return (
         <Box onMouseEnter = {() => setIsHovering(true)} 
              onMouseLeave = {() => setIsHovering(false)}
@@ -150,7 +216,7 @@ const TaskButton = ({ taskID, roomID }) => {
                                   borderRadius = '2xl'
                     >
                         <ModalHeader>
-                            Player 
+                            Who Has Completed The Task? 
                         </ModalHeader>
                         <ModalCloseButton />
                         <ModalBody>

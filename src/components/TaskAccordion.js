@@ -23,7 +23,7 @@ const TaskAccordion = (props) => {
             <AccordionPanel>
                 <Text pb = '12px'>Description: {task.description}</Text>
                 <Text pb = '12px'>Task Type: {task.taskType}</Text>
-                <Text pb = '12px'>{task.isComplete ? `Completed By: ${task.completedBy.join(', ')}` : 'Incomplete'}</Text>
+                <Text pb = '12px'>{task.completedBy.length === '0' ? `Completed By: ${task.completedBy.join(', ')}` : 'Incomplete'}</Text>
             </AccordionPanel>
         </AccordionItem>             
     );
