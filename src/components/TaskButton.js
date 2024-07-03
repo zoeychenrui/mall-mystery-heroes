@@ -10,7 +10,16 @@ import { Button, Checkbox,
          useDisclosure,
          Box,
          Image,
-         Stack
+         Stack,
+         Popover,
+         PopoverTrigger,
+         PopoverContent,
+         PopoverArrow,
+         PopoverCloseButton,
+         PopoverHeader,
+         PopoverBody,
+         PopoverFooter,
+         Text
     } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
 import { collection, 
@@ -24,8 +33,9 @@ import { collection,
 import CreateAlert from './CreateAlert';
 import enter from '../assets/enter-green.png';
 import enterHover from '../assets/enter-hovering.png';
+import RemapPlayers from './RemapPlayers';
 
-const TaskButton = ({ taskID, roomID }) => {    
+const TaskButton = ({ taskID, roomID, arrayOfAlivePlayers, handlePlayerRevive, handleKillPlayer, handleTaskCompleted }) => {    
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [listOfChoices, setListOfchoices] = useState([]);
     const createAlert = CreateAlert();
@@ -33,7 +43,8 @@ const TaskButton = ({ taskID, roomID }) => {
     const [isHovering, setIsHovering] = useState(false);
     const [newCheckedPlayers, setNewCheckedPlayers] = useState([]);
     const [newRemovedPlayers, setNewRemovedPlayers] = useState([]);
-    
+    const handleRegeneration = RemapPlayers();
+
     //cancels actions made in modal when cancel button is clicked
     const handleCancel = () => {
         setCheckedPlayers(prevCheckedPlayers => {
@@ -92,6 +103,10 @@ const TaskButton = ({ taskID, roomID }) => {
                 const playerSnapshot = await getDocs(playerQuery);
                 const playerdoc = playerSnapshot.docs[0].ref;
                 await updateDoc(playerdoc, { isAlive: true });
+                console.log('arrayOfAlivePlayers: ' + arrayOfAlivePlayers);
+                //remaps targets and assassins for revived player ONLY
+                await handleRegeneration(player, player, arrayOfAlivePlayers, roomID);
+                handlePlayerRevive(player);
             }
             //kills those that were initially checked, but now removed
             for (const player of newRemovedPlayers) {
@@ -99,6 +114,7 @@ const TaskButton = ({ taskID, roomID }) => {
                 const playerSnapshot = await getDocs(playerQuery);
                 const playerdoc = playerSnapshot.docs[0].ref;
                 await updateDoc(playerdoc, { isAlive: false });
+                handleKillPlayer(player);
             }
         }
         
@@ -115,8 +131,11 @@ const TaskButton = ({ taskID, roomID }) => {
         createAlert('info', 'Completed', 'Task has been saved as completed', 1500);
         const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
         const taskDocRef = doc(taskCollectionRef, taskID);
+        const taskDoc = await getDoc(taskDocRef)
+        const taskTitle = taskDoc.data().title;
         await updateDoc(taskDocRef, { isComplete: true });
-        onClose();
+        handleTaskCompleted();
+        onClose(taskTitle);
     }
 
     //handles when checkbox is clicked
@@ -187,12 +206,6 @@ const TaskButton = ({ taskID, roomID }) => {
         console.log('task changed. List of choices updated');
     }, [taskID])
 
-    useEffect(() => {
-        console.log('checkedPlayers:', checkedPlayers);
-        console.log('newCheckedPlayers:', newCheckedPlayers);
-        console.log('newRemovedPlayers:', newRemovedPlayers);
-    }, [checkedPlayers, newCheckedPlayers, newRemovedPlayers])
-
     return (
         <Box onMouseEnter = {() => setIsHovering(true)} 
              onMouseLeave = {() => setIsHovering(false)}
@@ -247,12 +260,31 @@ const TaskButton = ({ taskID, roomID }) => {
                             >
                                 Save Changes
                             </Button>
-                            <Button onClick = {handleComplete}
-                                    backgroundColor = 'green.500'
-                                    color = 'white'
-                            >
-                                Complete Task
-                            </Button>
+                            <Popover>
+                                <PopoverTrigger>
+                                    <Button backgroundColor = 'green.500'
+                                            color = 'white'
+                                    >
+                                        Complete Task
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent backgroundColor = "rgb(32,32,48)">
+                                    <PopoverArrow />
+                                    <PopoverCloseButton />
+                                    <PopoverBody>
+                                        <Text>Confirm that task is finalized.</Text>
+                                        <Text>Players: {checkedPlayers.join(', ')}</Text>
+                                    </PopoverBody>
+                                    <PopoverFooter>
+                                        <Button onClick = {handleComplete}
+                                                backgroundColor = 'green.500'
+                                                color = 'white'
+                                        >
+                                            Confirm
+                                        </Button>
+                                    </PopoverFooter>
+                                </PopoverContent>
+                            </Popover>
                         </ModalFooter>
                     </ModalContent>
                 </ModalOverlay>

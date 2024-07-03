@@ -18,7 +18,8 @@ import kill from '../assets/kill.png';
 import openseason from '../assets/openseason.png';
 import TaskCompletion from './TaskCompletion';
     
-const Execution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) => {
+const Execution = (props) => {
+    const { roomID, arrayOfAlivePlayers, handleKillPlayer, handlePlayerRevive, arrayOfTasks, handleTaskCompleted, completedTasks } = props;
     const [assassinPlayerNamed, setAssassinPlayerNamed] = useState('');
     const [action, setAction] = useState('completeKill');
 
@@ -113,6 +114,12 @@ const Execution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) => {
                 <Flex>
                     <TaskCompletion 
                         roomID = {roomID}
+                        handlePlayerRevive = {handlePlayerRevive}
+                        handleKillPlayer = {handleKillPlayer}
+                        arrayOfAlivePlayers = {arrayOfAlivePlayers}
+                        arrayOfTasks = {arrayOfTasks}
+                        handleTaskCompleted = {handleTaskCompleted}
+                        completedTasks = {completedTasks}
                     />
                 </Flex>
             }

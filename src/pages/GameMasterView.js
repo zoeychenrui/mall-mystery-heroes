@@ -3,28 +3,20 @@ import { useState, useEffect } from 'react';
 import AlivePlayersList from '../components/AlivePlayersList';
 import { useParams, 
          useLocation } from 'react-router-dom';
-import TargetGenerator from '../components/TargetGenerator';
 import DeadPlayersList from '../components/DeadPlayersList';
 import { HStack,   
-         Flex, 
          Heading,
          VStack,
          Box,
-         Image,
-         Divider
     } from '@chakra-ui/react';
-import PlayerRevive from '../components/PlayerRevive';
 import { db } from '../utils/firebase';
 import { collection,
          getDocs,
-         getPersistentCacheIndexManager,
          query
         } from "firebase/firestore";
-import RegenerateTargets from '../components/RegenerateTargets';
-import TaskCreation from '../components/TaskCreation';
-import TaskList from '../components/TaskList';
 import Execution from '../components/Execution';
-import whiteLogo from '../assets/mall-logo-white-2.png';
+import TaskExecution from '../components/TaskExecution';
+import HeaderExecution from '../components/HeaderExecution';
 
 const GameMasterView = () => {
     const { roomID } = useParams(); 
@@ -32,7 +24,8 @@ const GameMasterView = () => {
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players'); //reference to players subcollection
     const [arrayOfDeadPlayers, setArrayOfDeadPlayers] = useState([]);
     const [arrayOfAlivePlayers, setArrayOfAlivePlayers] = useState([]);
-    const [arrayOfTasks, setArrayOfTasks] = useState([]);
+    const [arrayOfTasks, setArrayOfTasks] = useState([]);    
+    const [completedTasks, setCompletedTasks] = useState([]);
 
     //updates arrayOfAlivePlayers, arrayOfDeadPlayers, and arrayOfTasks when roomID is updated
     useEffect (() => {
@@ -98,32 +91,29 @@ const GameMasterView = () => {
         setArrayOfTasks(arrayOfTasks => [...arrayOfTasks, newTask]);
     };
 
+    const handleTaskCompleted  = (task) => {
+        setCompletedTasks(completedTasks => [...completedTasks, task]);
+    }
+
     return (
         <div>
-            <HStack justifyContent = 'left' p = '5px' ml = '16px' size = ''>
-                <Image objectFit = 'cover'
-                       src = {whiteLogo}
-                       alt = 'Logo'
-                       boxSize = '36px'
-                />
-                <Heading>Lobby #: {roomID}</Heading>
-                <Flex>
-                    <TargetGenerator 
-                        arrayOfPlayers={arrayOfPlayers} 
-                        roomID={roomID} 
-                        
-                    />
+            <HeaderExecution roomID = {roomID}
+                             arrayOfPlayers = {arrayOfPlayers}
+                             arrayOfAlivePlayers = {arrayOfAlivePlayers}
+            />
 
-                    <RegenerateTargets
-                        arrayOfAlivePlayers={arrayOfAlivePlayers}
-                        roomID = {roomID}
-                    />
-                </Flex>
-            </HStack>
-
-            <HStack alignItems = 'left' p = '5px'>
-                <Box width = '23%' height = '2xl' borderWidth = '2px' borderRadius = '2xl' 
-                     overflow = 'auto' pl = '2px' pr = '2px' ml = '16px' mr = '10px'
+            <HStack alignItems = 'left'
+                    p = '5px'
+            >
+                <Box width = '23%' 
+                     height = '2xl' 
+                     borderWidth = '2px' 
+                     borderRadius = '2xl' 
+                     overflow = 'auto' 
+                     pl = '2px' 
+                     pr = '2px' 
+                     ml = '16px' 
+                     mr = '10px'
                 >
                     <Heading size = 'lg' textAlign = 'center' m = '4px'>Alive Players</Heading>
                     <AlivePlayersList roomID = {roomID}/>
@@ -136,43 +126,56 @@ const GameMasterView = () => {
                         Chat Box goes Here!
                     </Box>
 
-                    <Box borderWidth = '2px' borderRadius = '2xl' p = '4px' width = 'xl' height = '208px'>
+                    <Box borderWidth = '2px' 
+                         borderRadius = '2xl' 
+                         p = '4px' 
+                         width = 'xl' 
+                         height = '208px'
+                    >
                         <Execution
                             roomID={roomID}
                             arrayOfAlivePlayers={arrayOfAlivePlayers}
                             handleKillPlayer={handleKillPlayer}
+                            handlePlayerRevive = {handlePlayerRevive}
+                            arrayOfTasks = {arrayOfTasks}
+                            handleTaskCompleted = {handleTaskCompleted}
+                            completedTasks = {completedTasks}
                         />
                     </Box>
                 </VStack>
 
                 <VStack ml = '10px' mr = '16px'>
-                    <Box width = 'md' height = '274px' borderWidth = '2px' borderRadius = '2xl'
-                         overflow = 'auto' p = '4px' mb = '10px'
+                    <Box width = 'md' 
+                         height = '274px' 
+                         borderWidth = '2px' 
+                         borderRadius = '2xl'
+                         overflow = 'auto' 
+                         p = '4px' 
+                         mb = '10px'
                     >
                         <Heading size = 'lg' textAlign = 'center'>Dead Players</Heading>
-                        <DeadPlayersList roomID = {roomID} handlePlayerRevive={handlePlayerRevive} arrayOfAlivePlayers={arrayOfAlivePlayers}/>
+                        <DeadPlayersList roomID = {roomID} 
+                                         handlePlayerRevive={handlePlayerRevive} 
+                                         arrayOfAlivePlayers={arrayOfAlivePlayers}/>
                     </Box>
 
-                    <Box width = 'md' height = 'sm' borderWidth = '2px' borderRadius = '2xl'
-                         overflow = 'auto' p = '4px' display = 'flex' flexDirection = 'column'
+                    <Box width = 'md' 
+                         height = 'sm' 
+                         borderWidth = '2px' 
+                         borderRadius = '2xl'
+                         overflow = 'auto' 
+                         p = '4px' 
+                         display = 'flex' 
+                         flexDirection = 'column'
                     >
-                        <Box flex = '1' overflow = 'auto'>
-                            <Heading size = 'lg' textAlign = 'center'>Missions</Heading>
-                            <TaskList 
-                                arrayOfTasks = {arrayOfTasks}
-                                roomID = {roomID}
-                                arrayOfPlayers = {arrayOfPlayers}
-                                arrayO
-                                DeadPlayers = {arrayOfDeadPlayers}
-                            />
-                        </Box>
-                        <Box >
-                            <TaskCreation
-                                roomID = {roomID}
-                                onNewTaskAdded = {handleNewTaskAdded}
-                                arrayOfPlayers = {arrayOfPlayers}
-                            />       
-                        </Box>
+                        <TaskExecution
+                            roomID = {roomID}
+                            DeadPlayers = {arrayOfDeadPlayers}
+                            arrayOfTasks = {arrayOfTasks}
+                            handleNewTaskAdded = {handleNewTaskAdded}
+                            arrayOfPlayers = {arrayOfPlayers}
+                            completedTasks = {completedTasks}
+                        />
                     </Box>
                 </VStack>
             </HStack>

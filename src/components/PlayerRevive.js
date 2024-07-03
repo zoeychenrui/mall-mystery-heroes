@@ -13,7 +13,7 @@ import {collection,
 import CreateAlert from './CreateAlert';
 import RemapPlayers from './RemapPlayers';
 
-const PlayerRevive = (player, roomID, arrayOfAlivePlayers) => {
+const PlayerRevive = () => {
     const createAlert = CreateAlert();
 
     const handleRevivePlayer = async (player, roomID, arrayOfAlivePlayers) => {   

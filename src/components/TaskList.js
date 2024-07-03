@@ -32,7 +32,7 @@ const TaskList = (props) => {
         console.log(`fetching tasks in useEffect: ${roomID}`);
         fetchTasks();
         // eslint-disable-next-line
-    }, [props.arrayOfTasks]);
+    }, [props.arrayOfTasks, props.completedTasks]);
 
     //makes an array where each item contains an accordion item of an active task object
     const listOfActiveTasks = arrayOfActiveTasks.map(eachTask => {

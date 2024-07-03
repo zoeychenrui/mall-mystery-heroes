@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { db } from '../utils/firebase';
 import { collection, query, getDocs, where, onSnapshot, updateDoc } from "firebase/firestore";
 import { Select, Flex, Alert, AlertIcon, AlertTitle, AlertDescription, Box, HStack, Tooltip } from '@chakra-ui/react';
-import killImage from '../assets/kill.png'; // Adjust the path according to your project structure
+import kill from '../assets/kill-white.png';
+import killHover from '../assets/kill-hover.png';
 import CreateAlert from './CreateAlert';
 
 const KillButton = ({ roomID, assassinPlayerNamed, onPlayerKilled }) => {
@@ -10,6 +11,7 @@ const KillButton = ({ roomID, assassinPlayerNamed, onPlayerKilled }) => {
     const [possibleTargets, setPossibleTargets] = useState([]);
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
     const createAlert = CreateAlert();
+    const [isHovering, setIsHovering] = useState(false);
 
     const handleChange = (event) => {
         setSelectedTargetPlayer(event.target.value);
@@ -106,14 +108,18 @@ const KillButton = ({ roomID, assassinPlayerNamed, onPlayerKilled }) => {
     return (
         <form>
             <HStack spacing='40px'>
-                <Tooltip label = 'Kill Player'>
+                <Box onMouseEnter = {() => setIsHovering(true)} 
+                     onMouseLeave = {() => setIsHovering(false)}
+                >
+                    <Tooltip label = 'Kill Player'>
                     <img 
-                            src={killImage} 
-                            alt="Kill Button" 
-                            onClick={handleKill} 
-                            style={{ cursor: 'pointer', marginLeft: '1rem', width: '50px', height: '50px' }}
-                    />
-                </Tooltip>
+                                src={isHovering ? killHover : kill} 
+                                alt="Kill Button" 
+                                onClick={handleKill} 
+                                style={{ cursor: 'pointer', marginLeft: '1rem', width: '60px', height: '50px' }}
+                        />
+                    </Tooltip>
+                </Box>
                     <Select 
                         id='killTarget'
                         placeholder='Select Target'

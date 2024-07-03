@@ -4,9 +4,8 @@ import { db } from '../utils/firebase';
 import { collection, getDocs, where, query, onSnapshot } from 'firebase/firestore';
 import TaskButton from './TaskButton';
 
-const TaskCompletion = (props) => {
+const TaskCompletion = ({ roomID, arrayOfAlivePlayers, handlePlayerRevive, handleKillPlayer, arrayOfTasks, handleTaskCompleted, completedTasks }) => {
     const [taskList, setTaskList] = useState([]);
-    const roomID = props.roomID;
     const [selectedTask, setSelectedTask] = useState('');
 
     //fetches tasks that are incomplete and turns tasklist to a list of the options
@@ -34,10 +33,11 @@ const TaskCompletion = (props) => {
         console.log(selectedTask);
     }, [selectedTask]);
 
+    //updates tasklist when possible tasks are updated
     useEffect(() => {
         fetchTasks();
         console.log('fetched tasks');
-    },[]);
+    },[arrayOfTasks, completedTasks]);
 
     return (  
         <Flex alignItems= 'center'>
@@ -51,6 +51,10 @@ const TaskCompletion = (props) => {
             <TaskButton 
                 taskID = {selectedTask}
                 roomID = {roomID}
+                handlePlayerRevive = {handlePlayerRevive}
+                handleKillPLayer = {handleKillPlayer}
+                arrayOfAlivePlayers = {arrayOfAlivePlayers}
+                handleTaskCompleted = {handleTaskCompleted}
             />
         </Flex>
     );
