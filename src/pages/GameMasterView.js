@@ -11,12 +11,16 @@ import { HStack,
     } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
 import { collection,
+         doc,
+         getDoc,
          getDocs,
-         query
+         query,
+         updateDoc
         } from "firebase/firestore";
 import Execution from '../components/Execution';
 import TaskExecution from '../components/TaskExecution';
 import HeaderExecution from '../components/HeaderExecution';
+import Log from '../components/Log';
 
 const GameMasterView = () => {
     const { roomID } = useParams(); 
@@ -26,8 +30,9 @@ const GameMasterView = () => {
     const [arrayOfAlivePlayers, setArrayOfAlivePlayers] = useState([]);
     const [arrayOfTasks, setArrayOfTasks] = useState([]);    
     const [completedTasks, setCompletedTasks] = useState([]);
+    const [logList, setLogList] = useState([]);
 
-    //updates arrayOfAlivePlayers, arrayOfDeadPlayers, and arrayOfTasks when roomID is updated
+    //updates arrayOfAlivePlayers, arrayOfDeadPlayers, logs, and arrayOfTasks when roomID is updated
     useEffect (() => {
         const fetchPlayers = async () => {
             console.log(`fetching players and tasks in useEffect: ${roomID}`);
@@ -68,31 +73,82 @@ const GameMasterView = () => {
             }
         }
 
+        const fetchLogs = async () => {
+            try {
+                const docRef = doc(db, 'rooms', roomID);
+                const docSnapshot = await getDoc(docRef);
+                const logs = docSnapshot.data().logs;
+                setLogList(logs);
+            }
+            catch (error) {
+                console.error("Error updating logList: ", error);
+            }
+        }
+
         if (roomID) {
             fetchPlayers();
             fetchTasks();
+            fetchLogs();
         }
         //eslint-disable-next-line
     }, [roomID]);
 
-    const handleKillPlayer = (killedPlayerName) => {
+    const updateLogs = async (newLog) => {
+        try {
+            const date = new Date();
+            const time = date.toLocaleTimeString();
+            const docRef = doc(db, 'rooms', roomID);
+            const docSnapshot = await getDoc(docRef);
+            const currLogs = docSnapshot.data().logs;
+            const newAddition = {
+                time: time,
+                log: newLog
+            }
+            const newLogs = [...currLogs, newAddition];
+            await updateDoc(docRef, { logs: newLogs });
+            setLogList(newLogs);
+        }
+        catch (error) {
+            console.error("Error updating logList: ", error);
+        }
+    }
+
+    //removes player from alivePlayers and adds them to deadPlayers
+    const handleKillPlayer = async (killedPlayerName, assassinName) => {
         setArrayOfDeadPlayers(arrayOfDeadPlayers => [...arrayOfDeadPlayers, killedPlayerName]);
         setArrayOfAlivePlayers(arrayOfAlivePlayers.filter((name) => name !== killedPlayerName));
+        await updateLogs(killedPlayerName + " was killed by " + assassinName);
     };
 
     //updates ArrayOfDeadPlayers and adds player to arrayOfAlivePlayers
-    const handlePlayerRevive = (revivedPlayerName) => {
+    const handlePlayerRevive = async (revivedPlayerName) => {
         setArrayOfDeadPlayers(arrayOfDeadPlayers.filter((name) => name !== revivedPlayerName));
         setArrayOfAlivePlayers(arrayOfAlivePlayers => [...arrayOfAlivePlayers, revivedPlayerName]);
+        await updateLogs(revivedPlayerName + " was revived");
     };
 
     //updates arrayOfTasks when new task is added to db
-    const handleNewTaskAdded = (newTask) => {
+    const handleNewTaskAdded = async (newTask) => {
         setArrayOfTasks(arrayOfTasks => [...arrayOfTasks, newTask]);
+        await updateLogs("Added new task: " + newTask.title);
     };
 
-    const handleTaskCompleted  = (task) => {
+    //updates completedTasks
+    const handleTaskCompleted  = async (task) => {
         setCompletedTasks(completedTasks => [...completedTasks, task]);
+        await updateLogs("Completed task: " + task);
+    }
+
+    //removes player from alivePlayers and adds them to deadPlayers
+    const handleUndoRevive = async (revivedPlayerName) => {
+        setArrayOfDeadPlayers(arrayOfDeadPlayers => [...arrayOfDeadPlayers, revivedPlayerName]);
+        setArrayOfAlivePlayers(arrayOfAlivePlayers.filter((name) => name !== revivedPlayerName));
+        await updateLogs(revivedPlayerName + "'s revive was undone");
+    }
+
+    //updates logList with remapped targets
+    const handleRemapping = async (log) => {
+        await updateLogs(log);
     }
 
     return (
@@ -100,6 +156,7 @@ const GameMasterView = () => {
             <HeaderExecution roomID = {roomID}
                              arrayOfPlayers = {arrayOfPlayers}
                              arrayOfAlivePlayers = {arrayOfAlivePlayers}
+                             handleRemapping = {handleRemapping}
             />
 
             <HStack alignItems = 'left'
@@ -115,15 +172,23 @@ const GameMasterView = () => {
                      ml = '16px' 
                      mr = '10px'
                 >
-                    <Heading size = 'lg' textAlign = 'center' m = '4px'>Alive Players</Heading>
+                    <Heading size = 'lg' textAlign = 'center' m = '4px'>Alive Players ({arrayOfAlivePlayers.length})</Heading>
                     <AlivePlayersList roomID = {roomID}/>
                 </Box>
 
                 <VStack ml = '10px' mr = '10px'>
-                    <Box borderWidth = '2px' borderRadius = '2xl' p = '4px' width = 'xl' 
-                         height = 'md' mb = '10px'
+                    <Box borderWidth = '2px' 
+                         borderRadius = '2xl' 
+                         p = '4px' 
+                         width = 'xl' 
+                         height = 'md' 
+                         mb = '10px'
+                         overflow = 'auto'
                     >
-                        Chat Box goes Here!
+                        <Heading size = 'lg' textAlign = 'center'>History Log</Heading>
+                        <Log 
+                            logList = {logList}
+                        />
                     </Box>
 
                     <Box borderWidth = '2px' 
@@ -140,6 +205,8 @@ const GameMasterView = () => {
                             arrayOfTasks = {arrayOfTasks}
                             handleTaskCompleted = {handleTaskCompleted}
                             completedTasks = {completedTasks}
+                            handleUndoRevive = {handleUndoRevive}
+                            handleRemapping = {handleRemapping}
                         />
                     </Box>
                 </VStack>
@@ -153,10 +220,12 @@ const GameMasterView = () => {
                          p = '4px' 
                          mb = '10px'
                     >
-                        <Heading size = 'lg' textAlign = 'center'>Dead Players</Heading>
+                        <Heading size = 'lg' textAlign = 'center'>Dead Players ({arrayOfDeadPlayers.length})</Heading>
                         <DeadPlayersList roomID = {roomID} 
                                          handlePlayerRevive={handlePlayerRevive} 
-                                         arrayOfAlivePlayers={arrayOfAlivePlayers}/>
+                                         arrayOfAlivePlayers={arrayOfAlivePlayers}
+                                         handleRemapping = {handleRemapping}
+                        />
                     </Box>
 
                     <Box width = 'md' 

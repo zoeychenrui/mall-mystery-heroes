@@ -14,7 +14,7 @@ import {
 import DeadPlayerReviveButton from './DeadPlayerReviveButton';
 
 
-const DeadPlayersList = ({roomID, handlePlayerRevive, arrayOfAlivePlayers}) => {
+const DeadPlayersList = ({roomID, handlePlayerRevive, arrayOfAlivePlayers, handleRemapping}) => {
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players'); // This takes us to the players folder
 
     // Construct a query that gets all players in the room that are still alive
@@ -61,6 +61,7 @@ const DeadPlayersList = ({roomID, handlePlayerRevive, arrayOfAlivePlayers}) => {
                                 roomID = {roomID}
                                 handlePlayerRevive = {handlePlayerRevive}
                                 arrayOfAlivePlayers = {arrayOfAlivePlayers}
+                                handleRemapping = {handleRemapping}
                             />
                         </Box>
                     </ListItem>

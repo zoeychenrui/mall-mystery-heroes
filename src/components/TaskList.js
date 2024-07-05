@@ -67,8 +67,8 @@ const TaskList = (props) => {
      return (  
         <Tabs>
             <TabList>
-                <Tab fontSize = 'md' fontWeight = 'bold'>Active Tasks</Tab>
-                <Tab fontSize = 'md' fontWeight = 'bold'>Completed Tasks</Tab>
+                <Tab fontSize = 'md' fontWeight = 'bold'>Active Tasks ({arrayOfActiveTasks.length})</Tab>
+                <Tab fontSize = 'md' fontWeight = 'bold'>Completed Tasks ({arrayOfInactiveTasks.length})</Tab>
             </TabList>
             <TabPanels>
                 <TabPanel>

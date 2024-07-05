@@ -6,8 +6,8 @@ import { query,
     } from 'firebase/firestore';
 import { db } from '../utils/firebase';
 
-const RemapPlayers = () => {
-    
+const RemapPlayers = (handleRemapping) => {
+
     //randomizes order of array
     const randomizeArray = (array) => {
         for (let i = 0; i < array.length; i++) {
@@ -52,6 +52,7 @@ const RemapPlayers = () => {
                     await updateDoc(possibleTargetDoc.ref, {
                         assassins: [...possibleTargetData.assassins, player]
                     });
+                    await handleRemapping("New target for " + player + ": " + possibleTarget);
                     console.log(`Assassins updated for ${possibleTarget} in database (loop1): ${possibleTargetData.assassins}`);
 
                     //breaks loop if player has max targets
@@ -66,10 +67,11 @@ const RemapPlayers = () => {
                          newTargetArray.length < MAXTARGETS //checks if player has max targets
                 ) {
                     newTargetArray.push(possibleTarget);
-
                     await updateDoc(possibleTargetDoc.ref, {
                         assassins: [...possibleTargetData.assassins, player]
                     })
+                    await handleRemapping("New target for " + player + ": " + possibleTarget);
+                    
                     console.log(`Assassins updated for ${possibleTarget} in database (loop2): ${possibleTargetData.assassins}`);
 
                     //breaks loop if player has max targets
@@ -115,6 +117,7 @@ const RemapPlayers = () => {
                     await updateDoc(possibleAssassinDoc.ref, {
                         targets: [...possibleAssassinData.targets, player]
                     });
+                    await handleRemapping("New assassin for " + possibleAssassin + ": " + player);
                     console.log(`Targets updated for ${possibleAssassin} in database (loop3): ${possibleAssassinData.targets}`);
 
                     //breaks loop if player has max targets

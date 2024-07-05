@@ -7,7 +7,7 @@ import { Image,
 import whiteLogo from '../assets/mall-logo-white-2.png';
 import TargetGenerator from './TargetGenerator';
 import RegenerateTargets from './RegenerateTargets';
-const HeaderExecution = ({ roomID, arrayOfPlayers, arrayOfAlivePlayers}) => {
+const HeaderExecution = ({ roomID, arrayOfPlayers, arrayOfAlivePlayers, handleRemapping}) => {
     return (  
         <HStack justifyContent = 'left'
                 p = '5px'
@@ -28,6 +28,7 @@ const HeaderExecution = ({ roomID, arrayOfPlayers, arrayOfAlivePlayers}) => {
                 <RegenerateTargets
                     arrayOfAlivePlayers={arrayOfAlivePlayers}
                     roomID = {roomID}
+                    handleRemapping = {handleRemapping}
                 />
             </Flex>
         </HStack>

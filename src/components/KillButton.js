@@ -102,7 +102,7 @@ const KillButton = ({ roomID, assassinPlayerNamed, onPlayerKilled }) => {
         }
         const targets = possibleTargets.filter(target => target !== selectedTargetPlayer);
         setPossibleTargets(targets);
-        onPlayerKilled(selectedTargetPlayer);
+        onPlayerKilled(selectedTargetPlayer, assassinPlayerNamed);
     };
 
     return (

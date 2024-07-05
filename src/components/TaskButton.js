@@ -16,7 +16,6 @@ import { Button, Checkbox,
          PopoverContent,
          PopoverArrow,
          PopoverCloseButton,
-         PopoverHeader,
          PopoverBody,
          PopoverFooter,
          Text
@@ -35,7 +34,15 @@ import enter from '../assets/enter-green.png';
 import enterHover from '../assets/enter-hovering.png';
 import RemapPlayers from './RemapPlayers';
 
-const TaskButton = ({ taskID, roomID, arrayOfAlivePlayers, handlePlayerRevive, handleKillPlayer, handleTaskCompleted }) => {    
+const TaskButton = (props) => {    
+    const { taskID,
+            roomID,
+            arrayOfAlivePlayers,
+            handlePlayerRevive,
+            handleUndoRevive,
+            handleTaskCompleted,
+            handleRemapping
+        } = props;
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [listOfChoices, setListOfchoices] = useState([]);
     const createAlert = CreateAlert();
@@ -43,7 +50,27 @@ const TaskButton = ({ taskID, roomID, arrayOfAlivePlayers, handlePlayerRevive, h
     const [isHovering, setIsHovering] = useState(false);
     const [newCheckedPlayers, setNewCheckedPlayers] = useState([]);
     const [newRemovedPlayers, setNewRemovedPlayers] = useState([]);
-    const handleRegeneration = RemapPlayers();
+    const handleRegeneration = RemapPlayers(handleRemapping);
+
+    //keeps checked players whenever page is reset
+    useEffect(() => {
+        const fetchCheckedPlayers = async() => {
+            if (!taskID) return;
+            const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
+            const taskDocRef = doc(taskCollectionRef, taskID);
+            const taskSnapshot = await getDoc(taskDocRef);
+            const task = taskSnapshot.data();
+            setCheckedPlayers(task.completedBy);
+        }
+
+        if (roomID) {
+            fetchCheckedPlayers();
+            console.log('checked players:', checkedPlayers);
+        }
+
+        //disable below because 'fetchedCheckedPlayers' should not be a dependency
+        //eslint-disable-next-line
+    }, [roomID, taskID]);
 
     //cancels actions made in modal when cancel button is clicked
     const handleCancel = () => {
@@ -114,7 +141,7 @@ const TaskButton = ({ taskID, roomID, arrayOfAlivePlayers, handlePlayerRevive, h
                 const playerSnapshot = await getDocs(playerQuery);
                 const playerdoc = playerSnapshot.docs[0].ref;
                 await updateDoc(playerdoc, { isAlive: false });
-                handleKillPlayer(player);
+                handleUndoRevive(player);
             }
         }
         
@@ -134,7 +161,7 @@ const TaskButton = ({ taskID, roomID, arrayOfAlivePlayers, handlePlayerRevive, h
         const taskDoc = await getDoc(taskDocRef)
         const taskTitle = taskDoc.data().title;
         await updateDoc(taskDocRef, { isComplete: true });
-        handleTaskCompleted();
+        handleTaskCompleted(taskTitle);
         onClose(taskTitle);
     }
 
@@ -204,6 +231,8 @@ const TaskButton = ({ taskID, roomID, arrayOfAlivePlayers, handlePlayerRevive, h
     useEffect(() => {
         createListOfChoices();
         console.log('task changed. List of choices updated');
+        //disabled below becaue 'createListOfchoices' does not need to be in dependency array
+        //eslint-disable-next-line
     }, [taskID])
 
     return (

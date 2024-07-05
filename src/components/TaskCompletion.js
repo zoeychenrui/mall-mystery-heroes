@@ -1,10 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { Flex, Select } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
-import { collection, getDocs, where, query, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, where, query } from 'firebase/firestore';
 import TaskButton from './TaskButton';
 
-const TaskCompletion = ({ roomID, arrayOfAlivePlayers, handlePlayerRevive, handleKillPlayer, arrayOfTasks, handleTaskCompleted, completedTasks }) => {
+const TaskCompletion = (props) => {
+    const { roomID,
+            arrayOfAlivePlayers,
+            handlePlayerRevive,
+            handleUndoRevive,
+            arrayOfTasks,
+            handleTaskCompleted,
+            completedTasks,
+            handleRemapping
+        } = props;
     const [taskList, setTaskList] = useState([]);
     const [selectedTask, setSelectedTask] = useState('');
 
@@ -37,6 +46,8 @@ const TaskCompletion = ({ roomID, arrayOfAlivePlayers, handlePlayerRevive, handl
     useEffect(() => {
         fetchTasks();
         console.log('fetched tasks');
+        // disabled below because 'fetchTasks' does not need to be a dependency
+        // eslint-disable-next-line
     },[arrayOfTasks, completedTasks]);
 
     return (  
@@ -52,9 +63,10 @@ const TaskCompletion = ({ roomID, arrayOfAlivePlayers, handlePlayerRevive, handl
                 taskID = {selectedTask}
                 roomID = {roomID}
                 handlePlayerRevive = {handlePlayerRevive}
-                handleKillPLayer = {handleKillPlayer}
+                handleUndoRevive = {handleUndoRevive}
                 arrayOfAlivePlayers = {arrayOfAlivePlayers}
                 handleTaskCompleted = {handleTaskCompleted}
+                handleRemapping = {handleRemapping}
             />
         </Flex>
     );
