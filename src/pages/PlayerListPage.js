@@ -12,7 +12,7 @@ import { Button,
 import PlayerAddition from '../components/PlayerAddition';
 import PlayerList from '../components/PlayerList';
 import PlayerRemove from "../components/PlayerRemove";
-import {collection, query, getDocs} from 'firebase/firestore';
+import {collection, query, getDocs, getDoc} from 'firebase/firestore';
 import {db} from '../utils/firebase';
 import { auth} from "../utils/firebase";
 import { signOut } from "firebase/auth";
@@ -85,20 +85,20 @@ const PlayerListPage = () => {
             setShowAlert(true);
         }
 
-            try {
-                if (navigate) {
-                    navigate(`/rooms/${roomID}/GameMasterView`, {state: { arrayOfPlayers } });
-                }
-                else {
-                    console.error("navigate not defined");
-                    setError("navigate not defined");
-                    setShowAlert(true);
-                }
+        try {
+            if (navigate) {
+                navigate(`/rooms/${roomID}/GameMasterView`, {state: { arrayOfPlayers } });
             }
-            catch (error) {
-                console.error("Error navigating to lobby: ", error);
-                setError("Error navigating to lobby: ", error);
-                            setShowAlert(true);
+            else {
+                console.error("navigate not defined");
+                setError("navigate not defined");
+                setShowAlert(true);
+            }
+        }
+        catch (error) {
+            console.error("Error navigating to lobby: ", error);
+            setError("Error navigating to lobby: ", error);
+            setShowAlert(true);
         }
     }
     //addes player to arrayOfPlayers when they are added

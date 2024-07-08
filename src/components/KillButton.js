@@ -1,40 +1,24 @@
-import React, { useEffect, useState } from 'react';
-import { db } from '../utils/firebase';
-import { collection, query, getDocs, where, onSnapshot, updateDoc } from "firebase/firestore";
-import { Select, Flex, Alert, AlertIcon, AlertTitle, AlertDescription, Box, HStack } from '@chakra-ui/react';
-import killImage from '../assets/kill.png'; // Adjust the path according to your project structure
+import React, { useState} from 'react';
+import { Box, Tooltip } from '@chakra-ui/react';
 import CreateAlert from './CreateAlert';
+import kill from '../assets/kill-white.png';
+import killHover from '../assets/kill-hover.png';
+import { db } from '../utils/firebase';
+import { collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 
-const KillButton = ({ roomID, assassinPlayerNamed, onPlayerKilled }) => {
-    const [selectedTargetPlayer, setSelectedTargetPlayer] = useState('');
-    const [possibleTargets, setPossibleTargets] = useState([]);
-    const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
+const KillButton = (props) => {
+    const { roomID, assassinPlayerNamed, handleKillPlayer, selectedTarget, possibleTargets, getPossibleTargets } = props;
+    const [isHovering, setIsHovering] = useState(false);
     const createAlert = CreateAlert();
-
-    const handleChange = (event) => {
-        setSelectedTargetPlayer(event.target.value);
-    };
-
-    useEffect(() => {
-        const assassinQuery = query(playerCollectionRef, where('name', '==', assassinPlayerNamed));
-        const unsubscribe = onSnapshot(assassinQuery, (snapshot) => {
-            if (!snapshot.empty) {
-                const playerData = snapshot.docs[0].data();
-                setPossibleTargets(playerData.targets || []);
-            } else {
-                console.error("No documents found with the specified query.");
-            }
-        });
-        return () => unsubscribe();
-    }, [assassinPlayerNamed, playerCollectionRef]);
+    const playerCollectionRef = collection (db, 'rooms', roomID, 'players');
 
     const handleKill = async () => {
-        if (selectedTargetPlayer === '') {
+        if (selectedTarget === '') {
             return createAlert('error', 'Error', 'Must Select Target', 1500);
         }
 
-        console.log("The following player will be killed: ", selectedTargetPlayer);
-        const targetQuery = query(playerCollectionRef, where('name', '==', selectedTargetPlayer));
+        console.log("The following player will be killed: ", selectedTarget);
+        const targetQuery = query(playerCollectionRef, where('name', '==', selectedTarget));
         const assassinQuery = query(playerCollectionRef, where('name', '==', assassinPlayerNamed));
 
         try {
@@ -61,7 +45,7 @@ const KillButton = ({ roomID, assassinPlayerNamed, onPlayerKilled }) => {
                     const newSnapshot = await getDocs(newQuery);
                     if (!newSnapshot.empty) {
                         const targetArray = [...newSnapshot.docs[0].data().targets];
-                        const index = targetArray.indexOf(selectedTargetPlayer);
+                        const index = targetArray.indexOf(selectedTarget);
                         if (index !== -1) {
                             targetArray.splice(index, 1);
                             await updateDoc(newSnapshot.docs[0].ref, {
@@ -77,7 +61,7 @@ const KillButton = ({ roomID, assassinPlayerNamed, onPlayerKilled }) => {
                     const newSnapshot = await getDocs(newQuery);
                     if (!newSnapshot.empty) {
                         const assassinArray = [...newSnapshot.docs[0].data().assassins];
-                        const index = assassinArray.indexOf(selectedTargetPlayer);
+                        const index = assassinArray.indexOf(selectedTarget);
                         if (index !== -1) {
                             assassinArray.splice(index, 1);
                             await updateDoc(newSnapshot.docs[0].ref, {
@@ -92,34 +76,32 @@ const KillButton = ({ roomID, assassinPlayerNamed, onPlayerKilled }) => {
         } catch (error) {
             console.error("Error updating assassin's score: ", error);
         }
-        setPossibleTargets([]);
-        onPlayerKilled(selectedTargetPlayer);
+        const targets = possibleTargets.filter(target => target !== selectedTarget);
+        getPossibleTargets(targets);
+        handleKillPlayer(selectedTarget, assassinPlayerNamed);
     };
 
-    return (
-        <form>
-            <HStack spacing='40px'>
-                <img 
-                        src={killImage} 
+    return (  
+        <Box onMouseEnter = {() => setIsHovering(true)} 
+             onMouseLeave = {() => setIsHovering(false)}
+             w = '54px'
+             h = '50px'
+             display = 'flex'
+             justifyContent = 'center'
+             alignItems = 'center'
+             ml = '16px'
+             mr = '16px'
+        >
+            <Tooltip label = 'Kill Player'>
+            <img 
+                        src={isHovering ? killHover : kill} 
                         alt="Kill Button" 
                         onClick={handleKill} 
-                        style={{ cursor: 'pointer', marginLeft: '1rem', width: '50px', height: '50px' }}
-                    />
-                    <Select 
-                        id='killTarget'
-                        placeholder='Player Name'
-                        value={selectedTargetPlayer}
-                        onChange={handleChange}
-                    >
-                        {possibleTargets.map((player, index) => (
-                            <option key={index} value={player}>
-                                {player}
-                            </option>
-                        ))}
-                    </Select>
-            </HStack>
-        </form>
+                        style={{ cursor: 'pointer', width: '54px', height: '50px' }}
+                />
+            </Tooltip>
+        </Box>
     );
-};
-
+}
+ 
 export default KillButton;

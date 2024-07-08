@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import AssassinSelection from './AssassinsSelection';
-import KillButton from './KillButton';
 import { Menu, 
         MenuButton,
         MenuList, 
@@ -17,17 +15,24 @@ import mission from '../assets/mission.png';
 import kill from '../assets/kill.png';
 import openseason from '../assets/openseason.png';
 import TaskCompletion from './TaskCompletion';
+import KillActionExecution from './KillActionExecution';
     
-const Execution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) => {
-    const [assassinPlayerNamed, setAssassinPlayerNamed] = useState('');
+const Execution = (props) => {
+    const { roomID, 
+            arrayOfAlivePlayers, 
+            handleKillPlayer, 
+            handlePlayerRevive, 
+            arrayOfTasks, 
+            handleTaskCompleted, 
+            completedTasks, 
+            handleUndoRevive,
+            handleRemapping
+        } = props;
     const [action, setAction] = useState('completeKill');
 
     const handleActionChange = (actionType) => {
         setAction(actionType);
     }
-    const getAssassinPlayerName = (assassinName) => {
-        setAssassinPlayerNamed(assassinName);
-    };
 
     return (
         <VStack>
@@ -96,23 +101,29 @@ const Execution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) => {
             </Menu> 
 
             {action === 'completeKill' && 
-                <Flex>
-                    <AssassinSelection
+                <Flex
+                    mt = '20px'
+                >
+                    <KillActionExecution 
                         roomID = {roomID}
-                        getAssassinPlayerName = {getAssassinPlayerName}
                         arrayOfAlivePlayers = {arrayOfAlivePlayers}
-                    />
-                    <KillButton
-                        roomID = {roomID}
-                        onPlayerKilled = {handleKillPlayer}
-                        assassinPlayerNamed = {assassinPlayerNamed}
+                        handleKillPlayer = {handleKillPlayer}
                     />
                 </Flex>
             }
             {action === 'completeMission' && 
-                <Flex>
+                <Flex 
+                    mt = '20px'
+                >
                     <TaskCompletion 
                         roomID = {roomID}
+                        handlePlayerRevive = {handlePlayerRevive}
+                        handleUndoRevive = {handleUndoRevive}
+                        arrayOfAlivePlayers = {arrayOfAlivePlayers}
+                        arrayOfTasks = {arrayOfTasks}
+                        handleTaskCompleted = {handleTaskCompleted}
+                        completedTasks = {completedTasks}
+                        handleRemapping = {handleRemapping}
                     />
                 </Flex>
             }

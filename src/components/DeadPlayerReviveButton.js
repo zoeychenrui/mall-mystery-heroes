@@ -4,9 +4,9 @@ import revive from '../assets/revive-gray.png';
 import reviveHover from '../assets/revive-white.png';
 import PlayerRevive from './PlayerRevive';
 
-const DeadPlayerReviveButton = ({player, roomID, arrayOfAlivePlayers, handlePlayerRevive}) => {
+const DeadPlayerReviveButton = ({player, roomID, arrayOfAlivePlayers, handlePlayerRevive, handleRemapping}) => {
     const [isHovering, setIsHovering] = useState(false);
-    const revivePlayer = PlayerRevive();
+    const revivePlayer = PlayerRevive(handleRemapping);
 
     const handleReviveClicked = async (player) => {
         await revivePlayer(player, roomID, arrayOfAlivePlayers);

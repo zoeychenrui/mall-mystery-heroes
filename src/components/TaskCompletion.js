@@ -4,10 +4,17 @@ import { db } from '../utils/firebase';
 import { collection, getDocs, where, query } from 'firebase/firestore';
 import TaskButton from './TaskButton';
 
-
 const TaskCompletion = (props) => {
+    const { roomID,
+            arrayOfAlivePlayers,
+            handlePlayerRevive,
+            handleUndoRevive,
+            arrayOfTasks,
+            handleTaskCompleted,
+            completedTasks,
+            handleRemapping
+        } = props;
     const [taskList, setTaskList] = useState([]);
-    const roomID = props.roomID;
     const [selectedTask, setSelectedTask] = useState('');
 
     //fetches tasks that are incomplete and turns tasklist to a list of the options
@@ -19,10 +26,10 @@ const TaskCompletion = (props) => {
             <option key = {doc.data().title}
                     value = {doc.id}
             >
-                {doc.data().title}
-            </option>
-        ));
-        setTaskList(tempTaskList);
+                 {doc.data().title}
+             </option>
+         ));
+         setTaskList(tempTaskList);
     }
 
     //changes selected Task to the task selected
@@ -30,16 +37,18 @@ const TaskCompletion = (props) => {
         setSelectedTask(event.target.value);
     }
 
-    //updates taskList when taskSelection is changed.
-    useEffect(() => {
-        fetchTasks()
-        console.log('useEfffect on: TaskCompletion')
-    }, [roomID])
-
     //logs when selectedTask is changed.
     useEffect(() => {
         console.log(selectedTask);
     }, [selectedTask]);
+
+    //updates tasklist when possible tasks are updated
+    useEffect(() => {
+        fetchTasks();
+        console.log('fetched tasks');
+        // disabled below because 'fetchTasks' does not need to be a dependency
+        // eslint-disable-next-line
+    },[arrayOfTasks, completedTasks]);
 
     return (  
         <Flex alignItems= 'center'>
@@ -53,6 +62,11 @@ const TaskCompletion = (props) => {
             <TaskButton 
                 taskID = {selectedTask}
                 roomID = {roomID}
+                handlePlayerRevive = {handlePlayerRevive}
+                handleUndoRevive = {handleUndoRevive}
+                arrayOfAlivePlayers = {arrayOfAlivePlayers}
+                handleTaskCompleted = {handleTaskCompleted}
+                handleRemapping = {handleRemapping}
             />
         </Flex>
     );

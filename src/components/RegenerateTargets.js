@@ -12,6 +12,7 @@ import { Button } from '@chakra-ui/react';
 const RegenerateTargets = (props) => {
     const arrayOfAlivePlayers = props.arrayOfAlivePlayers;
     const roomID = props.roomID;
+    const handleRemapping = props.handleRemapping;
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
     
     //randomizes order of array
@@ -71,6 +72,7 @@ const RegenerateTargets = (props) => {
                     await updateDoc(possibleTargetDoc.ref, {
                         assassins: [...possibleTargetData.assassins, player]
                     });
+                    await handleRemapping('New target for ' + player + ': ' + possibleTarget);
                     console.log(`Assassins updated for ${possibleTarget} in database (loop1): ${possibleTargetData.assassins}`);
 
                     //breaks loop if player has max targets
@@ -89,6 +91,7 @@ const RegenerateTargets = (props) => {
                     await updateDoc(possibleTargetDoc.ref, {
                         assassins: [...possibleTargetData.assassins, player]
                     })
+                    await handleRemapping('New target for ' + player + ': ' + possibleTarget);
                     console.log(`Assassins updated for ${possibleTarget} in database (loop2): ${possibleTargetData.assassins}`);
 
                     //breaks loop if player has max targets
@@ -146,6 +149,8 @@ const RegenerateTargets = (props) => {
                     await updateDoc(possibleAssassinDoc.ref, {
                         targets: [...possibleAssassinData.targets, player]
                     });
+                    await handleRemapping('New target for ' + possibleAssassin + ': ' + player);
+
                     console.log(`Targets updated for ${possibleAssassin} in database (loop3): ${possibleAssassinData.targets}`);
 
                     //breaks loop if player has max targets

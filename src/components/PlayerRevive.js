@@ -1,8 +1,3 @@
-import React, { useState } from 'react';
-import {Button,
-        Select,
-        Flex
-    } from '@chakra-ui/react';
 import {db} from '../utils/firebase';
 import {collection, 
         query,  
@@ -13,7 +8,7 @@ import {collection,
 import CreateAlert from './CreateAlert';
 import RemapPlayers from './RemapPlayers';
 
-const PlayerRevive = (player, roomID, arrayOfAlivePlayers) => {
+const PlayerRevive = (handleRemapping) => {
     const createAlert = CreateAlert();
 
     const handleRevivePlayer = async (player, roomID, arrayOfAlivePlayers) => {   
@@ -25,7 +20,7 @@ const PlayerRevive = (player, roomID, arrayOfAlivePlayers) => {
         const playerSnapshot = await getDocs(playerQuery);
         const playerdoc = playerSnapshot.docs[0].ref;
         await updateDoc(playerdoc, { isAlive: true });
-        const handleRegeneration = RemapPlayers();
+        const handleRegeneration = RemapPlayers(handleRemapping);
         await handleRegeneration(player, player, arrayOfAlivePlayers, roomID);
     }
 

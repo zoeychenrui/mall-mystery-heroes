@@ -10,21 +10,39 @@ import { Button, Checkbox,
          useDisclosure,
          Box,
          Image,
-         Stack
+         Stack,
+         Popover,
+         PopoverTrigger,
+         PopoverContent,
+         PopoverArrow,
+         PopoverCloseButton,
+         PopoverBody,
+         PopoverFooter,
+         Text
     } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
 import { collection, 
          getDoc, 
          getDocs, 
          query, 
-         where ,
-         doc
+         where,
+         doc,
+         updateDoc
     } from 'firebase/firestore';
 import CreateAlert from './CreateAlert';
 import enter from '../assets/enter-green.png';
 import enterHover from '../assets/enter-hovering.png';
+import RemapPlayers from './RemapPlayers';
 
-const TaskButton = ({ taskID, roomID }) => {    
+const TaskButton = (props) => {    
+    const { taskID,
+            roomID,
+            arrayOfAlivePlayers,
+            handlePlayerRevive,
+            handleUndoRevive,
+            handleTaskCompleted,
+            handleRemapping
+        } = props;
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [listOfChoices, setListOfchoices] = useState([]);
     const createAlert = CreateAlert();
@@ -32,40 +50,128 @@ const TaskButton = ({ taskID, roomID }) => {
     const [isHovering, setIsHovering] = useState(false);
     const [newCheckedPlayers, setNewCheckedPlayers] = useState([]);
     const [newRemovedPlayers, setNewRemovedPlayers] = useState([]);
+    const handleRegeneration = RemapPlayers(handleRemapping);
+
+    //keeps checked players whenever page is reset
+    useEffect(() => {
+        const fetchCheckedPlayers = async() => {
+            if (!taskID) return;
+            const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
+            const taskDocRef = doc(taskCollectionRef, taskID);
+            const taskSnapshot = await getDoc(taskDocRef);
+            const task = taskSnapshot.data();
+            setCheckedPlayers(task.completedBy);
+        }
+
+        if (roomID) {
+            fetchCheckedPlayers();
+            console.log('checked players:', checkedPlayers);
+        }
+
+        //disable below because 'fetchedCheckedPlayers' should not be a dependency
+        //eslint-disable-next-line
+    }, [roomID, taskID]);
 
     //cancels actions made in modal when cancel button is clicked
     const handleCancel = () => {
-        for (const player of newCheckedPlayers) {
-            setCheckedPlayers(checkedPlayers.filter(p => p !== player));
-        }
-        for (const player of newRemovedPlayers) {
-            setCheckedPlayers([...checkedPlayers, player]);
-        }
+        setCheckedPlayers(prevCheckedPlayers => {
+            let tempCheckedPlayers = [...prevCheckedPlayers];
+            for (const player of newCheckedPlayers) {
+                tempCheckedPlayers = tempCheckedPlayers.filter(p => p !== player);
+            }
+            for (const player of newRemovedPlayers) {
+                tempCheckedPlayers.push(player);
+            }
+            return tempCheckedPlayers;
+        });
         setNewCheckedPlayers([]);
         setNewRemovedPlayers([]);
         onClose();
     }
 
-    //handles when save button is clicked
-    const handleSave = () => {
+    //updates scores/live status when save button is clicked
+    const handleSave = async () => {
         const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
-        const taskDocRef = doc(taskCollectionRef, taskID);
-        const taskSnapshot = getDoc(taskDocRef);
+        const taskRef = doc(taskCollectionRef, taskID);
+        const taskSnapshot = await getDoc(taskRef);
         const task = taskSnapshot.data();
+        const taskDocRef = taskSnapshot.ref;
+        const points = parseInt(task.pointValue);
+        const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
 
+        //updates player scores for task types
+        if (task.taskType === 'Task') {
+            //adds points to new updated players
+            for (const player of newCheckedPlayers) {
+                const playerQuery = query(playerCollectionRef, where('name', '==', player));
+                const playerSnapshot = await getDocs(playerQuery);
+                const playerDoc = playerSnapshot.docs[0].ref;
+                const playerScore = parseInt(playerSnapshot.docs[0].data().score);
+                console.log('points: ' + points);
+                console.log('playerScore: ' + playerScore);
+                const newPoints = points + playerScore;
+                await updateDoc(playerDoc, { score: newPoints });
+            }
+            //removes points for those that were initially checked, but now removed
+            for (const player of newRemovedPlayers) {
+                const playerQuery = query(playerCollectionRef, where('name', '==', player));
+                const playerSnapshot = await getDocs(playerQuery);
+                const playerdoc = playerSnapshot.docs[0].ref;
+                const playerScore = parseInt(playerSnapshot.docs[0].data().score);
+                const newPoints = playerScore - points;
+                await updateDoc(playerdoc, { score: newPoints });
+            }
+        }
+        //updates player live status for revival missions
+        else if (task.taskType === 'Revival Mission') {
+            //revives newly checked players
+            for (const player of newCheckedPlayers) {
+                const playerQuery = query(playerCollectionRef, where('name', '==', player));
+                const playerSnapshot = await getDocs(playerQuery);
+                const playerdoc = playerSnapshot.docs[0].ref;
+                await updateDoc(playerdoc, { isAlive: true });
+                console.log('arrayOfAlivePlayers: ' + arrayOfAlivePlayers);
+                //remaps targets and assassins for revived player ONLY
+                await handleRegeneration(player, player, arrayOfAlivePlayers, roomID);
+                handlePlayerRevive(player);
+            }
+            //kills those that were initially checked, but now removed
+            for (const player of newRemovedPlayers) {
+                const playerQuery = query(playerCollectionRef, where('name', '==', player));
+                const playerSnapshot = await getDocs(playerQuery);
+                const playerdoc = playerSnapshot.docs[0].ref;
+                await updateDoc(playerdoc, { isAlive: false });
+                handleUndoRevive(player);
+            }
+        }
+        
+        //updates task to be completed by checkedplayers
+        await updateDoc(taskDocRef, { completedBy: checkedPlayers });
+        setNewCheckedPlayers([]);
+        setNewRemovedPlayers([]);
         onClose();
     }
 
     //handles when complete button is clicked
-    const handleComplete = () => {
-        onClose();
+    const handleComplete = async() => {
+        await handleSave();
+        createAlert('info', 'Completed', 'Task has been saved as completed', 1500);
+        const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
+        const taskDocRef = doc(taskCollectionRef, taskID);
+        const taskDoc = await getDoc(taskDocRef)
+        const taskTitle = taskDoc.data().title;
+        await updateDoc(taskDocRef, { isComplete: true });
+        handleTaskCompleted(taskTitle);
+        onClose(taskTitle);
     }
 
     //handles when checkbox is clicked
     const handleCheckedPlayers = (player) => {
         if (checkedPlayers.includes(player)) {
             setCheckedPlayers(checkedPlayers.filter(p => p !== player));
-            setNewRemovedPlayers([...newRemovedPlayers, player]);
+            if (!newCheckedPlayers.includes(player)) {
+                setNewRemovedPlayers([...newRemovedPlayers, player]);   
+            }
             setNewCheckedPlayers(newCheckedPlayers.filter(p => p !== player));
         }
         else {
@@ -125,6 +231,8 @@ const TaskButton = ({ taskID, roomID }) => {
     useEffect(() => {
         createListOfChoices();
         console.log('task changed. List of choices updated');
+        //disabled below becaue 'createListOfchoices' does not need to be in dependency array
+        //eslint-disable-next-line
     }, [taskID])
 
     return (
@@ -150,7 +258,7 @@ const TaskButton = ({ taskID, roomID }) => {
                                   borderRadius = '2xl'
                     >
                         <ModalHeader>
-                            Player 
+                            Who Has Completed The Task? 
                         </ModalHeader>
                         <ModalCloseButton />
                         <ModalBody>
@@ -181,12 +289,31 @@ const TaskButton = ({ taskID, roomID }) => {
                             >
                                 Save Changes
                             </Button>
-                            <Button onClick = {handleComplete}
-                                    backgroundColor = 'green.500'
-                                    color = 'white'
-                            >
-                                Complete Task
-                            </Button>
+                            <Popover>
+                                <PopoverTrigger>
+                                    <Button backgroundColor = 'green.500'
+                                            color = 'white'
+                                    >
+                                        Complete Task
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent backgroundColor = "rgb(32,32,48)">
+                                    <PopoverArrow />
+                                    <PopoverCloseButton />
+                                    <PopoverBody>
+                                        <Text>Confirm that task is finalized.</Text>
+                                        <Text>Players: {checkedPlayers.join(', ')}</Text>
+                                    </PopoverBody>
+                                    <PopoverFooter>
+                                        <Button onClick = {handleComplete}
+                                                backgroundColor = 'green.500'
+                                                color = 'white'
+                                        >
+                                            Confirm
+                                        </Button>
+                                    </PopoverFooter>
+                                </PopoverContent>
+                            </Popover>
                         </ModalFooter>
                     </ModalContent>
                 </ModalOverlay>
