@@ -15,12 +15,13 @@ import { collection,
          getDoc,
          getDocs,
          query,
-         updateDoc
+         updateDoc,
         } from "firebase/firestore";
 import Execution from '../components/Execution';
 import TaskExecution from '../components/TaskExecution';
 import HeaderExecution from '../components/HeaderExecution';
 import Log from '../components/Log';
+import UnmapPlayers from '../components/UnmapPlayers';
 
 const GameMasterView = () => {
     const { roomID } = useParams(); 
@@ -31,6 +32,7 @@ const GameMasterView = () => {
     const [arrayOfTasks, setArrayOfTasks] = useState([]);    
     const [completedTasks, setCompletedTasks] = useState([]);
     const [logList, setLogList] = useState([]);
+    const unmapPlayers = UnmapPlayers();
 
     //updates arrayOfAlivePlayers, arrayOfDeadPlayers, logs, and arrayOfTasks when roomID is updated
     useEffect (() => {
@@ -143,6 +145,9 @@ const GameMasterView = () => {
     const handleUndoRevive = async (revivedPlayerName) => {
         setArrayOfDeadPlayers(arrayOfDeadPlayers => [...arrayOfDeadPlayers, revivedPlayerName]);
         setArrayOfAlivePlayers(arrayOfAlivePlayers.filter((name) => name !== revivedPlayerName));
+        if (revivedPlayerName) {
+            unmapPlayers(revivedPlayerName, roomID);
+        }
         await updateLogs(revivedPlayerName + "'s revive was undone");
     }
 
@@ -154,7 +159,6 @@ const GameMasterView = () => {
     return (
         <div>
             <HeaderExecution roomID = {roomID}
-                             arrayOfPlayers = {arrayOfPlayers}
                              arrayOfAlivePlayers = {arrayOfAlivePlayers}
                              handleRemapping = {handleRemapping}
             />
@@ -172,7 +176,13 @@ const GameMasterView = () => {
                      ml = '16px' 
                      mr = '10px'
                 >
-                    <Heading size = 'lg' textAlign = 'center' m = '4px'>Alive Players ({arrayOfAlivePlayers.length})</Heading>
+                    <Heading 
+                        size = 'lg' 
+                        textAlign = 'center'
+                        m = '4px'
+                    >
+                        Alive Players ({arrayOfAlivePlayers.length})
+                    </Heading>
                     <AlivePlayersList roomID = {roomID}/>
                 </Box>
 
@@ -195,7 +205,7 @@ const GameMasterView = () => {
                          borderRadius = '2xl' 
                          p = '4px' 
                          width = 'xl' 
-                         height = '208px'
+                         height = '34%'
                     >
                         <Execution
                             roomID={roomID}

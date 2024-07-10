@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Select } from '@chakra-ui/react';
+import { Box, Flex, Select } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
 import { query, getDocs, collection, where } from "firebase/firestore";
 
@@ -29,12 +29,14 @@ const AssassinSelection = (props) => {
     };
 
     return (
-        <Box>
+        <Flex w = '100%' 
+        >
             <Select 
                 id='assassin'
                 placeholder='Select Assassin'
                 value={selectedAssassin}
                 onChange={handleChange}
+                w = '100%'
             >
                 {arrayOfAlivePlayers.map((player, index) => (
                     <option key={index} value={player}>
@@ -42,7 +44,7 @@ const AssassinSelection = (props) => {
                     </option>
                 ))}
             </Select>
-        </Box>
+        </Flex>
     );
 };
 

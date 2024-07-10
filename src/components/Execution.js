@@ -9,7 +9,9 @@ import { Menu,
         Tooltip,
         Flex,
         Heading,
-        VStack
+        VStack,
+        Divider,
+        Text
     } from '@chakra-ui/react';
 import mission from '../assets/mission.png';
 import kill from '../assets/kill.png';
@@ -35,11 +37,21 @@ const Execution = (props) => {
     }
 
     return (
-        <VStack>
+        <VStack  h = '100%'>
             <Menu>
                 <HStack>
-                    <Heading size = 'md'>Action</Heading>
-                    <MenuButton as = {Button} >
+                    <Heading    
+                        size = 'md'
+                        mr = '10px'
+                    >
+                        {action === 'completeKill' ? 'Kill' : 
+                         action === 'completeMission' ? 'Complete Mission' : 
+                         'Open Season'
+                        }
+                    </Heading>
+                    <MenuButton 
+                        as = {Button} 
+                    >
                         {action === 'completeKill' && 
                             <Image
                                 boxSize = '24px'
@@ -66,16 +78,25 @@ const Execution = (props) => {
                         }
                     </MenuButton>
                 </HStack>
+                <Divider />
                 
-                <MenuList>
-                    <MenuItem onClick = {() => handleActionChange('completeKill')}>
+                <MenuList
+                    color = 'black'
+                >
+                    <MenuItem 
+                        onClick = {() => handleActionChange('completeKill')}
+                    >
                         <Tooltip label = 'Kill'>
                             <Image boxSize = '24px'
                                    objectFit = 'cover'
                                    src = {kill}
                                    alt = 'Kill'
+                                   mr = '16px'
                             />
-                        </Tooltip>
+                        </Tooltip> 
+                        <Text fontSize = 'md'>
+                            Assassinate
+                        </Text>
                     </MenuItem>
 
                     <MenuItem onClick = {() => handleActionChange('completeMission')}>
@@ -84,8 +105,12 @@ const Execution = (props) => {
                                    objectFit = 'cover'
                                    src = {mission}
                                    alt = 'Complete Mission'
+                                   mr = '16px'
                             />
                         </Tooltip>
+                        <Text fontSize = 'md'>
+                            Complete Mission
+                        </Text>
                     </MenuItem>
 
                     <MenuItem onClick = {() => handleActionChange('openSeason')}>
@@ -94,15 +119,21 @@ const Execution = (props) => {
                                    objectFit = 'cover'
                                    src = {openseason}
                                    alt = 'Open Season'
+                                   mr = '16px'
                             />
                         </Tooltip>
+                        <Text fontSize = 'md'>
+                            Open Season
+                        </Text>
                     </MenuItem>
                 </MenuList> 
             </Menu> 
 
             {action === 'completeKill' && 
                 <Flex
-                    mt = '20px'
+                    justifyContent = 'center'
+                    alignItems = 'center'
+                    h = '100%'
                 >
                     <KillActionExecution 
                         roomID = {roomID}
@@ -113,7 +144,7 @@ const Execution = (props) => {
             }
             {action === 'completeMission' && 
                 <Flex 
-                    mt = '20px'
+                    h = '100%'
                 >
                     <TaskCompletion 
                         roomID = {roomID}

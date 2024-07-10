@@ -5,9 +5,8 @@ import { Image,
          HStack   
     } from '@chakra-ui/react';
 import whiteLogo from '../assets/mall-logo-white-2.png';
-import TargetGenerator from './TargetGenerator';
 import RegenerateTargets from './RegenerateTargets';
-const HeaderExecution = ({ roomID, arrayOfPlayers, arrayOfAlivePlayers, handleRemapping}) => {
+const HeaderExecution = ({ roomID, arrayOfAlivePlayers, handleRemapping}) => {
     return (  
         <HStack justifyContent = 'left'
                 p = '5px'
@@ -21,10 +20,6 @@ const HeaderExecution = ({ roomID, arrayOfPlayers, arrayOfAlivePlayers, handleRe
             />
             <Heading>Lobby #: {roomID}</Heading>
             <Flex>
-                <TargetGenerator 
-                    arrayOfPlayers={arrayOfPlayers} 
-                    roomID={roomID} 
-                />
                 <RegenerateTargets
                     arrayOfAlivePlayers={arrayOfAlivePlayers}
                     roomID = {roomID}

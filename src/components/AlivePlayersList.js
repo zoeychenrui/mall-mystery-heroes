@@ -7,7 +7,8 @@ import {
     AccordionIcon,
     Box,
     VStack,
-    Flex
+    Flex,
+    Text
 } from '@chakra-ui/react';
 import { db } from '../utils/firebase';
 import {
@@ -52,6 +53,8 @@ const AlivePlayersList = (props) => {
 
         // Clean up the subscription when the component unmounts
         return () => unsubscribe();
+        // disabled next line because playerAlivePlayersQuery should not be in dependency array
+        // eslint-disable-next-line
     }, []); // empty dependency array means this effect will only run when the component mounts
 
 
@@ -60,26 +63,90 @@ const AlivePlayersList = (props) => {
     }
     
     return (
-        <Flex background = 'transparent' justifyContent = 'center'>
-            <VStack width = '100%'>
-                 <Accordion width = '100%' allowToggle>
+        <Flex 
+            background = 'transparent' 
+            justifyContent = 'center'
+        >
+            <VStack 
+                width = '100%'
+            >
+                 <Accordion 
+                    width = '100%' 
+                    allowToggle
+                >
                     {players.map((player) => (
-                        <AccordionItem key = {player.name}>
-                            <Box textOverflow = 'ellipsis' marginTop = '2px' marginBottom = '2px'>
-                                <AccordionButton fontSize = '25px'>
-                                    <Box as = 'span' flex='1' textAlign='left'>
+                        <AccordionItem 
+                            key = {player.name}
+                        >
+                            <Box 
+                                textOverflow = 'ellipsis' 
+                                marginTop = '2px' 
+                                marginBottom = '2px'
+                            >
+                                <AccordionButton 
+                                    fontSize = '25px'
+                                >
+                                    <Box 
+                                        as = 'span' 
+                                        flex = '1' 
+                                        textAlign='left'
+                                        overflow = 'hidden'
+                                        textOverflow = 'ellipsis'
+                                        whiteSpace = 'nowrap'
+                                    >
                                         {player.name}
                                     </Box>
-                                    <Box as = 'span' flex='1' textAlign='right'>
+                                    <Box 
+                                        as = 'span' 
+                                        textAlign='right'
+                                    >
                                         {player.score}
                                     </Box>
                                     <AccordionIcon/>
                                 </AccordionButton>
                             </Box>
-                            <AccordionPanel pb = '3' fontSize = '20px'>
-                                Targets: {player.targets.join(', ')}
-                                <br/>
-                                Assassins: {player.assassins.join(', ')}
+                            <AccordionPanel 
+                                pb = '3' 
+                                fontSize = '20px'
+                            >
+                                <Text 
+                                    pb = '12px'
+                                >
+                                    <Text
+                                        as = 'b'
+                                        color = 'red'
+                                    > 
+                                        Targets: 
+                                    </Text> 
+                                    {player.targets.map((target, index) => (
+                                        <Text
+                                            overflow = 'hidden'
+                                            textOverflow = 'ellipsis'
+                                            whiteSpace = 'nowrap'
+                                            key = {index}
+                                        >
+                                            {index + 1}. {target}
+                                        </Text>
+                                    ))}
+                                </Text>
+                                <Text>
+                                    <Text
+                                        as = 'b'
+                                        color = 'lightblue'
+                                    >
+                                        Assassins: 
+                                    </Text> 
+                                    {player.assassins.map((assassin, index) => (
+                                        <Text
+                                            overflow = 'hidden'
+                                            textOverflow = 'ellipsis'
+                                            whiteSpace = 'nowrap'
+                                            key = {index}
+                                        >
+                                            {index + 1}.{assassin}
+                                        </Text>
+                                    ))}
+                                </Text>
                             </AccordionPanel>
                         </AccordionItem>
                     ))}
