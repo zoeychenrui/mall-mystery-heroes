@@ -1,34 +1,28 @@
 import React, {useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button, 
+         Divider, 
          Flex, 
-         Heading, 
-         Alert, 
-         AlertIcon, 
-         AlertTitle, 
-         AlertDescription, 
-         CloseButton, 
-         Box, } from '@chakra-ui/react';
+         Heading,
+         Image, 
+    } from '@chakra-ui/react';
 import PlayerAddition from '../components/PlayerAddition';
 import PlayerList from '../components/PlayerList';
 import PlayerRemove from "../components/PlayerRemove";
-import {collection, query, getDocs, getDoc} from 'firebase/firestore';
+import {collection, query, getDocs} from 'firebase/firestore';
 import {db} from '../utils/firebase';
 import { auth} from "../utils/firebase";
 import { signOut } from "firebase/auth";
+import CreateAlert from '../components/CreateAlert';
+import mallLogo from '../assets/mall-logo-black-green.png';
+import TargetGenerator from "../components/TargetGenerator";
 
 const PlayerListPage = () => {
     const navigate = useNavigate();
     const { roomID } = useParams();
-    const [showAlert, setShowAlert] = useState(false); //defines state of alert showing
-    const [error, setError] = useState(''); //defines the message for error
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players'); //reference to players subcollection
     const [arrayOfPlayers, setArrayOfPlayers] = useState([]);
-
-    //closes Alert
-    const onClose = () => {
-        setShowAlert(false);
-    }
+    const createAlert = CreateAlert();
 
     const logout = async () => {
         try {
@@ -51,9 +45,8 @@ const PlayerListPage = () => {
                 setArrayOfPlayers(players);
             }
             catch (error) {
-                console.error("Error updating arrayOfPlayers: ", error);
-                setError("Error updating arrayOfPlayers: ", error);
-                setShowAlert(true);
+                console.log(error);
+                createAlert('error', 'Error updating arrayOfPlayers', 'Check console.', 1500);
             }
         }
         
@@ -73,16 +66,11 @@ const PlayerListPage = () => {
         //checks if arrayOfPlayers has at least two players
         if (arrayOfPlayers) {
             if (arrayOfPlayers <= 1) {
-                console.error("Must have at least two players");
-                setError("Must have at least two players");
-                setShowAlert(true);
-                return;
+                return createAlert('error', 'Error', 'Not enough players (must have at least 2)', 1500);
             }
             }
         else {
-            console.error("arrayOfPlayers not defined");
-            setError("arrayOfPlayers not defined");
-            setShowAlert(true);
+            return createAlert('error', 'Error', 'arrayOfPlayers is not defined', 1500);
         }
 
         try {
@@ -90,15 +78,12 @@ const PlayerListPage = () => {
                 navigate(`/rooms/${roomID}/GameMasterView`, {state: { arrayOfPlayers } });
             }
             else {
-                console.error("navigate not defined");
-                setError("navigate not defined");
-                setShowAlert(true);
+                return createAlert('error', 'Error', 'Navigate is not defined', 1500);
             }
         }
         catch (error) {
             console.error("Error navigating to lobby: ", error);
-            setError("Error navigating to lobby: ", error);
-            setShowAlert(true);
+            createAlert('error', 'Error navigating to lobby', 'Check console.', 1500);
         }
     }
     //addes player to arrayOfPlayers when they are added
@@ -115,48 +100,119 @@ const PlayerListPage = () => {
         }
         catch(error) {
             console.error("Error removing player: ", error);
-            setError("Error removing player: ", error);
-            setShowAlert(true);
+            createAlert('error', 'Error removing player', 'Check console.', 1500);
         }
     }
 
                
     return (
-        <Flex>
-            {showAlert && (
-                <Alert status='error'>
-                    <Box>
-                        <AlertIcon/>
-                        <AlertTitle>Error: </AlertTitle>
-                        <AlertDescription>{error}</AlertDescription>
-                    </Box>
-                    <CloseButton alignSelf='flex-start'
-                                 position='relative'
-                                 right={-1}
-                                 top={-1}
-                                 onClick={onClose}/>
-                </Alert>
-            )}
+        <Flex
+            h = '100vh'
+            w = '100vw'
+            justify = 'center'
+            align = 'center'
+            direction = 'row'
+        >
+            <Flex 
+                direction = 'column'
+                w = '40%'
+                h = '100%'
+                bg = '#66bf78'
+                justify = 'center'
+                align = 'center'
+            >
+                <Image
+                    src = {mallLogo}
+                    alt = 'logo'
+                    w = '45%'
+                    h = '40%'
+                    mt = '20%'
+                />
+                <Heading 
+                    as = "h2" 
+                    size = "md"
+                    mt = '10%' 
+                    color = 'black'
+                >
+                    Lobby ID: {roomID}
+                </Heading>
+                <Heading
+                    size = 'md'
+                    mt = '6%'
+                    mb = '4px'
+                    color = 'black'
+                >
+                    Add Player
+                </Heading>
+                <PlayerAddition 
+                    roomID = {roomID} 
+                    onPlayerAdded = {handlePlayerAdded}
+                />
+                <TargetGenerator
+                    roomID = {roomID}   
+                    arrayOfPlayers = {arrayOfPlayers} 
+                    handleLobbyRoom = {handleLobbyRoom}
+                />
+            </Flex>
+            
+            <Flex
+                direction = 'column'
+                h = '100%'
+                w = '70%'
+                bg = 'black'
+            >
+                <Flex 
+                    justify = 'flex-end'
+                    h = '6%'
+                >
+                    <Button 
+                        colorScheme = 'red' 
+                        m = '12px'
+                        borderRadius = '2px'
+                        variant = 'ghost'
+                        _hover = {{ bg: 'red', color: 'white' }} 
+                        onClick={logout}
+                    >
+                        Log Out
+                    </Button> 
+                </Flex>
+                
+                <Flex 
+                    justify = 'center'
+                    align = 'center'
+                    mb = '1%'
+                >
+                    <Heading>Players ({arrayOfPlayers.length})</Heading>
+                </Flex>
+                <Divider />
 
-            <Heading as="h2" size="xl" mb={4}>
-                Room ID: {roomID}
-            </Heading>
-            <PlayerAddition roomID = {roomID} 
-                            onPlayerAdded = {handlePlayerAdded}/>
-            <PlayerList arrayOfPlayers = {arrayOfPlayers}/>        
-            <PlayerRemove roomID = {roomID} 
+                <Flex
+                    h = '76%'
+                    justify = 'center'
+                    align = 'center'
+                    overflow = 'hidden'
+                >   
+                    
+                    <PlayerList 
+                        arrayOfPlayers = {arrayOfPlayers}
+                    /> 
+                </Flex>
+
+                <Flex
+                    h = '16%'
+                    align = 'center'
+                    justify = 'center'
+                    w = '100%'
+                >
+                    {arrayOfPlayers.length > 0 &&
+                        <PlayerRemove 
+                            roomID = {roomID} 
                             arrayOfPlayers = {arrayOfPlayers} 
-                            onPlayerRemoved = {handlePlayerRemoved}/>
-            <Button colorScheme='teal' 
-                    variant='outline' 
-                    onClick={handleLobbyRoom}>
-                Begin Game
-            </Button>
-            <Button colorScheme='teal' 
-                variant='solid' 
-                onClick={logout}>
-              Log Out
-        </Button> 
+                            onPlayerRemoved = {handlePlayerRemoved}
+                        /> 
+                    } 
+                </Flex>    
+            </Flex>
         </Flex>
     )
 }

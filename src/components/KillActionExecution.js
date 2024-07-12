@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import AssassinSelection from "./AssassinsSelection";
 import KillButton from "./KillButton";
 import TargetSelection from "./TargetSelection";
-import { Box, HStack } from '@chakra-ui/react';
+import { Box, Flex } from '@chakra-ui/react';
 
 const KillActionExecution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) => {
     const [assassinPlayerNamed, setAssassinPlayerNamed] = useState('');
@@ -24,21 +24,22 @@ const KillActionExecution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) 
     }
 
     return (  
-        <Box
-            display = 'flex'
-            flexDirection = 'row'
+        <Flex
+            direction = 'row'
             justifyContent = 'center'
             alignItems = 'center'
         >
-            <Box>
+            <Flex
+                w = '30%'
+            >
                 <AssassinSelection
                     roomID = {roomID}
                     getAssassinPlayerName = {getAssassinPlayerName}
                     arrayOfAlivePlayers = {arrayOfAlivePlayers} 
                     getPossibleTargets = {getPossibleTargets}
                 />
-            </Box>
-            <Box>
+            </Flex>
+            <Flex>
                 <KillButton 
                     assassinPlayerNamed = {assassinPlayerNamed}
                     selectedTarget = {selectedTarget}
@@ -47,15 +48,15 @@ const KillActionExecution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) 
                     roomID = {roomID}
                     getPossibleTargets = {getPossibleTargets}
                 />
-            </Box>
-            <Box>
+            </Flex>
+            <Flex>
                 <TargetSelection
                     possibleTargets = {possibleTargets}
                     getSelectedTarget = {getSelectedTarget}
-                    selectedTargetPlayer = {selectedTarget}
+                    selectedTarget = {selectedTarget}
                 />
-            </Box>
-        </Box>
+            </Flex>
+        </Flex>
     );
 }
  

@@ -1,48 +1,38 @@
 import React, {useState} from 'react';
-import {Button, 
+import {Box, Button, 
         Flex, 
+        Image, 
         Input,
-        Alert,
-        AlertIcon,
-        AlertTitle,
-        AlertDescription,
-        CloseButton,
-        Box,
-} from '@chakra-ui/react';
+    } from '@chakra-ui/react';
 
 import {collection, 
         addDoc, 
         query, 
         where, 
         getDocs,
-} from "firebase/firestore"; 
+    } from "firebase/firestore"; 
 import {db} from '../utils/firebase';
+import CreateAlert from './CreateAlert';
+import enter from '../assets/enter-black.png';
+import enterHovering from '../assets/enter-black-hover.png';
 
 //adds player to database
 const PlayerAddition = (props) => {
-    const [showAlert, setShowAlert] = useState(false); //defines state of alert showing
     const [PlayerName, setPlayerName] = useState(''); //defines player name
-    const [error, setError] = useState(''); //defines the message for error
     const roomID = props.roomID;
     const onPlayerAdded = props.onPlayerAdded;
+    const createAlert = CreateAlert();
+    const [isHover, setIsHover] = useState(false);
     
     //setes PlayerName to input
     const handleInputChange = (event) => {
         setPlayerName(event.target.value);
     };
 
-    //closes alert message
-    const onClose = () => {
-        setShowAlert(false);
-    }
-
     //handles function to add player
     const handleAddPlayer = () => {
         if (PlayerName === '') {
-            setError("Input cannot be blank");
-            setShowAlert(true);
-            console.error("Error adding player: name cannot be blank");
-            return;
+            return createAlert('error', 'Error', 'name cannot be blank', 1500);
         }
 
         // player name becomes lowercased
@@ -70,10 +60,8 @@ const PlayerAddition = (props) => {
                         console.log("Player added with ID: ", docRef.id);
                     })
                     .catch((error) => {
-                        setError("Error while adding player. Check console.");
-                        setShowAlert(true);
                         console.error("Error adding player:", error);
-                        return;
+                        return createAlert('error', 'Error', 'Error adding player. Check console.', 1500);
                     });
     
                     //onPlayerAdded callback called
@@ -83,15 +71,13 @@ const PlayerAddition = (props) => {
                 }
                 //notifies for duplicate player
                 else {
-                    setError(`Cannot add duplicate player: ${PlayerName}`);
-                    setShowAlert(true);
                     console.error(`Cannot add duplicate player: ${PlayerName}`);
+                    return createAlert('error', 'Error', `Cannot add duplicate player: ${PlayerName}`, 1500);
                 }
             })
             .catch((error) => {
-                setError("Error while checking for player. Check console.");
-                setShowAlert(true);
                 console.error("Error checking for player: ", error);
+                return createAlert('error', 'Error', 'Error checking for player. Check console.', 1500);
             });
             setPlayerName('');
     }
@@ -103,38 +89,36 @@ const PlayerAddition = (props) => {
     }
 
     return ( 
-        <div>
-            {showAlert && (
-                <Alert status='error'>
-                    <Box>
-                        <AlertIcon/>
-                        <AlertTitle>Error: </AlertTitle>
-                        <AlertDescription>{error}</AlertDescription>
-                    </Box>
-                    <CloseButton
-                        alignSelf='flex-start'
-                        position='relative'
-                        right={-1}
-                        top={-1}
-                        onClick={onClose}
-                    />
-                </Alert>
-            )}
-                
+        <div> 
             <form onSubmit={handleSubmit}>
-                <Flex padding='10px'>
+                <Flex 
+                    padding='10px' 
+                    w = '100%'
+                >
                     <Input
                         placeholder = "Enter Player Name"
                         value = {PlayerName}
                         onChange = {handleInputChange}
                         size = 'lg'
+                        borderRadius = '3xl'
+                        ml = '30%'
+                        borderColor = 'black'
+                        borderWidth = '2px'
+                        bg = '#9FF0AB'
+                        _hover = {{borderColor: 'white', bg: '#9FF0AB'}}
                     />
-                    <Button 
-                        onClick={handleAddPlayer} 
-                        colorScheme='blue'
-                        size= 'lg'>
-                    Add
-                    </Button>
+                    <Box 
+                        ml = '6px'
+                    >
+                        <Image 
+                            src = {isHover ? enterHovering : enter}
+                            onMouseEnter = {() => setIsHover(true)}
+                            onMouseLeave = {() => setIsHover(false)}
+                            onClick = {handleSubmit}
+                            w = '30%'
+                            h = '100%'
+                        />
+                    </Box>
                 </Flex> 
             </form>
         </div>

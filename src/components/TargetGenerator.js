@@ -18,15 +18,14 @@ import {AlertDialog,
 import { db } from '../utils/firebase';
 import { collection } from "firebase/firestore";
 import { updateDoc, getDocs, where, query } from 'firebase/firestore';
-const TargetGenerator = (props) => {
+const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
     //store player's data for three things: 
     //1. number of assassins (hits on a person)
     //2. index of last target
     //3. array of previous targets
     //can be used later for assigning new targets
     const [playerData, setPlayerData] = useState({});
-    const arrayOfPlayers = props.arrayOfPlayers;
-    const roomID = props.roomID;
+
     //reference to players subcollection
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
     const { isOpen, onOpen, onClose } = useDisclosure();
@@ -47,9 +46,10 @@ const TargetGenerator = (props) => {
         InitializeTargets();
     }
     //actions that occur when clicking yes
-    const onYesClose = () => {
-        UpdateDatabase(arrayOfPlayers, targetMap);
+    const onYesClose = async () => {
+        await UpdateDatabase(arrayOfPlayers, targetMap);
         onClose();
+        handleLobbyRoom();
     }
     //updates targets in database
     const UpdateDatabase = async (players, map) => {
@@ -142,11 +142,17 @@ const TargetGenerator = (props) => {
 
     return (
         <div>
-            <Button colorScheme = 'teal'
+            <Button bg = 'black'
+                    color = 'white'
+                    variant = 'solid'
                     size = 'lg'
+                    borderRadius = '3xl'
+                    _hover = {{bg: 'white', color: 'black'}}
+                    mt = '8px'
                     onClick = {handleClick}
+
             >
-                Generate Targets!
+                Begin Game
             </Button>
             <AlertDialog
                 isOpen={isOpen}
@@ -155,24 +161,26 @@ const TargetGenerator = (props) => {
             >
 
                 <AlertDialogOverlay/>
-                    <AlertDialogContent>
+                    <AlertDialogContent 
+                        bg = '#202030'
+                    >
 
-                        <AlertDialogHeader color = 'black'>
+                        <AlertDialogHeader>
                             Generate Targets?
                         </AlertDialogHeader>
 
-                        <AlertDialogBody color = 'black'>
+                        <AlertDialogBody>
                             The following will be the initial targets for the the round:
                             <TableContainer>
                                 <Table>
                                     <Thead>
                                         <Tr>
-                                            <Th>Player</Th>
-                                            <Th>Targets</Th>
-                                            <Th>Assassins</Th>
+                                            <Th color = '#FFFFFF'>Player</Th>
+                                            <Th color = '#FFFFFF'>Targets</Th>
+                                            <Th color = '#FFFFFF'>Assassins</Th>
                                         </Tr>
                                     </Thead>
-                                    <Tbody color = 'black'>
+                                    <Tbody>
                                         {tableOfPlayers}
                                     </Tbody>
                                 </Table>
