@@ -9,18 +9,15 @@ import { Button,
 import PlayerAddition from '../components/PlayerAddition';
 import PlayerList from '../components/PlayerList';
 import PlayerRemove from "../components/PlayerRemove";
-import {collection, query, getDocs} from 'firebase/firestore';
-import {db} from '../utils/firebase';
 import { auth} from "../utils/firebase";
 import { signOut } from "firebase/auth";
 import CreateAlert from '../components/CreateAlert';
 import mallLogo from '../assets/mall-logo-black-green.png';
 import TargetGenerator from "../components/TargetGenerator";
-
+import { fetchAllPlayersForRoom } from "../components/dbCalls";
 const PlayerListPage = () => {
     const navigate = useNavigate();
     const { roomID } = useParams();
-    const playerCollectionRef = collection(db, 'rooms', roomID, 'players'); //reference to players subcollection
     const [arrayOfPlayers, setArrayOfPlayers] = useState([]);
     const createAlert = CreateAlert();
 
@@ -39,9 +36,7 @@ const PlayerListPage = () => {
     useEffect (() => {
         const fetchPlayers = async () => {
             try {
-                const playerQuery = query(playerCollectionRef);
-                const playerSnapshot = await getDocs(playerQuery);
-                const players = playerSnapshot.docs.map(doc => doc.data().name);
+                const players = await fetchAllPlayersForRoom(roomID);
                 setArrayOfPlayers(players);
             }
             catch (error) {
@@ -65,7 +60,7 @@ const PlayerListPage = () => {
     const handleLobbyRoom = async () => {
         //checks if arrayOfPlayers has at least two players
         if (arrayOfPlayers) {
-            if (arrayOfPlayers <= 1) {
+            if (arrayOfPlayers.length <= 1) {
                 return createAlert('error', 'Error', 'Not enough players (must have at least 2)', 1500);
             }
             }

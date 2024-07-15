@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { functions } from "../utils/firebase";
 import { httpsCallable } from 'firebase/functions';
 import { Flex, Button } from '@chakra-ui/react';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 
 const CloudFunction = () => {
     const [message, setMessage] = useState("Default Message");

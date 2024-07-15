@@ -15,9 +15,8 @@ import {AlertDialog,
         Table,
         Thead
     } from '@chakra-ui/react';
-import { db } from '../utils/firebase';
-import { collection } from "firebase/firestore";
-import { updateDoc, getDocs, where, query } from 'firebase/firestore';
+import CreateAlert from './CreateAlert';
+import { updateAssassinsForPlayer, updateTaregtsForPlayer } from './dbCalls';
 const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
     //store player's data for three things: 
     //1. number of assassins (hits on a person)
@@ -25,9 +24,9 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
     //3. array of previous targets
     //can be used later for assigning new targets
     const [playerData, setPlayerData] = useState({});
+    const createAlert = CreateAlert();
 
     //reference to players subcollection
-    const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
     const { isOpen, onOpen, onClose } = useDisclosure();
     const cancelRef = React.useRef();
     const [targetMap, setTargetMap] = useState(new Map());
@@ -56,13 +55,9 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
         try {
             console.log(playerData);
             for (const player of players) {
-                const playerQuery = query(playerCollectionRef, where ('name', '==', player));
-                const snapshot = await getDocs(playerQuery);
                 const playerAssassins = playerData[player]?.assassins || [];
-                await updateDoc(snapshot.docs[0].ref, {
-                    targets: map.get(player),
-                    assassins: playerAssassins
-                });
+                await updateTaregtsForPlayer(player, map.get(player), createAlert, roomID);
+                await updateAssassinsForPlayer(player, playerAssassins, createAlert, roomID);
                 console.log(`Targets updated for ${player} in database: ${map.get(player)}`);
             }
         } 

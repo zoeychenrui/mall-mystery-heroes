@@ -1,12 +1,6 @@
-import { query, 
-         updateDoc,
-         where,
-         getDocs,
-         collection
-    } from 'firebase/firestore';
-import { db } from '../utils/firebase';
+import { fetchPlayerForRoom, updateAssassinsForPlayer, updateTaregtsForPlayer } from './dbCalls';
 
-const RemapPlayers = (handleRemapping) => {
+const RemapPlayers = (handleRemapping, createAlert) => {
 
     //randomizes order of array
     const randomizeArray = (array) => {
@@ -18,7 +12,6 @@ const RemapPlayers = (handleRemapping) => {
     }
 
     const handleRegeneration = async (playersNeedingTarget, playersNeedingAssassins, arrayOfAlivePlayers, roomID) => {
-        const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const MAXTARGETS = arrayOfAlivePlayers.length > 15 ? 3 : (arrayOfAlivePlayers.length > 5 ? 2 : 1); //defines what max targets each player should be assigned
 
         //updates targets for players that need to update targets
@@ -26,17 +19,13 @@ const RemapPlayers = (handleRemapping) => {
             const randomizedAlivePlayers = randomizeArray(arrayOfAlivePlayers);
             
             //finds player in db and retrieves targets
-            const playerQuery = query(playerCollectionRef, where('name', '==', player));
-            const playerSnapshot = await getDocs(playerQuery);
-            const playerDoc = playerSnapshot.docs[0];
+            const playerDoc = await fetchPlayerForRoom(player, roomID);
             const playerData = playerDoc.data();
             let newTargetArray = [...playerData.targets];
             
             //finds possible targets for player
             for (const possibleTarget of randomizedAlivePlayers) {
-                const possibleTargetQuery = query(playerCollectionRef, where('name', '==', possibleTarget));
-                const possibleTargetSnapshot = await getDocs(possibleTargetQuery);
-                const possibleTargetDoc = possibleTargetSnapshot.docs[0];
+                const possibleTargetDoc = await fetchPlayerForRoom(possibleTarget, roomID);
                 const possibleTargetData = possibleTargetDoc.data();
                 
                 if ( possibleTargetData.assassins.length < MAXTARGETS && //checks if possible target has max assassins
@@ -49,9 +38,7 @@ const RemapPlayers = (handleRemapping) => {
                     newTargetArray.push(possibleTarget);
 
                     //updates target's assassins in db
-                    await updateDoc(possibleTargetDoc.ref, {
-                        assassins: [...possibleTargetData.assassins, player]
-                    });
+                    await updateAssassinsForPlayer(possibleTarget, [...possibleTargetData.assassins, player], createAlert, roomID);
                     await handleRemapping("New target for " + player + ": " + possibleTarget);
                     console.log(`Assassins updated for ${possibleTarget} in database (loop1): ${possibleTargetData.assassins}`);
 
@@ -67,22 +54,16 @@ const RemapPlayers = (handleRemapping) => {
                          newTargetArray.length < MAXTARGETS //checks if player has max targets
                 ) {
                     newTargetArray.push(possibleTarget);
-                    await updateDoc(possibleTargetDoc.ref, {
-                        assassins: [...possibleTargetData.assassins, player]
-                    })
+                    await updateAssassinsForPlayer(possibleTarget, [...possibleTargetData.assassins, player], createAlert, roomID);
                     await handleRemapping("New target for " + player + ": " + possibleTarget);
-                    
                     console.log(`Assassins updated for ${possibleTarget} in database (loop2): ${possibleTargetData.assassins}`);
-
                     //breaks loop if player has max targets
                     if (newTargetArray.length >= MAXTARGETS) {
                         break;
                     }
                 }
             }
-            await updateDoc(playerDoc.ref, {
-                targets: [...newTargetArray]
-            });
+            await updateTaregtsForPlayer(player, newTargetArray, createAlert, roomID);
             console.log(`Targets updated for ${player} in database: ${newTargetArray}`);
         }
 
@@ -90,17 +71,13 @@ const RemapPlayers = (handleRemapping) => {
             const randomizedAlivePlayers = randomizeArray(arrayOfAlivePlayers);
             
             //finds player in db and retrieves assassins
-            const playerQuery = query(playerCollectionRef, where('name', '==', player));
-            const playerSnapshot = await getDocs(playerQuery);
-            const playerDoc = playerSnapshot.docs[0];
+            const playerDoc = await fetchPlayerForRoom(player, roomID);
             const playerData = playerDoc.data();
             let newAssassinArray = [...playerData.assassins];
 
             //finds possible assassins for player
             for (const possibleAssassin of randomizedAlivePlayers) {
-                const possibleAssassinQuery = query(playerCollectionRef, where('name', '==', possibleAssassin));
-                const possibleAssassinSnapshot = await getDocs(possibleAssassinQuery);
-                const possibleAssassinDoc = possibleAssassinSnapshot.docs[0];
+                const possibleAssassinDoc = await fetchPlayerForRoom(possibleAssassin, roomID);
                 const possibleAssassinData = possibleAssassinDoc.data();
 
                 if ( possibleAssassinData.targets.length < MAXTARGETS + 1 && //checks if possible assassin has max targets + 1
@@ -114,9 +91,7 @@ const RemapPlayers = (handleRemapping) => {
                     newAssassinArray.push(possibleAssassin);
 
                     //updates assassin's targets in db
-                    await updateDoc(possibleAssassinDoc.ref, {
-                        targets: [...possibleAssassinData.targets, player]
-                    });
+                    await updateTaregtsForPlayer(possibleAssassin, [...possibleAssassinData.targets, player], createAlert, roomID);
                     await handleRemapping("New assassin for " + possibleAssassin + ": " + player);
                     console.log(`Targets updated for ${possibleAssassin} in database (loop3): ${possibleAssassinData.targets}`);
 
@@ -128,9 +103,7 @@ const RemapPlayers = (handleRemapping) => {
             }
 
             //updates player's assassins in db
-            await updateDoc(playerDoc.ref, {
-                assassins: [...newAssassinArray]
-            });
+            await updateAssassinsForPlayer(player, newAssassinArray, createAlert, roomID);
             console.log(`Assassins updated for ${player} in database: ${newAssassinArray}`);
         }
     }

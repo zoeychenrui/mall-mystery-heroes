@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Flex, Select } from '@chakra-ui/react';
-import { db } from '../utils/firebase';
-import { collection, getDocs, where, query } from 'firebase/firestore';
 import TaskButton from './TaskButton';
+import { fetchActiveTasksForRoom } from './dbCalls';
 
 const TaskCompletion = (props) => {
     const { roomID,
@@ -18,10 +17,8 @@ const TaskCompletion = (props) => {
     const [selectedTask, setSelectedTask] = useState('');
 
     //fetches tasks that are incomplete and turns tasklist to a list of the options
-    const fetchTasks = async () => {
-        const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
-        const taskCollectionQuery = query(taskCollectionRef, where('isComplete', '==', false));
-        const taskSnapshot = await getDocs(taskCollectionQuery);
+    const fetchTaskForRooms = async () => {
+        const taskSnapshot = await fetchActiveTasksForRoom(roomID);
         const tempTaskList = taskSnapshot.docs.map(doc => (
             <option key = {doc.data().title}
                     value = {doc.id}
@@ -44,9 +41,9 @@ const TaskCompletion = (props) => {
 
     //updates tasklist when possible tasks are updated
     useEffect(() => {
-        fetchTasks();
+        fetchTaskForRooms();
         console.log('fetched tasks');
-        // disabled below because 'fetchTasks' does not need to be a dependency
+        // disabled below because 'fetchTaskForRooms' does not need to be a dependency
         // eslint-disable-next-line
     },[arrayOfTasks, completedTasks]);
 
