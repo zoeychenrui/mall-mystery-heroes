@@ -1,23 +1,23 @@
-import React, {useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Button, 
-         Divider, 
-         Flex, 
-         Heading,
-         Image, 
-    } from '@chakra-ui/react';
+import {
+    Button,
+    Divider,
+    Flex,
+    Heading,
+    Image,
+} from '@chakra-ui/react';
+import { signOut } from "firebase/auth";
+import { collection, getDocs, query } from 'firebase/firestore';
+import React, { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import mallLogo from '../assets/mall-logo-black-green.png';
+import CreateAlert from '../components/CreateAlert';
 import PlayerAddition from '../components/PlayerAddition';
 import PlayerList from '../components/PlayerList';
 import PlayerRemove from "../components/PlayerRemove";
-import {collection, query, getDocs} from 'firebase/firestore';
-import {db} from '../utils/firebase';
-import { auth} from "../utils/firebase";
-import { signOut } from "firebase/auth";
-import CreateAlert from '../components/CreateAlert';
-import mallLogo from '../assets/mall-logo-black-green.png';
 import TargetGenerator from "../components/TargetGenerator";
+import { auth, db } from '../utils/firebase';
 
-const PlayerListPage = () => {
+const Lobby = () => {
     const navigate = useNavigate();
     const { roomID } = useParams();
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players'); //reference to players subcollection
@@ -29,7 +29,6 @@ const PlayerListPage = () => {
           await signOut(auth);
           console.log("User successfully logged out");
           navigate('/');
-    
         } catch (err) {
           console.error(err);
         }
@@ -55,17 +54,12 @@ const PlayerListPage = () => {
         }
         //eslint-disable-next-line
     }, [roomID]);
-     
-    //logs when new player is added to array
-    useEffect (() => {
-        console.log(arrayOfPlayers);
-    }, [arrayOfPlayers]);
 
     //navigates to lobby
     const handleLobbyRoom = async () => {
         //checks if arrayOfPlayers has at least two players
         if (arrayOfPlayers) {
-            if (arrayOfPlayers <= 1) {
+            if (arrayOfPlayers.length <= 1) {
                 return createAlert('error', 'Error', 'Not enough players (must have at least 2)', 1500);
             }
             }
@@ -74,19 +68,14 @@ const PlayerListPage = () => {
         }
 
         try {
-            if (navigate) {
-                navigate(`/rooms/${roomID}/GameMasterView`, {state: { arrayOfPlayers } });
-            }
-            else {
-                return createAlert('error', 'Error', 'Navigate is not defined', 1500);
-            }
+            navigate(`/rooms/${roomID}/GameMasterView`, {state: { arrayOfPlayers } });
         }
         catch (error) {
-            console.error("Error navigating to lobby: ", error);
-            createAlert('error', 'Error navigating to lobby', 'Check console.', 1500);
+            console.error("Error navigating to game view: ", error);
+            createAlert('error', 'Error navigating to game view', 'Check console.', 1500);
         }
     }
-    //addes player to arrayOfPlayers when they are added
+    //adds player to arrayOfPlayers when they are added
     const handlePlayerAdded = (PlayerName) => {
         setArrayOfPlayers(arrayOfPlayers => [...arrayOfPlayers, PlayerName]);
     }
@@ -217,4 +206,4 @@ const PlayerListPage = () => {
     )
 }
 
-export default PlayerListPage;
+export default Lobby;
