@@ -25,14 +25,12 @@ import enter from '../assets/enter-green.png';
 import enterHover from '../assets/enter-hovering.png';
 import RemapPlayers from './RemapPlayers';
 import { updateIsCompleteToTrueForTask, 
-         fetchAlivePlayersForRoom, 
-         fetchDeadPlayersForRoom, 
+         fetchPlayersByStatusForRoom,
          fetchTaskForRoom, 
-         updateIsAliveToFalseForPlayer, 
-         updateIsAliveToTrueForPlayer, 
          updateCompletedByForTask, 
          updatePointsForPlayer, 
-         fetchReferenceForTask
+         fetchReferenceForTask,
+         updateIsAliveForPlayer
     } from './dbCalls';
 
 const TaskButton = (props) => {    
@@ -89,43 +87,52 @@ const TaskButton = (props) => {
 
     //updates scores/live status when save button is clicked
     const handleSave = async () => {
-        const task = await fetchTaskForRoom(taskID, roomID);
-        const taskDocRef = await fetchReferenceForTask(taskID, createAlert, roomID);
-        let points = parseInt(task.pointValue);
+        try {
+            const task = await fetchTaskForRoom(taskID, roomID);
+            const taskDocRef = await fetchReferenceForTask(taskID, roomID);
+            if (taskDocRef === null) {
+                return createAlert('error', 'Error', 'task does not exist', 1500);
+            }
+            let points = parseInt(task.pointValue);
 
-        //updates player scores for task types
-        if (task.taskType === 'Task') {
-            //adds points to new updated players
-            for (const player of newCheckedPlayers) {
-                await updatePointsForPlayer(player, points, roomID);
+            //updates player scores for task types
+            if (task.taskType === 'Task') {
+                //adds points to new updated players
+                for (const player of newCheckedPlayers) {
+                    await updatePointsForPlayer(player, points, roomID);
+                }
+                //removes points for those that were initially checked, but now removed
+                for (const player of newRemovedPlayers) {
+                    points = points * -1;
+                    await updatePointsForPlayer(player, points, roomID);
+                }
             }
-            //removes points for those that were initially checked, but now removed
-            for (const player of newRemovedPlayers) {
-                points = points * -1;
-                await updatePointsForPlayer(player, points, roomID);
+            //updates player live status for revival missions
+            else if (task.taskType === 'Revival Mission') {
+                //revives newly checked players
+                for (const player of newCheckedPlayers) {
+                    await updateIsAliveForPlayer(player, true, roomID);
+                    //remaps targets and assassins for revived player ONLY
+                    await handleRegeneration(player, player, arrayOfAlivePlayers, roomID);
+                    handlePlayerRevive(player);
+                }
+                //kills those that were initially checked, but now removed
+                for (const player of newRemovedPlayers) {
+                    await updateIsAliveForPlayer(player, false, roomID);
+                    handleUndoRevive(player);
+                }
             }
+            
+            //updates task to be completed by checkedplayers
+            await updateCompletedByForTask(taskDocRef, checkedPlayers);
+            setNewCheckedPlayers([]);
+            setNewRemovedPlayers([]);
+            onClose();
         }
-        //updates player live status for revival missions
-        else if (task.taskType === 'Revival Mission') {
-            //revives newly checked players
-            for (const player of newCheckedPlayers) {
-                await updateIsAliveToTrueForPlayer(player, roomID);
-                //remaps targets and assassins for revived player ONLY
-                await handleRegeneration(player, player, arrayOfAlivePlayers, roomID);
-                handlePlayerRevive(player);
-            }
-            //kills those that were initially checked, but now removed
-            for (const player of newRemovedPlayers) {
-                await updateIsAliveToFalseForPlayer(player, roomID);
-                handleUndoRevive(player);
-            }
+        catch (error) {
+            console.error(error);
+            return createAlert('error', 'Error saving task', 'Check console', 1500);
         }
-        
-        //updates task to be completed by checkedplayers
-        await updateCompletedByForTask(taskDocRef, checkedPlayers);
-        setNewCheckedPlayers([]);
-        setNewRemovedPlayers([]);
-        onClose();
     }
 
     //handles when complete button is clicked
@@ -177,12 +184,12 @@ const TaskButton = (props) => {
         const task = await fetchTaskForRoom(taskID, roomID);
         //alive players are shown for tasks
         if (task.taskType === 'Task') {
-            const tempList = await fetchAlivePlayersForRoom(roomID);
+            const tempList = await fetchPlayersByStatusForRoom(true, roomID);
             setListOfchoices(tempList);
         }
         //dead players are shown for revival missions
         else if (task.taskType === 'Revival Mission') {
-            const tempList = await fetchDeadPlayersForRoom(roomID);
+            const tempList = await fetchPlayersByStatusForRoom(false, roomID);
             setListOfchoices(tempList);
         }
         //error when invalid task type

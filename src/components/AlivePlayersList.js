@@ -11,11 +11,11 @@ import {
     Text
 } from '@chakra-ui/react';
 import { onSnapshot } from "firebase/firestore";
-import { fetchAlivePlayersQueryByDesendPointsForRoom } from './dbCalls';
+import { fetchAlivePlayersQueryByDescendPointsForRoom } from './dbCalls';
 
 const AlivePlayersList = ({roomID}) => {
     // Construct a query that gets all players in the room that are still alive, sorted by score
-    const playerAlivePlayersQuery = fetchAlivePlayersQueryByDesendPointsForRoom(roomID);
+    const playerAlivePlayersQuery = fetchAlivePlayersQueryByDescendPointsForRoom(roomID);
 
     // Initialize state to keep track of the current list of players
     const [players, setPlayers] = useState([]); // array of player objects

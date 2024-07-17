@@ -1,17 +1,21 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Flex, Select } from '@chakra-ui/react';
 import { fetchTargetsForPlayer } from './dbCalls';
 import CreateAlert from './CreateAlert';
 
 const AssassinSelection = (props) => {
-    const { roomID, getAssassinPlayerName, arrayOfAlivePlayers, getPossibleTargets } = props;
-    const [selectedAssassin, setSelectedAssassin] = useState('');
+    const { roomID, getAssassinPlayerName, arrayOfAlivePlayers, getPossibleTargets, assassinPlayerNamed, getSelectedTarget } = props;
     const createAlert = CreateAlert();
 
     const handleChange = async (event) => {
         const newAssassin = event.target.value;
-        setSelectedAssassin(newAssassin);
+        if (newAssassin === '') {
+            getAssassinPlayerName('');
+            getPossibleTargets([]);
+            return;
+        }
         getAssassinPlayerName(newAssassin);
+        getSelectedTarget('');
         const targetList = await fetchTargetsForPlayer(newAssassin, roomID, createAlert);
         getPossibleTargets(targetList);
     };
@@ -22,7 +26,7 @@ const AssassinSelection = (props) => {
             <Select 
                 id='assassin'
                 placeholder='Select Assassin'
-                value={selectedAssassin}
+                value={assassinPlayerNamed}
                 onChange={handleChange}
                 w = '100%'
             >

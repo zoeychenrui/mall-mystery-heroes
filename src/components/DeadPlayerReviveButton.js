@@ -7,11 +7,11 @@ import CreateAlert from './CreateAlert';
 
 const DeadPlayerReviveButton = ({player, roomID, arrayOfAlivePlayers, handlePlayerRevive, handleRemapping}) => {
     const [isHovering, setIsHovering] = useState(false);
-    const updateIsAliveToTrueForPlayer = PlayerRevive(handleRemapping);
+    const revivePlayer = PlayerRevive(handleRemapping);
     const createAlert = CreateAlert();
     
     const handleReviveClicked = async () => {
-        await updateIsAliveToTrueForPlayer(player, roomID, arrayOfAlivePlayers);
+        await revivePlayer(player, roomID, arrayOfAlivePlayers);
         handlePlayerRevive(player, createAlert);
     }
 

@@ -23,14 +23,17 @@ const PlayerAddition = (props) => {
     };
 
     //handles function to add player
-    const handleAddPlayer = () => {
+    const handleAddPlayer = async () => {
         if (playerName === '') {
             return createAlert('error', 'Error', 'name cannot be blank', 1500);
         }
-
-        // player name becomes lowercased
-        const playerNameLowCase = playerName.toLowerCase();
-        addPlayerForRoom(playerName, playerNameLowCase, createAlert, roomID);
+        try {
+            await addPlayerForRoom(playerName, roomID);
+        }
+        catch (error) {
+            console.error('Error adding player: ', error);
+            return createAlert('error', 'Error', 'name already exists', 1500);
+        }
         setPlayerName('');
         if (onPlayerAdded) onPlayerAdded(playerName);
     }

@@ -15,8 +15,7 @@ import {AlertDialog,
         Table,
         Thead
     } from '@chakra-ui/react';
-import CreateAlert from './CreateAlert';
-import { updateAssassinsForPlayer, updateTaregtsForPlayer } from './dbCalls';
+import { updateAssassinsForPlayer, updateTargetsForPlayer } from './dbCalls';
 const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
     //store player's data for three things: 
     //1. number of assassins (hits on a person)
@@ -24,7 +23,6 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
     //3. array of previous targets
     //can be used later for assigning new targets
     const [playerData, setPlayerData] = useState({});
-    const createAlert = CreateAlert();
 
     //reference to players subcollection
     const { isOpen, onOpen, onClose } = useDisclosure();
@@ -56,8 +54,8 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
             console.log(playerData);
             for (const player of players) {
                 const playerAssassins = playerData[player]?.assassins || [];
-                await updateTaregtsForPlayer(player, map.get(player), createAlert, roomID);
-                await updateAssassinsForPlayer(player, playerAssassins, createAlert, roomID);
+                await updateTargetsForPlayer(player, map.get(player), roomID);
+                await updateAssassinsForPlayer(player, playerAssassins, roomID);
                 console.log(`Targets updated for ${player} in database: ${map.get(player)}`);
             }
         } 
@@ -131,7 +129,6 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
         <Tr key = {eachName}>
             <Td>{eachName}</Td>
             <Td>{targetMap.get(eachName)?.join(", ") || "no targets"}</Td>
-            <Td>{playerData[eachName]?.assassins?.join(", ") || "no assassins"}</Td>
         </Tr>
     );
 
@@ -153,6 +150,7 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
                 isOpen={isOpen}
                 leastDestructiveRef={cancelRef}
                 onClose = {onClose}
+                size = '3xl'
             >
 
                 <AlertDialogOverlay/>
@@ -161,7 +159,7 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
                     >
 
                         <AlertDialogHeader>
-                            Generate Targets?
+                            Generate Targets
                         </AlertDialogHeader>
 
                         <AlertDialogBody>
@@ -172,7 +170,6 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
                                         <Tr>
                                             <Th color = '#FFFFFF'>Player</Th>
                                             <Th color = '#FFFFFF'>Targets</Th>
-                                            <Th color = '#FFFFFF'>Assassins</Th>
                                         </Tr>
                                     </Thead>
                                     <Tbody>
@@ -183,11 +180,11 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
                         </AlertDialogBody>
 
                         <AlertDialogFooter>
-                            <Button ref={cancelRef} onClick={onClose} colorScheme='gray'>
-                                No
+                            <Button ref={cancelRef} onClick={onClose} colorScheme='red'>
+                                Go Back
                             </Button>
-                            <Button colorScheme='red' onClick= {onYesClose}>
-                                Yes
+                            <Button colorScheme='green' onClick= {onYesClose}>
+                                Confirm and Begin Game
                             </Button>
                         </AlertDialogFooter>
 

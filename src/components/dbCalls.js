@@ -24,11 +24,11 @@ const fetchAllPlayersForRoom = async (roomID) => {
     }
 }
 
-//fetch all alive players from database
-const fetchAlivePlayersForRoom = async (roomID) => {
+//fetch all players by living status from database
+const fetchPlayersByStatusForRoom = async (isAlive, roomID) => {
     try {
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
-        const playerQuery = query(playerCollectionRef, where('isAlive', '==', true));
+        const playerQuery = query(playerCollectionRef, where('isAlive', '==', isAlive));
         const playerSnapshot = await getDocs(playerQuery);
         return playerSnapshot.docs.map(doc => doc.data().name);
     }
@@ -36,19 +36,6 @@ const fetchAlivePlayersForRoom = async (roomID) => {
         console.error('Error fetching alive players: ', error);
     }
 }
-
-//fetch all dead players from database
-const fetchDeadPlayersForRoom = async (roomID) => {
-    try {
-        const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
-        const playerQuery = query(playerCollectionRef, where('isAlive', '==', false));
-        const playerSnapshot = await getDocs(playerQuery);
-        return playerSnapshot.docs.map(doc => doc.data().name);
-    }
-    catch (error) {
-        console.error('Error fetching dead players: ', error);
-    }
-} 
    
 //fetch all tasks from database
 const fetchAllTasksForRoom = async (roomID) => {
@@ -63,7 +50,7 @@ const fetchAllTasksForRoom = async (roomID) => {
 }
 
 //fetch all logs from database
-const fetchallLogsForRoom = async (roomID) => {
+const fetchAllLogsForRoom = async (roomID) => {
     try {
         const docRef = doc(db, 'rooms', roomID);
         const docSnapshot = await getDoc(docRef);
@@ -109,29 +96,16 @@ const fetchTargetsForPlayer = async (playerName, roomID) => {
     }
 }
 
-//fetches all active tasks from database
-const fetchActiveTasksForRoom = async (roomID) => {
+//fetches all tasks by completion from database
+const fetchTasksByCompletionForRoom = async (isComplete, roomID) => {
     try {
         const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
-        const taskQuery = query(taskCollectionRef, where ('isComplete', '==', false));
+        const taskQuery = query(taskCollectionRef, where ('isComplete', '==', isComplete));
         const taskSnapshot = await getDocs(taskQuery);
         return taskSnapshot;
     }
     catch (error) {
         console.error('Error fetching active tasks: ', error);
-    }
-}
-
-//fetches all inactive tasks from database
-const fetchInactiveTasksForRoom = async (roomID) => {
-    try {
-        const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
-        const taskQuery = query(taskCollectionRef, where ('isComplete', '==', true));
-        const taskSnapshot = await getDocs(taskQuery);
-        return taskSnapshot;
-    }
-    catch (error) { 
-        console.error('Error fetching inactive tasks: ', error);
     }
 }
 
@@ -164,31 +138,17 @@ const updatePointsForPlayer = async (player, points, roomID) => {
     }
 }
 
-//revives a player
-const updateIsAliveToTrueForPlayer = async (player, roomID) => {
+//updates the 'isAlive' field of a player
+const updateIsAliveForPlayer = async (player, isAlive, roomID) => {
     try {
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const playerQuery = query(playerCollectionRef, where('name', '==', player));
         const playerSnapshot = await getDocs(playerQuery);
         const playerdoc = playerSnapshot.docs[0].ref;
-        await updateDoc(playerdoc, { isAlive: true });
+        await updateDoc(playerdoc, { isAlive: isAlive });
     }
     catch (error) {
         console.error('Error reviving player: ', error);
-    }
-}
-
-//turns a player's alive status to false
-const updateIsAliveToFalseForPlayer = async (player, roomID) => {
-    try {
-        const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
-        const playerQuery = query(playerCollectionRef, where('name', '==', player));
-        const playerSnapshot = await getDocs(playerQuery);
-        const playerdoc = playerSnapshot.docs[0].ref;
-        await updateDoc(playerdoc, { isAlive: false });
-    }
-    catch (error) {
-        console.error('Error killing player: ', error);
     }
 }
 
@@ -225,7 +185,7 @@ const addTaskForRoom = async (task, roomID) => {
 }
 
 //check if task title already exists in database
-const checkForTaskDupesForRoom = async (task, roomID, createAlert) => {
+const checkForTaskDupesForRoom = async (task, roomID) => {
     try {
         const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
         const taskQuery = query(taskCollectionRef, where('title', '==', task.title));
@@ -234,7 +194,6 @@ const checkForTaskDupesForRoom = async (task, roomID, createAlert) => {
             return false;
         }
         else {
-            createAlert('error', 'Error', 'Error: task title already exists', 1500);
             return true;
         }
     }
@@ -244,7 +203,7 @@ const checkForTaskDupesForRoom = async (task, roomID, createAlert) => {
 }
 
 //returns a query of alive players in descending order of score
-const fetchAlivePlayersQueryByDesendPointsForRoom = (roomID) => {
+const fetchAlivePlayersQueryByDescendPointsForRoom = (roomID) => {
     try {
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         return query(playerCollectionRef, 
@@ -258,13 +217,13 @@ const fetchAlivePlayersQueryByDesendPointsForRoom = (roomID) => {
 }
 
 //returns document of player
-const fetchPlayerForRoom = async (playerName, roomID, createAlert) => {
+const fetchPlayerForRoom = async (playerName, roomID) => {
     try {
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const playerQuery = query(playerCollectionRef, where('name', '==', playerName));
         const playerSnapshot = await getDocs(playerQuery);
         if (playerSnapshot.empty) {
-            return createAlert('error', 'Error', 'Player not found', 1500);
+            throw new Error('Player not found');
         }
         else {
             return playerSnapshot.docs[0];
@@ -296,13 +255,14 @@ const killPlayerForRoom = async (target, roomID) => {
 }
 
 //add player to database
-const addPlayerForRoom = async(player, lowercaseName, createAlert, roomID) => {
+const addPlayerForRoom = async (player, roomID) => {
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
+    const lowercaseName = player.toLowerCase();
     //check if player already exists
     const playerQuery = query(playerCollectionRef, where('name', '==', lowercaseName));
     const playerSnapshot = await getDocs(playerQuery);
     if (!playerSnapshot.empty) {
-        return createAlert('error', 'Error', `Player already exists: ${player}`, 1500);
+        throw new Error('Player already exists');
     }
     //adds if not
     addDoc(playerCollectionRef, {
@@ -318,29 +278,27 @@ const addPlayerForRoom = async(player, lowercaseName, createAlert, roomID) => {
     })
     .catch((error) => {
         console.error('Error adding player: ', error);
-        return createAlert('error', 'Error adding player:', 'check console', 1500);
     });
 }
 
 //removes player from database
-const removePlayerForRoom = async (player, createAlert, roomID) => {
+const removePlayerForRoom = async (player, roomID) => {
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
     const playerQuery = query(playerCollectionRef, where('name', '==', player));
     const playerSnapshot = await getDocs(playerQuery); 
-    //returns error alert if player not found
-    if (playerSnapshot.empty) return createAlert('error', 'Error', 'player does not exist', 1500);
+    //returns error if player not found
+    if (playerSnapshot.empty) throw new Error('Player not found');
     try {
         const docRef = playerSnapshot.docs[0].ref;
         await deleteDoc(docRef);
     }
     catch (error) {
         console.error('Error removing player: ', error);
-        createAlert('error', 'Error deleting player', 'check console', 1500);
     }
 }
 
 //dupates assassins of player in database
-const updateAssassinsForPlayer = async (player, assassins, createAlert, roomID) => {
+const updateAssassinsForPlayer = async (player, assassins, roomID) => {
     try {
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const playerQuery = query(playerCollectionRef, where('name', '==', player));
@@ -350,12 +308,11 @@ const updateAssassinsForPlayer = async (player, assassins, createAlert, roomID) 
     }
     catch (error) {
         console.error('Error updating player assassins: ', error);
-        createAlert('error', 'Error updating player assassins', 'check console', 1500);
     }
 }
 
 //updates targets of player in database
-const updateTaregtsForPlayer = async (player, targets, createAlert, roomID) => {
+const updateTargetsForPlayer = async (player, targets, roomID) => {
     try {
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const playerQuery = query(playerCollectionRef, where('name', '==', player));
@@ -365,12 +322,11 @@ const updateTaregtsForPlayer = async (player, targets, createAlert, roomID) => {
     }
     catch (error) {
         console.error('Error updating player targets: ', error);
-        createAlert('error', 'Error updating player targets', 'check console', 1500);
     }
 }
 
 //fetches player's assassins
-const fetchAssassinsForPlayer = async (player, createAlert, roomID) => {
+const fetchAssassinsForPlayer = async (player, roomID) => {
     try {
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const playerQuery = query(playerCollectionRef, where('name', '==', player));
@@ -380,11 +336,10 @@ const fetchAssassinsForPlayer = async (player, createAlert, roomID) => {
     }
     catch (error) {
         console.error('Error fetching player assassins: ', error);
-        createAlert('error', 'Error fetching player assassins', 'check console', 1500);
     }
 }
 
-const fetchReferenceForTask = async (taskID, createAlert, roomID) => {
+const fetchReferenceForTask = async (taskID, roomID) => {
     console.log('fetching task: ', taskID);
     try {
         const taskRef = doc(db, 'rooms', roomID, 'tasks', taskID);
@@ -393,43 +348,36 @@ const fetchReferenceForTask = async (taskID, createAlert, roomID) => {
             return taskRef;
         }
         else {
-            console.error('task does not exist.')
-            createAlert('error', 'Error', 'task does not exist', 1500);
-            return null;
+            throw new Error('Task not found');
         }
     }
     catch (error) {
-        console.error('Error fetching task: ', error);
-        createAlert('error', 'Error fetching task reference', 'check console', 1500);
-        return null;
+        throw new Error('Error fetching task: ', error);
     }
 }
 
 export { 
     fetchAllPlayersForRoom,
-    fetchAlivePlayersForRoom,
-    fetchDeadPlayersForRoom,
+    fetchPlayersByStatusForRoom,
     fetchAllTasksForRoom,
-    fetchallLogsForRoom,
+    fetchAllLogsForRoom,
     updateLogsForRoom,
     fetchTargetsForPlayer,
-    fetchActiveTasksForRoom,
+    fetchTasksByCompletionForRoom,
     fetchTaskForRoom,
     updatePointsForPlayer,
-    updateIsAliveToTrueForPlayer,
-    updateIsAliveToFalseForPlayer,
+    updateIsAliveForPlayer,
     updateIsCompleteToTrueForTask,
     updateCompletedByForTask,
-    fetchInactiveTasksForRoom,
     addTaskForRoom,
     checkForTaskDupesForRoom,
-    fetchAlivePlayersQueryByDesendPointsForRoom,
+    fetchAlivePlayersQueryByDescendPointsForRoom,
     fetchPlayerForRoom,
     killPlayerForRoom,
     addPlayerForRoom,
     removePlayerForRoom,
     updateAssassinsForPlayer,
-    updateTaregtsForPlayer,
+    updateTargetsForPlayer,
     fetchAssassinsForPlayer,
     fetchReferenceForTask
 };

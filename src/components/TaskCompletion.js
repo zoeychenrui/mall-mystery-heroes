@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Flex, Select } from '@chakra-ui/react';
 import TaskButton from './TaskButton';
-import { fetchActiveTasksForRoom } from './dbCalls';
+import { fetchTasksByCompletionForRoom } from './dbCalls';
 
 const TaskCompletion = (props) => {
     const { roomID,
@@ -18,7 +18,7 @@ const TaskCompletion = (props) => {
 
     //fetches tasks that are incomplete and turns tasklist to a list of the options
     const fetchTaskForRooms = async () => {
-        const taskSnapshot = await fetchActiveTasksForRoom(roomID);
+        const taskSnapshot = await fetchTasksByCompletionForRoom(false, roomID);
         const tempTaskList = taskSnapshot.docs.map(doc => (
             <option key = {doc.data().title}
                     value = {doc.id}

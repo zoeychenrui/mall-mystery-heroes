@@ -6,23 +6,30 @@ import killHover from '../assets/kill-hover.png';
 import { fetchPlayerForRoom, killPlayerForRoom, updatePointsForPlayer } from './dbCalls';
 
 const KillButton = (props) => {
-    const { roomID, assassinPlayerNamed, handleKillPlayer, selectedTarget, possibleTargets, getPossibleTargets } = props;
+    const { roomID, assassinPlayerNamed, handleKillPlayer, selectedTarget, possibleTargets, getPossibleTargets, handleChoiceReset } = props;
     const [isHovering, setIsHovering] = useState(false);
     const createAlert = CreateAlert();
 
     const handleKill = async () => {
-        if (selectedTarget === '') {
-            return createAlert('error', 'Error', 'Must Select Target', 1500);
-        }
+        try {
+            if (selectedTarget === '') {
+                return createAlert('error', 'Error', 'Must Select Target', 1500);
+            }
 
-        console.log("The following player will be killed: ", selectedTarget);
-        const targetDoc = await fetchPlayerForRoom(selectedTarget, roomID, createAlert);
-        const targetData = targetDoc.data();
-        await updatePointsForPlayer(assassinPlayerNamed, targetData.score, roomID);
-        await killPlayerForRoom(selectedTarget, roomID);
-        const targets = possibleTargets.filter(target => target !== selectedTarget);
-        getPossibleTargets(targets);
-        handleKillPlayer(selectedTarget, assassinPlayerNamed);
+            console.log("The following player will be killed: ", selectedTarget);
+            const targetDoc = await fetchPlayerForRoom(selectedTarget, roomID);
+            const targetData = targetDoc.data();
+            await updatePointsForPlayer(assassinPlayerNamed, targetData.score, roomID);
+            await killPlayerForRoom(selectedTarget, roomID);
+            const targets = possibleTargets.filter(target => target !== selectedTarget);
+            getPossibleTargets(targets);
+            handleChoiceReset();
+            handleKillPlayer(selectedTarget, assassinPlayerNamed);
+        }
+        catch (error) {
+            console.log(error);
+            createAlert('error', 'Error killing player', 'Check console', 1500);
+        }
     };
 
     return (  

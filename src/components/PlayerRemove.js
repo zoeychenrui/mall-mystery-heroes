@@ -27,10 +27,18 @@ const PlayerRemove = ({onPlayerRemoved, arrayOfPlayers, roomID}) => {
         if (selectedPlayer === '') {
             return createAlert('error', 'Error', 'must select player', 1500);
         }
-        removePlayerForRoom(selectedPlayer, createAlert, roomID);
+        try {
+            await removePlayerForRoom(selectedPlayer, roomID);
+        }
+        catch (error) {
+            console.error('Error removing player: ', error);
+            return createAlert('error', 'Error', 'player not found', 1500);
+        }
+
         if (onPlayerRemoved) {
             onPlayerRemoved(selectedPlayer);
         }
+        setSelectedPlayer('');
         console.log(`selected player removed successfully`);
     }
      

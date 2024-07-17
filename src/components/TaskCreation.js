@@ -74,11 +74,18 @@ const TaskCreation = ({roomID, onNewTaskAdded}) => {
             newTask.pointValue = 0;
         }
 
-        const dupeExists = await checkForTaskDupesForRoom(newTask, roomID, createAlert);
+        const dupeExists = await checkForTaskDupesForRoom(newTask, roomID);
         if (!dupeExists) {
             await addTaskForRoom(newTask, roomID);
             onNewTaskAdded(newTask);
+            setTaskTitle('');
+            setTaskDescription('');
+            setPointValue('0');
+            setSelectedTaskType('');
             createAlert('success', 'Task Added', 'Your task has been created', 1500);
+        }
+        if (dupeExists) {
+            createAlert('error', 'Error', 'Task already exists', 1500);
         }
     }
 
@@ -89,18 +96,22 @@ const TaskCreation = ({roomID, onNewTaskAdded}) => {
     return (  
         <Flex m = '6px' direction = 'column'>
             <Flex mb = '4px'>
-                <Input size = 'md'
-                        borderRadius = '2xl'
-                        placeholder = 'Task Title'
-                        value = {TaskTitle}
-                        onChange = {handleTitleChange}
-                    />
-                    <Input size = 'md'
-                        borderRadius = '2xl'
-                        placeholder='Description'
-                        value = {TaskDescription}
-                        onChange= {handleDescriptionChange}
-                    />
+                <Input 
+                    size = 'md'
+                    borderRadius = '2xl'
+                    placeholder = 'Task Title'
+                    value = {TaskTitle}
+                    onChange = {handleTitleChange}
+                    m = '2px'
+                />
+                <Input 
+                    size = 'md'
+                    borderRadius = '2xl'
+                    placeholder='Description'
+                    value = {TaskDescription}
+                    onChange= {handleDescriptionChange}
+                    m = '2px'
+                />
             </Flex>
 
             <Flex>

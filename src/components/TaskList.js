@@ -8,7 +8,7 @@ import {
     TabList
     } from '@chakra-ui/react';
 import TaskAccordion from './TaskAccordion';
-import { fetchActiveTasksForRoom, fetchInactiveTasksForRoom } from './dbCalls';
+import { fetchTasksByCompletionForRoom } from './dbCalls';
 
 const TaskList = (props) => {
     const { roomID, arrayOfTasks, completedTasks } = props;
@@ -17,8 +17,8 @@ const TaskList = (props) => {
 
     // Fetch tasks from Firestore
     const fetchTaskForRooms = async () => {
-        const activeTasks = await fetchActiveTasksForRoom(roomID);
-        const inactiveTasks = await fetchInactiveTasksForRoom(roomID);
+        const activeTasks = await fetchTasksByCompletionForRoom(false, roomID);
+        const inactiveTasks = await fetchTasksByCompletionForRoom(true, roomID);
         setArrayOfActiveTasks(activeTasks.docs.map(doc => doc.data()));
         setArrayOfInactiveTasks(inactiveTasks.docs.map(doc => doc.data()));
     }

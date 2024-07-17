@@ -8,16 +8,16 @@ import { HStack,
          Heading,
          VStack,
          Box,
+         Divider,
     } from '@chakra-ui/react';
 import Execution from '../components/Execution';
 import TaskExecution from '../components/TaskExecution';
 import HeaderExecution from '../components/HeaderExecution';
 import Log from '../components/Log';
 import UnmapPlayers from '../components/UnmapPlayers';
-import { fetchDeadPlayersForRoom, 
-         fetchAlivePlayersForRoom, 
+import { fetchPlayersByStatusForRoom, 
          fetchAllTasksForRoom, 
-         fetchallLogsForRoom, 
+         fetchAllLogsForRoom, 
          updateLogsForRoom 
     } from '../components/dbCalls';
 
@@ -35,9 +35,9 @@ const GameMasterView = () => {
     useEffect (() => {
         const fetchPlayers = async () => {
             console.log(`fetching players and tasks in useEffect: ${roomID}`);
-            const deadPlayers = await fetchDeadPlayersForRoom(roomID);
+            const deadPlayers = await fetchPlayersByStatusForRoom(false, roomID);
             setArrayOfDeadPlayers(deadPlayers);
-            const alivePlayers = await fetchAlivePlayersForRoom(roomID);
+            const alivePlayers = await fetchPlayersByStatusForRoom(true, roomID);
             setArrayOfAlivePlayers(alivePlayers);
         }
         const fetchTaskForRooms = async () => {
@@ -46,7 +46,7 @@ const GameMasterView = () => {
         }
 
         const fetchLogs = async () => {
-            const allLogs = await fetchallLogsForRoom(roomID);
+            const allLogs = await fetchAllLogsForRoom(roomID);
             setLogList(allLogs);
         }
 
@@ -82,7 +82,7 @@ const GameMasterView = () => {
     //updates arrayOfTasks when new task is added to db
     const handleNewTaskAdded = async (newTask) => {
         setArrayOfTasks(arrayOfTasks => [...arrayOfTasks, newTask]);
-        await addLog("Added new task: ", newTask.title);
+        await addLog("Added new task: " + newTask.title);
     };
 
     //updates completedTasks
@@ -108,17 +108,20 @@ const GameMasterView = () => {
 
     return (
         <div>
-            <HeaderExecution roomID = {roomID}/>
+            <Box h = '10%'>
+                <HeaderExecution roomID = {roomID}/>
+            </Box>
 
             <HStack alignItems = 'left'
                     p = '5px'
+                    flex = '1='
             >
-                <Box width = '23%' 
+                <Box width = 'lg' 
                      height = '2xl' 
                      borderWidth = '2px' 
                      borderRadius = '2xl' 
                      overflow = 'auto' 
-                     px = '2px' 
+                     px = '2px'
                      mx = '16px' 
                 >
                     <Heading 
@@ -138,12 +141,24 @@ const GameMasterView = () => {
                          width = 'xl' 
                          height = 'md' 
                          mb = '10px'
-                         overflow = 'auto'
                     >
-                        <Heading size = 'lg' textAlign = 'center'>History Log</Heading>
-                        <Log 
-                            logList = {logList}
-                        />
+                        <Heading 
+                            size = 'lg' 
+                            textAlign = 'center'
+                            mb = '4px'
+                        >
+                            History Log
+                        </Heading>
+                        <Divider/>
+                        <Box
+                            overflow = 'auto'
+                            height = 'calc(100% - 50px)'
+                        >
+                            <Log 
+                                logList = {logList}
+                            />
+                        </Box>
+
                     </Box>
 
                     <Box borderWidth = '2px' 
