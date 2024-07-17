@@ -9,21 +9,13 @@ import {Input,
         NumberInputStepper,
         Select
     } from '@chakra-ui/react';
-import { db } from '../utils/firebase';
-import { collection, 
-         addDoc,
-         getDocs,
-         where,
-         query
-    } from 'firebase/firestore';
 import CreateAlert from './CreateAlert';
+import { addTaskForRoom, checkForTaskDupesForRoom } from './dbCalls';
 
-const TaskCreation = (props) => {
+const TaskCreation = ({roomID, onNewTaskAdded}) => {
     const [TaskTitle, setTaskTitle] = useState('');
     const [TaskDescription, setTaskDescription] = useState('');
     const [PointValue, setPointValue] = useState('0');
-    const roomID = props.roomID;
-    const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
     const time = new Date();
     const [selectedTaskType, setSelectedTaskType] = useState('');
     const createAlert = CreateAlert();
@@ -65,59 +57,61 @@ const TaskCreation = (props) => {
         if (newTask.taskType === '') {
             return createAlert('error', 'Error', 'Task type must be selected', 1500);
         }
-
         //error handling for blank title
         if (newTask.title === '') {
             return createAlert('error', 'Error', 'Task title cannot be blank', 1500);
         }
-
         //error handling for task with 0 points
         if (newTask.pointValue === '0' && newTask.taskType === 'Task') {
             return createAlert('error', 'Error', 'Task cannot have 0 points', 1500);
         }
-        
         //handling for blank description
         if (newTask.description === '') {
             newTask.description = 'No description provided';
         }
-        
+        //sets points to 0 for revival misisons
         if (newTask.taskType === 'Revival Mission') {
             newTask.pointValue = 0;
         }
 
-        const checkTaskQuery = query(taskCollectionRef, where('title', '==', newTask.title));
-        const checkTaskSnapshot = await getDocs(checkTaskQuery); 
-        //adds new document for new tasks
-        if (checkTaskSnapshot.empty) {
-            await addDoc(taskCollectionRef, newTask);
+        const dupeExists = await checkForTaskDupesForRoom(newTask, roomID);
+        if (!dupeExists) {
+            await addTaskForRoom(newTask, roomID);
+            onNewTaskAdded(newTask);
+            setTaskTitle('');
+            setTaskDescription('');
+            setPointValue('0');
+            setSelectedTaskType('');
+            createAlert('success', 'Task Added', 'Your task has been created', 1500);
         }
-        //error handling for duplicate titles
-        else {
-            return createAlert('error', 'Error', 'Task title already exists', 1500);
+        if (dupeExists) {
+            createAlert('error', 'Error', 'Task already exists', 1500);
         }
-
-        props.onNewTaskAdded(newTask);
-        createAlert('success', 'Task Added', 'Your task has been created', 1500);
     }
 
     useEffect(() => {
         console.log(`usingEffect selectedTaskType: ${selectedTaskType}`);
     }, [selectedTaskType]);
+
     return (  
         <Flex m = '6px' direction = 'column'>
             <Flex mb = '4px'>
-                <Input size = 'md'
-                        borderRadius = '2xl'
-                        placeholder = 'Task Title'
-                        value = {TaskTitle}
-                        onChange = {handleTitleChange}
-                    />
-                    <Input size = 'md'
-                        borderRadius = '2xl'
-                        placeholder='Description'
-                        value = {TaskDescription}
-                        onChange= {handleDescriptionChange}
-                    />
+                <Input 
+                    size = 'md'
+                    borderRadius = '2xl'
+                    placeholder = 'Task Title'
+                    value = {TaskTitle}
+                    onChange = {handleTitleChange}
+                    m = '2px'
+                />
+                <Input 
+                    size = 'md'
+                    borderRadius = '2xl'
+                    placeholder='Description'
+                    value = {TaskDescription}
+                    onChange= {handleDescriptionChange}
+                    m = '2px'
+                />
             </Flex>
 
             <Flex>

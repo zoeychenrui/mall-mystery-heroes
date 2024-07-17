@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import AssassinSelection from "./AssassinsSelection";
 import KillButton from "./KillButton";
 import TargetSelection from "./TargetSelection";
-import { Box, Flex } from '@chakra-ui/react';
+import { Flex } from '@chakra-ui/react';
 
 const KillActionExecution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) => {
     const [assassinPlayerNamed, setAssassinPlayerNamed] = useState('');
@@ -23,6 +23,12 @@ const KillActionExecution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) 
         console.log('selected target: ', target);
     }
 
+    const handleChoiceReset = () => {
+        setAssassinPlayerNamed('');
+        setPossibleTargets([]);
+        setSelectedTarget('');
+    }
+
     return (  
         <Flex
             direction = 'row'
@@ -37,6 +43,8 @@ const KillActionExecution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) 
                     getAssassinPlayerName = {getAssassinPlayerName}
                     arrayOfAlivePlayers = {arrayOfAlivePlayers} 
                     getPossibleTargets = {getPossibleTargets}
+                    assassinPlayerNamed = {assassinPlayerNamed}
+                    getSelectedTarget = {getSelectedTarget}
                 />
             </Flex>
             <Flex>
@@ -47,6 +55,7 @@ const KillActionExecution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) 
                     possibleTargets = {possibleTargets}
                     roomID = {roomID}
                     getPossibleTargets = {getPossibleTargets}
+                    handleChoiceReset = {handleChoiceReset}
                 />
             </Flex>
             <Flex>

@@ -7,32 +7,28 @@ import {
     TabPanel,
     TabList
     } from '@chakra-ui/react';
-import { db } from '../utils/firebase';
-import { collection, 
-         getDocs 
-    } from 'firebase/firestore';
 import TaskAccordion from './TaskAccordion';
+import { fetchTasksByCompletionForRoom } from './dbCalls';
 
 const TaskList = (props) => {
-    const {roomID, arrayOfPlayers} = props;
-    const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
-    const [tasks, setTasks] = useState([]);
-    const arrayOfActiveTasks = tasks.filter(eachTask => eachTask.isComplete === false); //filters active tasks
-    const arrayOfInactiveTasks = tasks.filter(eachTask => eachTask.isComplete === true); //filters inactive tasks
+    const { roomID, arrayOfTasks, completedTasks } = props;
+    const [arrayOfActiveTasks, setArrayOfActiveTasks] = useState([]);
+    const [arrayOfInactiveTasks, setArrayOfInactiveTasks] = useState([]);
 
     // Fetch tasks from Firestore
-    const fetchTasks = async () => {
-        const taskSnapshot = await getDocs(taskCollectionRef);
-        const taskArray = taskSnapshot.docs.map(doc => doc.data());
-        setTasks(taskArray);
+    const fetchTaskForRooms = async () => {
+        const activeTasks = await fetchTasksByCompletionForRoom(false, roomID);
+        const inactiveTasks = await fetchTasksByCompletionForRoom(true, roomID);
+        setArrayOfActiveTasks(activeTasks.docs.map(doc => doc.data()));
+        setArrayOfInactiveTasks(inactiveTasks.docs.map(doc => doc.data()));
     }
 
     //updates tasklists when task is added
     useEffect(() => {
         console.log(`fetching tasks in useEffect: ${roomID}`);
-        fetchTasks();
+        fetchTaskForRooms();
         // eslint-disable-next-line
-    }, [props.arrayOfTasks, props.completedTasks]);
+    }, [arrayOfTasks, completedTasks, roomID]);
 
     //makes an array where each item contains an accordion item of an active task object
     const listOfActiveTasks = arrayOfActiveTasks.map(eachTask => {
@@ -40,11 +36,6 @@ const TaskList = (props) => {
             <TaskAccordion
                 key = {eachTask.title}
                 task = {eachTask}
-                players = {arrayOfPlayers}
-                roomID = {roomID}
-                refresh = {fetchTasks}
-                arrayOfDeadPlayers = {props.arrayOfDeadPlayers}
-                arrayOfPlayers = {props.arrayOfPlayers}
             />
        );
     });
@@ -55,11 +46,6 @@ const TaskList = (props) => {
             <TaskAccordion
                  key = {eachTask.title}
                  task = {eachTask}
-                 players = {arrayOfPlayers}
-                 roomID = {roomID}
-                 refresh = {fetchTasks}
-                 arrayOfDeadPlayers = {props.arrayOfDeadPlayers}
-                 arrayOfPlayers = {props.arrayOfPlayers}
             />
         );
     });

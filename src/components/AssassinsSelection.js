@@ -1,31 +1,23 @@
-import React, { useState } from 'react';
-import { Box, Flex, Select } from '@chakra-ui/react';
-import { db } from '../utils/firebase';
-import { query, getDocs, collection, where } from "firebase/firestore";
+import React from 'react';
+import { Flex, Select } from '@chakra-ui/react';
+import { fetchTargetsForPlayer } from './dbCalls';
+import CreateAlert from './CreateAlert';
 
 const AssassinSelection = (props) => {
-    const { roomID, getAssassinPlayerName, arrayOfAlivePlayers, getPossibleTargets } = props;
-    const [selectedAssassin, setSelectedAssassin] = useState('');
+    const { roomID, getAssassinPlayerName, arrayOfAlivePlayers, getPossibleTargets, assassinPlayerNamed, getSelectedTarget } = props;
+    const createAlert = CreateAlert();
 
     const handleChange = async (event) => {
         const newAssassin = event.target.value;
-        setSelectedAssassin(newAssassin);
-
-        const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
-        const playerQuery = query(playerCollectionRef, where('name', '==', newAssassin));
-
-        try {
-            const querySnapshot = await getDocs(playerQuery);
-            if (querySnapshot.empty) {
-                console.error("No documents found for the Assassin");
-                return;
-            }
-            getAssassinPlayerName(newAssassin);
-            const targetList = querySnapshot.docs[0].data().targets;
-            getPossibleTargets(targetList);
-        } catch (error) {
-            console.error('Error fetching player documents:', error);
+        if (newAssassin === '') {
+            getAssassinPlayerName('');
+            getPossibleTargets([]);
+            return;
         }
+        getAssassinPlayerName(newAssassin);
+        getSelectedTarget('');
+        const targetList = await fetchTargetsForPlayer(newAssassin, roomID, createAlert);
+        getPossibleTargets(targetList);
     };
 
     return (
@@ -34,7 +26,7 @@ const AssassinSelection = (props) => {
             <Select 
                 id='assassin'
                 placeholder='Select Assassin'
-                value={selectedAssassin}
+                value={assassinPlayerNamed}
                 onChange={handleChange}
                 w = '100%'
             >
