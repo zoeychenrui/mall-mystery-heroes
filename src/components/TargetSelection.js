@@ -16,11 +16,11 @@ const TargetSelection = (props) => {
                 value={selectedTarget}
                 onChange={handleChange}
             >
-                {possibleTargets.map((player, index) => (
+                {possibleTargets?.map((player, index) => (
                     <option key={index} value={player}>
                         {player}
                     </option>
-                ))}
+                )) || null}
             </Select>
         </Box>
     );

@@ -10,26 +10,12 @@ import {
     Flex,
     Text
 } from '@chakra-ui/react';
-import { db } from '../utils/firebase';
-import {
-    orderBy,
-    query,
-    collection,
-    where,
-    onSnapshot,
-} from "firebase/firestore";
+import { onSnapshot } from "firebase/firestore";
+import { fetchAlivePlayersQueryByDescendPointsForRoom } from './dbCalls';
 
-const AlivePlayersList = (props) => {
-    const roomID = props.roomID; // Get the ID of the room that this component is displaying
-
-    const playerCollectionRef = collection(db, 'rooms', roomID, 'players'); // This takes us to the players folder
-
+const AlivePlayersList = ({roomID}) => {
     // Construct a query that gets all players in the room that are still alive, sorted by score
-    const playerAlivePlayersQuery = query(
-        playerCollectionRef,
-        where("isAlive", "==", true),
-        orderBy("score", "desc")
-    );
+    const playerAlivePlayersQuery = fetchAlivePlayersQueryByDescendPointsForRoom(roomID);
 
     // Initialize state to keep track of the current list of players
     const [players, setPlayers] = useState([]); // array of player objects

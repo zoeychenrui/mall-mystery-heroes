@@ -6,7 +6,6 @@ import {
     Image,
 } from '@chakra-ui/react';
 import { signOut } from "firebase/auth";
-import { collection, getDocs, query } from 'firebase/firestore';
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import mallLogo from '../assets/mall-logo-black-green.png';
@@ -15,12 +14,12 @@ import PlayerAddition from '../components/PlayerAddition';
 import PlayerList from '../components/PlayerList';
 import PlayerRemove from "../components/PlayerRemove";
 import TargetGenerator from "../components/TargetGenerator";
-import { auth, db } from '../utils/firebase';
+import { fetchAllPlayersForRoom } from "../components/dbCalls";
+import { auth } from "../utils/firebase";
 
 const Lobby = () => {
     const navigate = useNavigate();
     const { roomID } = useParams();
-    const playerCollectionRef = collection(db, 'rooms', roomID, 'players'); //reference to players subcollection
     const [arrayOfPlayers, setArrayOfPlayers] = useState([]);
     const createAlert = CreateAlert();
 
@@ -38,9 +37,7 @@ const Lobby = () => {
     useEffect (() => {
         const fetchPlayers = async () => {
             try {
-                const playerQuery = query(playerCollectionRef);
-                const playerSnapshot = await getDocs(playerQuery);
-                const players = playerSnapshot.docs.map(doc => doc.data().name);
+                const players = await fetchAllPlayersForRoom(roomID);
                 setArrayOfPlayers(players);
             }
             catch (error) {

@@ -20,19 +20,18 @@ import { Button, Checkbox,
          PopoverFooter,
          Text
     } from '@chakra-ui/react';
-import { db } from '../utils/firebase';
-import { collection, 
-         getDoc, 
-         getDocs, 
-         query, 
-         where,
-         doc,
-         updateDoc
-    } from 'firebase/firestore';
 import CreateAlert from './CreateAlert';
 import enter from '../assets/enter-green.png';
 import enterHover from '../assets/enter-hovering.png';
 import RemapPlayers from './RemapPlayers';
+import { updateIsCompleteToTrueForTask, 
+         fetchPlayersByStatusForRoom,
+         fetchTaskForRoom, 
+         updateCompletedByForTask, 
+         updatePointsForPlayer, 
+         fetchReferenceForTask,
+         updateIsAliveForPlayer
+    } from './dbCalls';
 
 const TaskButton = (props) => {    
     const { taskID,
@@ -50,16 +49,13 @@ const TaskButton = (props) => {
     const [isHovering, setIsHovering] = useState(false);
     const [newCheckedPlayers, setNewCheckedPlayers] = useState([]);
     const [newRemovedPlayers, setNewRemovedPlayers] = useState([]);
-    const handleRegeneration = RemapPlayers(handleRemapping);
+    const handleRegeneration = RemapPlayers(handleRemapping, createAlert);
 
     //keeps checked players whenever page is reset
     useEffect(() => {
         const fetchCheckedPlayers = async() => {
             if (!taskID) return;
-            const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
-            const taskDocRef = doc(taskCollectionRef, taskID);
-            const taskSnapshot = await getDoc(taskDocRef);
-            const task = taskSnapshot.data();
+            const task = await fetchTaskForRoom(taskID, roomID);
             setCheckedPlayers(task.completedBy);
         }
 
@@ -91,76 +87,61 @@ const TaskButton = (props) => {
 
     //updates scores/live status when save button is clicked
     const handleSave = async () => {
-        const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
-        const taskRef = doc(taskCollectionRef, taskID);
-        const taskSnapshot = await getDoc(taskRef);
-        const task = taskSnapshot.data();
-        const taskDocRef = taskSnapshot.ref;
-        const points = parseInt(task.pointValue);
-        const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
+        try {
+            const task = await fetchTaskForRoom(taskID, roomID);
+            const taskDocRef = await fetchReferenceForTask(taskID, roomID);
+            if (taskDocRef === null) {
+                return createAlert('error', 'Error', 'task does not exist', 1500);
+            }
+            let points = parseInt(task.pointValue);
 
-        //updates player scores for task types
-        if (task.taskType === 'Task') {
-            //adds points to new updated players
-            for (const player of newCheckedPlayers) {
-                const playerQuery = query(playerCollectionRef, where('name', '==', player));
-                const playerSnapshot = await getDocs(playerQuery);
-                const playerDoc = playerSnapshot.docs[0].ref;
-                const playerScore = parseInt(playerSnapshot.docs[0].data().score);
-                console.log('points: ' + points);
-                console.log('playerScore: ' + playerScore);
-                const newPoints = points + playerScore;
-                await updateDoc(playerDoc, { score: newPoints });
+            //updates player scores for task types
+            if (task.taskType === 'Task') {
+                //adds points to new updated players
+                for (const player of newCheckedPlayers) {
+                    await updatePointsForPlayer(player, points, roomID);
+                }
+                //removes points for those that were initially checked, but now removed
+                for (const player of newRemovedPlayers) {
+                    points = points * -1;
+                    await updatePointsForPlayer(player, points, roomID);
+                }
             }
-            //removes points for those that were initially checked, but now removed
-            for (const player of newRemovedPlayers) {
-                const playerQuery = query(playerCollectionRef, where('name', '==', player));
-                const playerSnapshot = await getDocs(playerQuery);
-                const playerdoc = playerSnapshot.docs[0].ref;
-                const playerScore = parseInt(playerSnapshot.docs[0].data().score);
-                const newPoints = playerScore - points;
-                await updateDoc(playerdoc, { score: newPoints });
+            //updates player live status for revival missions
+            else if (task.taskType === 'Revival Mission') {
+                //revives newly checked players
+                for (const player of newCheckedPlayers) {
+                    await updateIsAliveForPlayer(player, true, roomID);
+                    //remaps targets and assassins for revived player ONLY
+                    await handleRegeneration(player, player, arrayOfAlivePlayers, roomID);
+                    handlePlayerRevive(player);
+                }
+                //kills those that were initially checked, but now removed
+                for (const player of newRemovedPlayers) {
+                    await updateIsAliveForPlayer(player, false, roomID);
+                    handleUndoRevive(player);
+                }
             }
+            
+            //updates task to be completed by checkedplayers
+            await updateCompletedByForTask(taskDocRef, checkedPlayers);
+            setNewCheckedPlayers([]);
+            setNewRemovedPlayers([]);
+            onClose();
         }
-        //updates player live status for revival missions
-        else if (task.taskType === 'Revival Mission') {
-            //revives newly checked players
-            for (const player of newCheckedPlayers) {
-                const playerQuery = query(playerCollectionRef, where('name', '==', player));
-                const playerSnapshot = await getDocs(playerQuery);
-                const playerdoc = playerSnapshot.docs[0].ref;
-                await updateDoc(playerdoc, { isAlive: true });
-                console.log('arrayOfAlivePlayers: ' + arrayOfAlivePlayers);
-                //remaps targets and assassins for revived player ONLY
-                await handleRegeneration(player, player, arrayOfAlivePlayers, roomID);
-                handlePlayerRevive(player);
-            }
-            //kills those that were initially checked, but now removed
-            for (const player of newRemovedPlayers) {
-                const playerQuery = query(playerCollectionRef, where('name', '==', player));
-                const playerSnapshot = await getDocs(playerQuery);
-                const playerdoc = playerSnapshot.docs[0].ref;
-                await updateDoc(playerdoc, { isAlive: false });
-                handleUndoRevive(player);
-            }
+        catch (error) {
+            console.error(error);
+            return createAlert('error', 'Error saving task', 'Check console', 1500);
         }
-        
-        //updates task to be completed by checkedplayers
-        await updateDoc(taskDocRef, { completedBy: checkedPlayers });
-        setNewCheckedPlayers([]);
-        setNewRemovedPlayers([]);
-        onClose();
     }
 
     //handles when complete button is clicked
     const handleComplete = async() => {
         await handleSave();
         createAlert('info', 'Completed', 'Task has been saved as completed', 1500);
-        const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
-        const taskDocRef = doc(taskCollectionRef, taskID);
-        const taskDoc = await getDoc(taskDocRef)
-        const taskTitle = taskDoc.data().title;
-        await updateDoc(taskDocRef, { isComplete: true });
+        const task = await fetchTaskForRoom(taskID, roomID);
+        await updateIsCompleteToTrueForTask(taskID, roomID);
+        const taskTitle = task.title;
         handleTaskCompleted(taskTitle);
         onClose(taskTitle);
     }
@@ -193,35 +174,25 @@ const TaskButton = (props) => {
 
     //creates listOfChoices based on the task type
     const createListOfChoices = async () => {
-        const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
-        const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
-
         //error when task is blank
         if (!taskID || taskID === '') {
             setListOfchoices([]);
             console.error('taskID not defined');
             return;
         }
-
-        const taskDocRef = doc(taskCollectionRef, taskID);
-        const taskSnapshot = await getDoc(taskDocRef);
-        const task = taskSnapshot.data();
-        
+        //fetches task
+        const task = await fetchTaskForRoom(taskID, roomID);
         //alive players are shown for tasks
         if (task.taskType === 'Task') {
-            const playerQuery = query(playerCollectionRef, where('isAlive', '==', true));
-            const playerSnapshot = await getDocs(playerQuery);
-            const tempList = playerSnapshot.docs.map(doc => doc.data().name); 
+            const tempList = await fetchPlayersByStatusForRoom(true, roomID);
             setListOfchoices(tempList);
         }
         //dead players are shown for revival missions
         else if (task.taskType === 'Revival Mission') {
-            const playerQuery = query(playerCollectionRef, where('isAlive', '==', false));
-            const playerSnapshot = await getDocs(playerQuery);
-            const tempList = playerSnapshot.docs.map(doc => doc.data().name);
+            const tempList = await fetchPlayersByStatusForRoom(false, roomID);
             setListOfchoices(tempList);
         }
-
+        //error when invalid task type
         else {
             console.error('invalid task type');
         }

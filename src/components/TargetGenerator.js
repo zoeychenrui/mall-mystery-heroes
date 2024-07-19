@@ -15,9 +15,7 @@ import {AlertDialog,
         Table,
         Thead
     } from '@chakra-ui/react';
-import { db } from '../utils/firebase';
-import { collection } from "firebase/firestore";
-import { updateDoc, getDocs, where, query } from 'firebase/firestore';
+import { updateAssassinsForPlayer, updateTargetsForPlayer } from './dbCalls';
 const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
     //store player's data for three things: 
     //1. number of assassins (hits on a person)
@@ -27,7 +25,6 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
     const [playerData, setPlayerData] = useState({});
 
     //reference to players subcollection
-    const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
     const { isOpen, onOpen, onClose } = useDisclosure();
     const cancelRef = React.useRef();
     const [targetMap, setTargetMap] = useState(new Map());
@@ -56,13 +53,9 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
         try {
             console.log(playerData);
             for (const player of players) {
-                const playerQuery = query(playerCollectionRef, where ('name', '==', player));
-                const snapshot = await getDocs(playerQuery);
                 const playerAssassins = playerData[player]?.assassins || [];
-                await updateDoc(snapshot.docs[0].ref, {
-                    targets: map.get(player),
-                    assassins: playerAssassins
-                });
+                await updateTargetsForPlayer(player, map.get(player), roomID);
+                await updateAssassinsForPlayer(player, playerAssassins, roomID);
                 console.log(`Targets updated for ${player} in database: ${map.get(player)}`);
             }
         } 
@@ -136,7 +129,6 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
         <Tr key = {eachName}>
             <Td>{eachName}</Td>
             <Td>{targetMap.get(eachName)?.join(", ") || "no targets"}</Td>
-            <Td>{playerData[eachName]?.assassins?.join(", ") || "no assassins"}</Td>
         </Tr>
     );
 
@@ -158,6 +150,7 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
                 isOpen={isOpen}
                 leastDestructiveRef={cancelRef}
                 onClose = {onClose}
+                size = '3xl'
             >
 
                 <AlertDialogOverlay/>
@@ -166,7 +159,7 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
                     >
 
                         <AlertDialogHeader>
-                            Generate Targets?
+                            Generate Targets
                         </AlertDialogHeader>
 
                         <AlertDialogBody>
@@ -177,7 +170,6 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
                                         <Tr>
                                             <Th color = '#FFFFFF'>Player</Th>
                                             <Th color = '#FFFFFF'>Targets</Th>
-                                            <Th color = '#FFFFFF'>Assassins</Th>
                                         </Tr>
                                     </Thead>
                                     <Tbody>
@@ -188,11 +180,11 @@ const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
                         </AlertDialogBody>
 
                         <AlertDialogFooter>
-                            <Button ref={cancelRef} onClick={onClose} colorScheme='gray'>
-                                No
+                            <Button ref={cancelRef} onClick={onClose} colorScheme='red'>
+                                Go Back
                             </Button>
-                            <Button colorScheme='red' onClick= {onYesClose}>
-                                Yes
+                            <Button colorScheme='green' onClick= {onYesClose}>
+                                Confirm and Begin Game
                             </Button>
                         </AlertDialogFooter>
 
