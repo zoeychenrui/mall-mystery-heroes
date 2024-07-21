@@ -89,8 +89,13 @@ const Auth = (props) => {
     
     <Stack spacing={4} >
       {errorMessage && (
-        <Alert status="error">
-          <AlertIcon />
+        <Alert 
+          status="error"
+          bg = '#FF5252'
+        >
+          <AlertIcon 
+            color = 'white'
+          />
           {errorMessage}
         </Alert>
       )} 

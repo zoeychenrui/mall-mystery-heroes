@@ -28,7 +28,10 @@ const Execution = (props) => {
             handleTaskCompleted, 
             completedTasks, 
             handleUndoRevive,
-            handleRemapping
+            handleRemapping,
+            handleAddNewTargets,
+            handleAddNewAssassins,
+            handleSetShowMessageToTrue
         } = props;
     const [action, setAction] = useState('completeKill');
 
@@ -139,6 +142,10 @@ const Execution = (props) => {
                         roomID = {roomID}
                         arrayOfAlivePlayers = {arrayOfAlivePlayers}
                         handleKillPlayer = {handleKillPlayer}
+                        handleAddNewAssassins = {handleAddNewAssassins}
+                        handleAddNewTargets = {handleAddNewTargets}
+                        handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
+                        handleRemapping = {handleRemapping}
                     />
                 </Flex>
             }
@@ -155,6 +162,9 @@ const Execution = (props) => {
                         handleTaskCompleted = {handleTaskCompleted}
                         completedTasks = {completedTasks}
                         handleRemapping = {handleRemapping}
+                        handleAddNewAssassins = {handleAddNewAssassins}
+                        handleAddNewTargets = {handleAddNewTargets}
+                        handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
                     />
                 </Flex>
             }

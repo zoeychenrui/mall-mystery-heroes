@@ -176,7 +176,7 @@ const Lobby = () => {
                     h = '76%'
                     justify = 'center'
                     align = 'center'
-                    overflow = 'hidden'
+                    overflow = 'auto'
                 >   
                     
                     <PlayerList 

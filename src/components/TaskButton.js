@@ -40,7 +40,10 @@ const TaskButton = (props) => {
             handlePlayerRevive,
             handleUndoRevive,
             handleTaskCompleted,
-            handleRemapping
+            handleRemapping,
+            handleAddNewTargets,
+            handleAddNewAssassins,
+            handleSetShowMessageToTrue
         } = props;
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [listOfChoices, setListOfchoices] = useState([]);
@@ -109,13 +112,21 @@ const TaskButton = (props) => {
             }
             //updates player live status for revival missions
             else if (task.taskType === 'Revival Mission') {
+                const alivePlayers = arrayOfAlivePlayers;
                 //revives newly checked players
                 for (const player of newCheckedPlayers) {
                     await updateIsAliveForPlayer(player, true, roomID);
-                    //remaps targets and assassins for revived player ONLY
-                    await handleRegeneration(player, player, arrayOfAlivePlayers, roomID);
                     handlePlayerRevive(player);
+                    if (!alivePlayers.includes(player)) {
+                        alivePlayers.push(player);
+                    }
                 }
+                //remaps targets and assassins for revived player ONLY
+                const [targets, assassins] = await handleRegeneration(newCheckedPlayers, newCheckedPlayers, alivePlayers, roomID);
+                handleAddNewAssassins(assassins);
+                handleAddNewTargets(targets);
+                handleSetShowMessageToTrue();
+
                 //kills those that were initially checked, but now removed
                 for (const player of newRemovedPlayers) {
                     await updateIsAliveForPlayer(player, false, roomID);
@@ -185,11 +196,13 @@ const TaskButton = (props) => {
         //alive players are shown for tasks
         if (task.taskType === 'Task') {
             const tempList = await fetchPlayersByStatusForRoom(true, roomID);
+            tempList.push(checkedPlayers);
             setListOfchoices(tempList);
         }
         //dead players are shown for revival missions
         else if (task.taskType === 'Revival Mission') {
             const tempList = await fetchPlayersByStatusForRoom(false, roomID);
+            tempList.concat(task.completedBy);
             setListOfchoices(tempList);
         }
         //error when invalid task type
@@ -290,6 +303,7 @@ const TaskButton = (props) => {
                 </ModalOverlay>
             </Modal>
         </Box>
+
     );
 }
  
