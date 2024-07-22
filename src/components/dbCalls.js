@@ -257,9 +257,9 @@ const killPlayerForRoom = async (target, roomID) => {
 //add player to database
 const addPlayerForRoom = async (player, roomID) => {
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
-    const lowercaseName = player.toLowerCase();
+    const trimmedLowercaseName  = player.trim().toLowerCase();
     //check if player already exists
-    const playerQuery = query(playerCollectionRef, where('name', '==', lowercaseName));
+    const playerQuery = query(playerCollectionRef, where('name', '==', trimmedLowercaseName));
     const playerSnapshot = await getDocs(playerQuery);
     if (!playerSnapshot.empty) {
         throw new Error('Player already exists');
@@ -267,7 +267,7 @@ const addPlayerForRoom = async (player, roomID) => {
     //adds if not
     addDoc(playerCollectionRef, {
         name: player,
-        nameLowerCase: lowercaseName,
+        nameLowerCase: player.toLowerCase(),
         isAlive: true,
         score: 10,
         targets: [],
