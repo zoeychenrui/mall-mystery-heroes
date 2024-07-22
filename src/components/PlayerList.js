@@ -41,11 +41,9 @@ const PlayerList = ({ arrayOfPlayers }) => {
                 w = '50%'
                 maxW = '50%'
                 justify = 'center'
-                overflow = 'hidden'
             >
                 <OrderedList
                     listStyleType = 'none'
-                    overflow = 'hidden'
                 > 
                     {firstHalf}
                 </OrderedList>
@@ -55,7 +53,7 @@ const PlayerList = ({ arrayOfPlayers }) => {
                 w = '50%'
                 justify = 'center'
                 maxW = '50%'
-                overflow = 'hidden'
+                overflowX = 'hidden'
             >
                 <OrderedList
                     listStyleType = 'none'

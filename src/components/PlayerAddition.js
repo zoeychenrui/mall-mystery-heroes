@@ -59,6 +59,7 @@ const PlayerAddition = (props) => {
                         borderRadius = '3xl'
                         ml = '30%'
                         borderColor = 'black'
+                        color = 'black'
                         borderWidth = '2px'
                         bg = '#9FF0AB'
                         _hover = {{borderColor: 'white', bg: '#9FF0AB'}}

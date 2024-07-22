@@ -1,13 +1,13 @@
-import './App.css';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ChakraProvider } from '@chakra-ui/react';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import './App.css';
 import DashBoard from './pages/DashBoard';
-import PlayerListPage from './pages/PlayerListPage';
 import GameMasterView from './pages/GameMasterView';
 import Homepage from './pages/Homepage';
+import Lobby from './pages/Lobby';
 import Login from './pages/Login';
-import SignUp from './pages/SignUp';
 import PasswordReset from './pages/PasswordReset';
+import SignUp from './pages/SignUp';
 import theme from './theme'; // Import your custom theme
 
 function App() {
@@ -20,7 +20,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/login/password-reset" element={<PasswordReset />} />
           <Route path="/signup" element={<SignUp />} />
-          <Route path="/rooms/:roomID/lobby" element={<PlayerListPage />} />
+          <Route path="/rooms/:roomID/lobby" element={<Lobby />} />
           <Route path="/rooms/:roomID/GameMasterView" element={<GameMasterView />} />
         </Routes>
       </BrowserRouter>
