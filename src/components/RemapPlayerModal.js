@@ -59,7 +59,7 @@ const RemapPlayerModal = ({ newTargets, newAssassins, showRemapModal, onClose })
             <ModalOverlay />
             <ModalContent bg = '#202030'>
                 <ModalHeader fontcolor = '#ffffff'>
-                    {mappedPlayers.length > 0 ? ('Ne Targets For Players') 
+                    {mappedPlayers.length > 0 ? ('New Targets For Players') 
                         : ('No New Targets For Players')
                     }
                 </ModalHeader>
