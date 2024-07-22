@@ -13,7 +13,10 @@ const DeadPlayersList = (props) => {
            handlePlayerRevive, 
            arrayOfAlivePlayers,
            handleRemapping, 
-           arrayOfDeadPlayers
+           arrayOfDeadPlayers,
+           handleAddNewTargets,
+           handleAddNewAssassins,
+           handleSetShowMessageToTrue
         } = props;
 
     if (arrayOfDeadPlayers.length === 0) return null;
@@ -34,6 +37,9 @@ const DeadPlayersList = (props) => {
                                 handlePlayerRevive = {handlePlayerRevive}
                                 arrayOfAlivePlayers = {arrayOfAlivePlayers}
                                 handleRemapping = {handleRemapping}
+                                handleAddNewTargets = {handleAddNewTargets}
+                                handleAddNewAssassins = {handleAddNewAssassins}
+                                handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
                             />
                         </Box>
                     </ListItem>

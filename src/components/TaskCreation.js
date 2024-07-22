@@ -19,6 +19,7 @@ const TaskCreation = ({roomID, onNewTaskAdded}) => {
     const time = new Date();
     const [selectedTaskType, setSelectedTaskType] = useState('');
     const createAlert = CreateAlert();
+    const [disableNumberInput, setDisableNumberInput] = useState(false);
 
     //stores task description
     const handleDescriptionChange = (event) => {
@@ -38,6 +39,13 @@ const TaskCreation = ({roomID, onNewTaskAdded}) => {
     //stores task type
     const handleChangeTaskType = (event) => {
         setSelectedTaskType(event.target.value);
+        if (event.target.value === 'Revival Mission') {
+            setDisableNumberInput(true); 
+            setPointValue('0');           
+        }
+        else {
+            setDisableNumberInput(false);
+        }
         console.log(selectedTaskType);
     }
 
@@ -132,6 +140,7 @@ const TaskCreation = ({roomID, onNewTaskAdded}) => {
                              min= '0'
                              size = 'md'
                              m = '2px'
+                             isDisabled = {disableNumberInput}
                 >
                     <NumberInputField />
                     <NumberInputStepper>
@@ -147,7 +156,7 @@ const TaskCreation = ({roomID, onNewTaskAdded}) => {
                 >
                     Add
                 </Button>
-        </Flex>
+            </Flex>
         </Flex>
     );
 }
