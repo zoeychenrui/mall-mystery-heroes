@@ -178,7 +178,7 @@ const GameMasterView = () => {
                             handleUndoRevive = {handleUndoRevive}
                             handleRemapping = {handleRemapping}
                         />
-                    </Box>
+                    </Box> 
                 </VStack>
 
                 <VStack ml = '10px' mr = '16px'>
