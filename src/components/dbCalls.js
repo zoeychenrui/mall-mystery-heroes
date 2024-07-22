@@ -109,7 +109,7 @@ const fetchTargetsForPlayer = async (playerName, roomID) => {
             }
 
             if (foundIndex !== -1) {
-                const newOpenSzn = openSeasonPlayers.slice(0, foundIndex).concat(openSeasonPlayers.slice(foundIndex + 1));
+                const newOpenSzn = openSeasonPlayers.toSpliced(foundIndex, 1);
                 targets = Array.from(new Set([...playerTargets, ...newOpenSzn]));
             } else {
                 targets = Array.from(new Set([...playerTargets, ...openSeasonPlayers]));
