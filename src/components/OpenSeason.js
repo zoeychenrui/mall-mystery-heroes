@@ -14,7 +14,6 @@ const OpenSeason = ({ arrayOfAlivePlayers, roomID, handleOpenSzn }) => {
     };
 
     const handleClick = async () => {
-        handleOpenSzn(selectedOpenSeasonPlayer);
         if (!selectedOpenSeasonPlayer) {
             toast({
                 title: "No player selected.",
@@ -29,6 +28,7 @@ const OpenSeason = ({ arrayOfAlivePlayers, roomID, handleOpenSzn }) => {
         setLoading(true);
 
         try {
+            handleOpenSzn(selectedOpenSeasonPlayer);
             const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
             const sznQuery = query(playerCollectionRef, where('name', '==', selectedOpenSeasonPlayer));
             const sznSnapshot = await getDocs(sznQuery);
