@@ -147,7 +147,7 @@ const Execution = (props) => {
                         roomID = {roomID}
                         arrayOfAlivePlayers = {arrayOfAlivePlayers}
                         handleKillPlayer = {handleKillPlayer}
-                        openSznTargets = {openSznTargets}
+                        
                     />
                 </Flex>
             }
