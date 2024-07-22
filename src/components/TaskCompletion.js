@@ -11,7 +11,10 @@ const TaskCompletion = (props) => {
             arrayOfTasks,
             handleTaskCompleted,
             completedTasks,
-            handleRemapping
+            handleRemapping,
+            handleAddNewTargets,
+            handleAddNewAssassins,
+            handleSetShowMessageToTrue
         } = props;
     const [taskList, setTaskList] = useState([]);
     const [selectedTask, setSelectedTask] = useState('');
@@ -24,7 +27,7 @@ const TaskCompletion = (props) => {
                     value = {doc.id}
             >
                  {doc.data().title}
-             </option>
+            </option>
          ));
          setTaskList(tempTaskList);
     }
@@ -64,6 +67,9 @@ const TaskCompletion = (props) => {
                 arrayOfAlivePlayers = {arrayOfAlivePlayers}
                 handleTaskCompleted = {handleTaskCompleted}
                 handleRemapping = {handleRemapping}
+                handleAddNewAssassins = {handleAddNewAssassins}
+                handleAddNewTargets = {handleAddNewTargets}
+                handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
             />
         </Flex>
     );

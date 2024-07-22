@@ -129,7 +129,7 @@ const AlivePlayersList = ({roomID}) => {
                                             whiteSpace = 'nowrap'
                                             key = {index}
                                         >
-                                            {index + 1}.{assassin}
+                                            {index + 1}. {assassin}
                                         </Text>
                                     ))}
                                 </Text>

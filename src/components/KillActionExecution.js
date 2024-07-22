@@ -4,7 +4,15 @@ import KillButton from "./KillButton";
 import TargetSelection from "./TargetSelection";
 import { Flex } from '@chakra-ui/react';
 
-const KillActionExecution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) => {
+const KillActionExecution = (props) => {
+    const { roomID, 
+            arrayOfAlivePlayers, 
+            handleKillPlayer,
+            handleAddNewAssassins,
+            handleAddNewTargets,
+            handleSetShowMessageToTrue,
+            handleRemapping 
+        } = props;
     const [assassinPlayerNamed, setAssassinPlayerNamed] = useState('');
     const [possibleTargets, setPossibleTargets] = useState([]);
     const [selectedTarget, setSelectedTarget] = useState('');
@@ -56,6 +64,11 @@ const KillActionExecution = ({ roomID, arrayOfAlivePlayers, handleKillPlayer }) 
                     roomID = {roomID}
                     getPossibleTargets = {getPossibleTargets}
                     handleChoiceReset = {handleChoiceReset}
+                    handleRemapping = {handleRemapping}
+                    handleAddNewAssassins = {handleAddNewAssassins}
+                    handleAddNewTargets = {handleAddNewTargets}
+                    handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
+                    arrayOfAlivePlayers = {arrayOfAlivePlayers}
                 />
             </Flex>
             <Flex>
