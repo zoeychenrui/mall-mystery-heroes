@@ -150,6 +150,10 @@ const Execution = (props) => {
                         roomID = {roomID}
                         arrayOfAlivePlayers = {arrayOfAlivePlayers}
                         handleKillPlayer = {handleKillPlayer}
+                        handleAddNewAssassins = {handleAddNewAssassins}
+                        handleAddNewTargets = {handleAddNewTargets}
+                        handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
+                        handleRemapping = {handleRemapping}
 
                     />
                 </Flex>

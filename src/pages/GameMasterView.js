@@ -20,6 +20,7 @@ import { fetchPlayersByStatusForRoom,
          fetchAllLogsForRoom, 
          updateLogsForRoom 
     } from '../components/dbCalls';
+import RemapPlayerModal from '../components/RemapPlayerModal';
 
 const GameMasterView = () => {
     const { roomID } = useParams(); 
@@ -30,6 +31,9 @@ const GameMasterView = () => {
     const [completedTasks, setCompletedTasks] = useState([]);
     const [logList, setLogList] = useState([]);
     const unmapPlayers = UnmapPlayers();
+    const [newTargets, setNewTargets] = useState({});
+    const [newAssassins, setNewAssassins] = useState({});
+    const [showRemapModal, setShowRemapModal] = useState(false);
 
     //updates arrayOfAlivePlayers, arrayOfDeadPlayers, logs, and arrayOfTasks when roomID is updated
     useEffect (() => {
@@ -74,8 +78,12 @@ const GameMasterView = () => {
 
     //updates ArrayOfDeadPlayers and adds player to arrayOfAlivePlayers
     const handlePlayerRevive = async (revivedPlayerName) => {
-        setArrayOfDeadPlayers(arrayOfDeadPlayers.filter((name) => name !== revivedPlayerName));
-        setArrayOfAlivePlayers(arrayOfAlivePlayers => [...arrayOfAlivePlayers, revivedPlayerName]);
+        setArrayOfDeadPlayers((prevArrayOfDeadPlayers) => 
+            prevArrayOfDeadPlayers.filter((name) => name !== revivedPlayerName)
+        );
+        setArrayOfAlivePlayers(arrayOfAlivePlayers => 
+            [...arrayOfAlivePlayers, revivedPlayerName]
+        );
         await addLog(revivedPlayerName + " was revived");
     };
 
@@ -106,18 +114,41 @@ const GameMasterView = () => {
         await addLog(log);
     }
 
+    //updates newTargets and newAssassins, and shows RemapPlayerModal
+    const handleAddNewTargets = (targets) => {
+        setNewTargets(targets);
+    }
+    const handleAddNewAssassins = (assassins) => {
+        setNewAssassins(assassins);
+    }
+    const handleSetShowMessageToTrue = () => {
+        setShowRemapModal(true);
+        console.log('set show message to true');
+    }
+
     return (
-        <div>
-            <Box h = '10%'>
+        <Box h = '100vh' 
+             display = 'flex' 
+             flexDirection = 'column'
+        >
+            <RemapPlayerModal 
+                showRemapModal = {showRemapModal}
+                newTargets = {newTargets}
+                newAssassins = {newAssassins}
+                onClose = {() => setShowRemapModal(false)}
+            />
+
+            <Box h = '6%'>
                 <HeaderExecution roomID = {roomID}/>
             </Box>
 
             <HStack alignItems = 'left'
                     p = '5px'
-                    flex = '1='
+                    flex = '1'
+                    overflow = 'hidden'
             >
-                <Box width = 'lg' 
-                     height = '2xl' 
+                <Box w = {{base: '100%', md: '25%'}}
+                     h = {{base: '94%', md: '95%'}}
                      borderWidth = '2px' 
                      borderRadius = '2xl' 
                      overflow = 'auto' 
@@ -134,13 +165,18 @@ const GameMasterView = () => {
                     <AlivePlayersList roomID = {roomID}/>
                 </Box>
 
-                <VStack ml = '10px' mr = '10px'>
+                <VStack ml = '10px' 
+                        mr = '10px' 
+                        w = {{base: '100%', md: '46%'}}  
+                        h = {{base: '95%', md: '95%'}}
+                >
                     <Box borderWidth = '2px' 
                          borderRadius = '2xl' 
                          p = '4px' 
-                         width = 'xl' 
-                         height = 'md' 
+                         w = '100%' 
+                         h = {{base: '34%', md: '100%'}} 
                          mb = '10px'
+                         overflow = 'hidden'
                     >
                         <Heading 
                             size = 'lg' 
@@ -152,7 +188,8 @@ const GameMasterView = () => {
                         <Divider/>
                         <Box
                             overflow = 'auto'
-                            height = 'calc(100% - 50px)'
+                            h = 'calc(100% - 50px)'
+                            maxH = 'calc(100% - 50px)'
                         >
                             <Log 
                                 logList = {logList}
@@ -164,8 +201,8 @@ const GameMasterView = () => {
                     <Box borderWidth = '2px' 
                          borderRadius = '2xl' 
                          p = '4px' 
-                         width = 'xl' 
-                         height = '34%'
+                         w = '100%' 
+                         h = {{base: '40%', md: '40%'}}
                     >
                         <Execution
                             roomID={roomID}
@@ -177,13 +214,20 @@ const GameMasterView = () => {
                             completedTasks = {completedTasks}
                             handleUndoRevive = {handleUndoRevive}
                             handleRemapping = {handleRemapping}
-                        />
-                    </Box> 
+                            handleAddNewAssassins = {handleAddNewAssassins}
+                            handleAddNewTargets = {handleAddNewTargets}
+                            handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
+           />
+                    </Box>
                 </VStack>
 
-                <VStack ml = '10px' mr = '16px'>
-                    <Box width = 'md' 
-                         height = '274px' 
+                <VStack ml = '10px' 
+                        mr = '16px' 
+                        w = {{ base: '100%', md: '29%' }}
+                        h = {{base: '95%', md: '95%'}}
+                >
+                    <Box w = {{base: '100%', md: '100%'}}
+                         h = {{base: '34%', md: '70%'}} 
                          borderWidth = '2px' 
                          borderRadius = '2xl'
                          overflow = 'auto' 
@@ -196,11 +240,15 @@ const GameMasterView = () => {
                                          arrayOfAlivePlayers={arrayOfAlivePlayers}
                                          handleRemapping = {handleRemapping}
                                          arrayOfDeadPlayers = {arrayOfDeadPlayers}
+                                         handleAddNewAssassins = {handleAddNewAssassins}
+                                         handleAddNewTargets = {handleAddNewTargets}
+                                         handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
+
                         />
                     </Box>
 
-                    <Box width = 'md' 
-                         height = 'sm' 
+                    <Box w = {{base: '100%', md: '100%'}}
+                         h = {{base: '34%', md: '100%'}} 
                          borderWidth = '2px' 
                          borderRadius = '2xl'
                          overflow = 'auto' 
@@ -218,7 +266,7 @@ const GameMasterView = () => {
                     </Box>
                 </VStack>
             </HStack>
-        </div>
+        </Box>
     );
 }
 
