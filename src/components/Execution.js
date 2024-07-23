@@ -18,6 +18,8 @@ import kill from '../assets/kill.png';
 import openseason from '../assets/openseason.png';
 import TaskCompletion from './TaskCompletion';
 import KillActionExecution from './KillActionExecution';
+import OpenSeason from './OpenSeason';
+
     
 const Execution = (props) => {
     const { roomID, 
@@ -34,10 +36,16 @@ const Execution = (props) => {
             handleSetShowMessageToTrue
         } = props;
     const [action, setAction] = useState('completeKill');
+    const [openSznTargets, setOpenSznTargets] = useState('');
+
 
     const handleActionChange = (actionType) => {
         setAction(actionType);
-    }
+    };
+
+    const handleOpenSzn = (givenName) => {
+        setOpenSznTargets(givenName);
+    };
 
     return (
         <VStack  h = '100%'>
@@ -146,6 +154,7 @@ const Execution = (props) => {
                         handleAddNewTargets = {handleAddNewTargets}
                         handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
                         handleRemapping = {handleRemapping}
+
                     />
                 </Flex>
             }
@@ -169,7 +178,13 @@ const Execution = (props) => {
                 </Flex>
             }
             {action === 'openSeason' && 
-                <Flex></Flex>
+                <Flex>
+                    <OpenSeason
+                        arrayOfAlivePlayers = {arrayOfAlivePlayers}
+                        roomID = {roomID}
+                        handleOpenSzn = {handleOpenSzn}
+                    />
+                </Flex>
             }
         </VStack>
     );

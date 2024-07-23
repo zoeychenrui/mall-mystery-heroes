@@ -113,7 +113,7 @@ const GameMasterView = () => {
     const handleRemapping = async (log) => {
         await addLog(log);
     }
-    
+
     //updates newTargets and newAssassins, and shows RemapPlayerModal
     const handleAddNewTargets = (targets) => {
         setNewTargets(targets);

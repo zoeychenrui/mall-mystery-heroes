@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { db } from '../utils/firebase';
 import { collection, 
          getDocs, 
@@ -82,19 +83,46 @@ const updateLogsForRoom = async (newLog, roomID) => {
     }
 }
 
-//fetches a player's targets from database
+//fetches a player's targets from database including openseason
 const fetchTargetsForPlayer = async (playerName, roomID) => {
     try {
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const playerQuery = query(playerCollectionRef, where('name', '==', playerName));
-        const playerSnapshot = await getDocs(playerQuery);
-        const playerTargets = playerSnapshot.docs[0].data().targets;
-        return playerTargets;
-    }    
-    catch (error) {
+        const openSeasonQuery = query(playerCollectionRef, where('openSeason', '==', true));
+
+        const [playerSnapshot, openSeasonSnapshot] = await Promise.all([
+            getDocs(playerQuery),
+            getDocs(openSeasonQuery),
+        ]);
+
+        let targets = [];
+        if (!playerSnapshot.empty) {
+            const playerTargets = playerSnapshot.docs[0].data().targets || [];
+            const openSeasonPlayers = openSeasonSnapshot.docs.map(doc => doc.data().name);
+            let foundIndex = -1;
+
+            for (let k = 0; k < openSeasonPlayers.length; k++) { // For each open season player
+                if (playerName === openSeasonPlayers[k]) { // If same name
+                    foundIndex = k;
+                    break; // Exit the loop once found
+                }
+            }
+
+            if (foundIndex !== -1) {
+                const newOpenSzn = openSeasonPlayers.toSpliced(foundIndex, 1);
+                targets = Array.from(new Set([...playerTargets, ...newOpenSzn]));
+            } else {
+                targets = Array.from(new Set([...playerTargets, ...openSeasonPlayers]));
+            }
+        }
+
+        return targets;
+
+    } catch (error) {
         console.error('Error fetching player targets: ', error);
+        return [];
     }
-}
+};
 
 //fetches all tasks by completion from database
 const fetchTasksByCompletionForRoom = async (isComplete, roomID) => {
@@ -271,7 +299,8 @@ const addPlayerForRoom = async (player, roomID) => {
         isAlive: true,
         score: 10,
         targets: [],
-        assassins: []
+        assassins: [],
+        openSeason: false
     })
     .then((docRef) => {
         console.log('Document written with ID: ', docRef.id);
