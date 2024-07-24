@@ -50,6 +50,10 @@ const TaskCompletion = (props) => {
         // eslint-disable-next-line
     },[arrayOfTasks, completedTasks]);
 
+    useEffect (() => {
+        setSelectedTask('');
+    }, [roomID]);
+
     return (  
         <Flex alignItems= 'center'>
             <Select placeholder = 'Select Task' 
