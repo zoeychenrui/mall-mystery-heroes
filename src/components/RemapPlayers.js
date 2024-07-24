@@ -2,9 +2,13 @@ import { fecthAlivePlayersByAscendAssassinsLengthForRoom,
          fecthAlivePlayersByAscendTargetsLengthForRoom, 
          fetchPlayerForRoom, 
          updateAssassinsForPlayer, 
-         updateTargetsForPlayer } from './dbCalls';
+         updateTargetsForPlayer 
+    } from './dbCalls';
 
 const RemapPlayers = (handleRemapping, createAlert) => {
+    const tempNewTargets = {};
+    const tempNewAssassins = {};
+
     //randomizes order of array
     const randomizeArray = (array) => {
         for (let i = 0; i < array.length; i++) {
@@ -13,15 +17,9 @@ const RemapPlayers = (handleRemapping, createAlert) => {
         }
         return array;
     }
-
-    const handleRegeneration = async (playersNeedingTarget, playersNeedingAssassins, arrayOfAlivePlayers, roomID) => {
-        const tempNewTargets = {};
-        const tempNewAssassins = {};
-
+    
+    const handleTargetRegeneration = async (playersNeedingTarget, arrayOfAlivePlayers, MAXTARGETS, roomID) => {
         try {
-            const MAXTARGETS = arrayOfAlivePlayers.length > 15 ? 3 : (arrayOfAlivePlayers.length > 5 ? 2 : 1); //defines what max targets each player should be assigned
-
-            //updates targets for players that need to update targets
             for (const player of playersNeedingTarget) {
                 const randomizedAlivePlayers = randomizeArray(arrayOfAlivePlayers);
                 
@@ -90,8 +88,14 @@ const RemapPlayers = (handleRemapping, createAlert) => {
                 tempNewTargets[player] = newTargetsForPlayer;
                 await updateTargetsForPlayer(player, newTargetArray, roomID);
                 console.log(`Targets updated for ${player} in database: ${newTargetArray}`);
-            }
+            } 
+        }catch (error) {
+            console.error('Error updating targets: ', error);
+        }
+    }
 
+    const handleAssassinRegeneration = async (playersNeedingAssassins, arrayOfAlivePlayers, MAXTARGETS, roomID) => {
+        try {
             for (const player of playersNeedingAssassins) {
                 const randomizedAlivePlayers = randomizeArray(arrayOfAlivePlayers);
                 
@@ -164,9 +168,18 @@ const RemapPlayers = (handleRemapping, createAlert) => {
                 await updateAssassinsForPlayer(player, newAssassinArray, roomID);
                 console.log(`Assassins updated for ${player} in database: ${newAssassinArray}`);
             }
+        } catch (error) {
+            console.error('Error updating assassins: ', error);
+        }
+    }
+    const handleRegeneration = async (playersNeedingTarget, playersNeedingAssassins, arrayOfAlivePlayers, roomID) => {
+        try {
+            const MAXTARGETS = arrayOfAlivePlayers.length > 15 ? 3 : (arrayOfAlivePlayers.length > 5 ? 2 : 1); //defines what max targets each player should be assigned
+            await handleTargetRegeneration(playersNeedingTarget, arrayOfAlivePlayers, MAXTARGETS, roomID);
+            await handleAssassinRegeneration(playersNeedingAssassins, arrayOfAlivePlayers, MAXTARGETS, roomID);
             return [tempNewTargets, tempNewAssassins];
         } catch(error) {
-            console.error("Error regenerating targets: ", error);
+            console.error("Error regenerating: ", error);
             createAlert('error', 'Error Regenerating Targets', 'Check console', 1500);
         }
     }
