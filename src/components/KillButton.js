@@ -3,7 +3,10 @@ import { Box, Tooltip } from '@chakra-ui/react';
 import CreateAlert from './CreateAlert';
 import kill from '../assets/kill-white.png';
 import killHover from '../assets/kill-hover.png';
-import { fetchPlayerForRoom, killPlayerForRoom, updatePointsForPlayer } from './dbCalls';
+import { fetchPlayerForRoom, 
+         killPlayerForRoom, 
+         updatePointsForPlayer 
+    } from './dbCalls';
 import RemapPlayers from './RemapPlayers';
 
 const KillButton = (props) => {

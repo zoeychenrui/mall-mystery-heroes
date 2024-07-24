@@ -139,7 +139,10 @@ const GameMasterView = () => {
             />
 
             <Box h = '6%'>
-                <HeaderExecution roomID = {roomID}/>
+                <HeaderExecution 
+                    roomID = {roomID}
+                    arrayOfAlivePlayers = {arrayOfAlivePlayers}
+                />
             </Box>
 
             <HStack alignItems = 'left'
