@@ -112,7 +112,7 @@ const TaskButton = (props) => {
             }
             //updates player live status for revival missions
             else if (task.taskType === 'Revival Mission') {
-                const alivePlayers = arrayOfAlivePlayers;
+                const alivePlayers = [...arrayOfAlivePlayers];
                 //revives newly checked players
                 for (const player of newCheckedPlayers) {
                     await updateIsAliveForPlayer(player, true, roomID);

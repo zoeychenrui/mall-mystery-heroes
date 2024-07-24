@@ -1,15 +1,17 @@
 import React from 'react';
 import { Image,
          Heading,
-         HStack   
+         HStack,   
+         Spacer
     } from '@chakra-ui/react';
 import whiteLogo from '../assets/mall-logo-white-2.png';
-const HeaderExecution = ({ roomID }) => {
+import ResetTargetsButton from './ResetTargetsButton';
+const HeaderExecution = ({ roomID, arrayOfAlivePlayers }) => {
     return (  
         <HStack justifyContent = 'left'
-                p = '5px'
-                ml = '16px'
-                size = ''
+                p = '8px'
+                h = '100%'
+                alignItems = 'center'
         >
             <Image objectFit = 'cover'
                    src = {whiteLogo}
@@ -17,6 +19,11 @@ const HeaderExecution = ({ roomID }) => {
                    boxSize = '36px'
             />
             <Heading>Lobby #: {roomID}</Heading>
+            <Spacer />
+            <ResetTargetsButton 
+                roomID = {roomID}
+                arrayOfPlayers = {arrayOfAlivePlayers}
+            />
         </HStack>
     );
 }

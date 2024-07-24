@@ -23,12 +23,13 @@ const DeadPlayerReviveButton = (props) => {
     //handling for when revive image for player is clicked
     const handleReviveClicked = async () => {
         if (player === '' || !player) {
-            return createAlert('error', 'Error', 'Error: player undefined', 1500);
+            return createAlert('error', 'Error', 'player undefined', 1500);
         }
         console.log('Reviving player: ', player);
         //revives and remaps player
         await updateIsAliveForPlayer(player, true, roomID);
-        const [target, assassin] = await handleRegeneration(player, player, arrayOfAlivePlayers, roomID);
+        const activePlayers = [...arrayOfAlivePlayers, player];
+        const [target, assassin] = await handleRegeneration(player, player, activePlayers, roomID);
         handleAddNewAssassins(assassin);
         handleAddNewTargets(target);
         handleSetShowMessageToTrue();
@@ -37,14 +38,16 @@ const DeadPlayerReviveButton = (props) => {
 
 
     return (
-        <Box mt = '2px' mb = '2px' onMouseEnter = {() => setIsHovering(true)} 
+        <Box mt = '2px' 
+             mb = '2px'
+             onMouseEnter = {() => setIsHovering(true)} 
              onMouseLeave = {() => setIsHovering(false)}
         >            
             <Image 
                 src = {isHovering ? reviveHover : revive}
                 alt = 'Revive Player'
                 cursor = 'pointer'
-                onClick = {() => handleReviveClicked(player.name)}
+                onClick = {handleReviveClicked}
                 width = '30px'
                 height = '30px'
             />  

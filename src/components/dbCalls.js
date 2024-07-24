@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { db } from '../utils/firebase';
 import { collection, 
          getDocs, 
@@ -385,6 +384,44 @@ const fetchReferenceForTask = async (taskID, roomID) => {
     }
 }
 
+//fetches array of alive players in descending order of assassins and then score
+const fecthAlivePlayersByAscendAssassinsLengthForRoom = async (roomID, player, playerAssassins) => {
+    try {
+        const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
+        const playerQuery = query(playerCollectionRef, 
+                                  where('isAlive', '==', true),
+                                  orderBy('assassins'),
+                                );
+        const playerSnapshot = await getDocs(playerQuery);
+        const players = playerSnapshot.docs
+                                      .map(doc => doc.data())
+                                      .filter(doc => doc.name !== player && !playerAssassins.includes(doc.name));
+        return players;
+    }
+    catch (error) {
+        throw new Error('Error fetching alive players: ', error.message);
+    }
+}
+
+//fetches array of alive players in descending order of assassins and then score
+const fecthAlivePlayersByAscendTargetsLengthForRoom = async (roomID, player, playerTargets) => {
+    try {
+        const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
+        const playerQuery = query(playerCollectionRef, 
+                                  where('isAlive', '==', true),
+                                  orderBy('targets')
+                                );
+        const playerSnapshot = await getDocs(playerQuery);
+        const players = playerSnapshot.docs.map(doc => doc.data())
+                                           .filter(doc => doc.name !== player)
+                                           .filter(doc => !playerTargets.includes(doc.name));  
+        return players;
+    }
+    catch (error) {
+        throw new Error('Error fetching alive players: ', error.message);
+    }
+}
+
 export { 
     fetchAllPlayersForRoom,
     fetchPlayersByStatusForRoom,
@@ -408,5 +445,7 @@ export {
     updateAssassinsForPlayer,
     updateTargetsForPlayer,
     fetchAssassinsForPlayer,
-    fetchReferenceForTask
+    fetchReferenceForTask,
+    fecthAlivePlayersByAscendAssassinsLengthForRoom,
+    fecthAlivePlayersByAscendTargetsLengthForRoom
 };
