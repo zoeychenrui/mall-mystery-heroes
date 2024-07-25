@@ -284,9 +284,9 @@ const killPlayerForRoom = async (target, roomID) => {
 //add player to database
 const addPlayerForRoom = async (player, roomID) => {
     const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
-    const trimmedLowercaseName  = player.trim().toLowerCase();
+    const trimmedLowercaseName  = player.replace(/\s/g, '').toLowerCase();
     //check if player already exists
-    const playerQuery = query(playerCollectionRef, where('name', '==', trimmedLowercaseName));
+    const playerQuery = query(playerCollectionRef, where('trimmedNameLowerCase', '==', trimmedLowercaseName));
     const playerSnapshot = await getDocs(playerQuery);
     if (!playerSnapshot.empty) {
         throw new Error('Player already exists');
@@ -294,7 +294,7 @@ const addPlayerForRoom = async (player, roomID) => {
     //adds if not
     addDoc(playerCollectionRef, {
         name: player,
-        nameLowerCase: player.toLowerCase(),
+        trimmedNameLowerCase: player.replace(/\s/g, '').toLowerCase(),
         isAlive: true,
         score: 10,
         targets: [],
@@ -385,7 +385,7 @@ const fetchReferenceForTask = async (taskID, roomID) => {
 }
 
 //fetches array of alive players in descending order of assassins and then score
-const fecthAlivePlayersByAscendAssassinsLengthForRoom = async (roomID, player, playerAssassins) => {
+const fetchAlivePlayersByAscendAssassinsLengthForRoom = async (roomID, player) => {
     try {
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const playerQuery = query(playerCollectionRef, 
@@ -393,9 +393,8 @@ const fecthAlivePlayersByAscendAssassinsLengthForRoom = async (roomID, player, p
                                   orderBy('assassins'),
                                 );
         const playerSnapshot = await getDocs(playerQuery);
-        const players = playerSnapshot.docs
-                                      .map(doc => doc.data())
-                                      .filter(doc => doc.name !== player && !playerAssassins.includes(doc.name));
+        const players = playerSnapshot.docs.map(doc => doc.data())
+                                           .filter(doc => doc.name !== player);
         return players;
     }
     catch (error) {
@@ -404,7 +403,7 @@ const fecthAlivePlayersByAscendAssassinsLengthForRoom = async (roomID, player, p
 }
 
 //fetches array of alive players in descending order of assassins and then score
-const fecthAlivePlayersByAscendTargetsLengthForRoom = async (roomID, player, playerTargets) => {
+const fetchAlivePlayersByAscendTargetsLengthForRoom = async (roomID, player) => {
     try {
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const playerQuery = query(playerCollectionRef, 
@@ -413,8 +412,7 @@ const fecthAlivePlayersByAscendTargetsLengthForRoom = async (roomID, player, pla
                                 );
         const playerSnapshot = await getDocs(playerQuery);
         const players = playerSnapshot.docs.map(doc => doc.data())
-                                           .filter(doc => doc.name !== player)
-                                           .filter(doc => !playerTargets.includes(doc.name));  
+                                           .filter(doc => doc.name !== player);
         return players;
     }
     catch (error) {
@@ -446,6 +444,6 @@ export {
     updateTargetsForPlayer,
     fetchAssassinsForPlayer,
     fetchReferenceForTask,
-    fecthAlivePlayersByAscendAssassinsLengthForRoom,
-    fecthAlivePlayersByAscendTargetsLengthForRoom
+    fetchAlivePlayersByAscendAssassinsLengthForRoom,
+    fetchAlivePlayersByAscendTargetsLengthForRoom
 };

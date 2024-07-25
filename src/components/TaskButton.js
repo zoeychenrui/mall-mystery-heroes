@@ -30,7 +30,8 @@ import { updateIsCompleteToTrueForTask,
          updateCompletedByForTask, 
          updatePointsForPlayer, 
          fetchReferenceForTask,
-         updateIsAliveForPlayer
+         updateIsAliveForPlayer,
+         fetchPlayerForRoom
     } from './dbCalls';
 
 const TaskButton = (props) => {    
@@ -54,22 +55,14 @@ const TaskButton = (props) => {
     const [newRemovedPlayers, setNewRemovedPlayers] = useState([]);
     const handleRegeneration = RemapPlayers(handleRemapping, createAlert);
 
-    //keeps checked players whenever page is reset
-    useEffect(() => {
-        const fetchCheckedPlayers = async() => {
+    useEffect (() => {
+        const fetchCheckedPlayers = async () => {
             if (!taskID) return;
             const task = await fetchTaskForRoom(taskID, roomID);
             setCheckedPlayers(task.completedBy);
-        }
-
-        if (roomID) {
-            fetchCheckedPlayers();
-            console.log('checked players:', checkedPlayers);
-        }
-
-        //disable below because 'fetchedCheckedPlayers' should not be a dependency
-        //eslint-disable-next-line
-    }, [roomID, taskID]);
+        }       
+        if (taskID) fetchCheckedPlayers();
+    }, [roomID,taskID])
 
     //cancels actions made in modal when cancel button is clicked
     const handleCancel = () => {
@@ -106,6 +99,8 @@ const TaskButton = (props) => {
                 }
                 //removes points for those that were initially checked, but now removed
                 for (const player of newRemovedPlayers) {
+                    const playerDoc = await fetchPlayerForRoom(player, roomID);
+                    if (playerDoc.data().isAlive === false) continue;
                     points = points * -1;
                     await updatePointsForPlayer(player, points, roomID);
                 }
@@ -195,14 +190,22 @@ const TaskButton = (props) => {
         const task = await fetchTaskForRoom(taskID, roomID);
         //alive players are shown for tasks
         if (task.taskType === 'Task') {
-            const tempList = await fetchPlayersByStatusForRoom(true, roomID);
-            tempList.push(checkedPlayers);
+            let tempList = await fetchPlayersByStatusForRoom(true, roomID);
+            for (const player of task.completedBy) {
+                if (!tempList.includes(player)) {
+                    tempList.push(player);
+                }
+            }
             setListOfchoices(tempList);
         }
         //dead players are shown for revival missions
         else if (task.taskType === 'Revival Mission') {
-            const tempList = await fetchPlayersByStatusForRoom(false, roomID);
-            tempList.concat(task.completedBy);
+            let tempList = await fetchPlayersByStatusForRoom(false, roomID);
+            for (const player of task.completedBy) {
+                if (!tempList.includes(player)) {
+                    tempList.push(player);
+                }
+            }            
             setListOfchoices(tempList);
         }
         //error when invalid task type
@@ -213,11 +216,21 @@ const TaskButton = (props) => {
 
     //updates ListofChoices when the task changes
     useEffect(() => {
-        createListOfChoices();
+        const fetchCheckedPlayersAndCreateChoices = async () => {
+            await createListOfChoices();
+        }
+        
+        if (taskID) {
+            fetchCheckedPlayersAndCreateChoices();
+        }
         console.log('task changed. List of choices updated');
         //disabled below becaue 'createListOfchoices' does not need to be in dependency array
         //eslint-disable-next-line
-    }, [taskID])
+    }, [roomID, taskID])
+
+    useEffect(() => {
+        console.log('listOfChoices:', listOfChoices);
+    }, [listOfChoices])
 
     return (
         <Box onMouseEnter = {() => setIsHovering(true)} 

@@ -1,5 +1,5 @@
-import { fecthAlivePlayersByAscendAssassinsLengthForRoom, 
-         fecthAlivePlayersByAscendTargetsLengthForRoom, 
+import { fetchAlivePlayersByAscendAssassinsLengthForRoom, 
+         fetchAlivePlayersByAscendTargetsLengthForRoom, 
          fetchPlayerForRoom, 
          updateAssassinsForPlayer, 
          updateTargetsForPlayer 
@@ -66,7 +66,7 @@ const RemapPlayers = (handleRemapping, createAlert) => {
                 if (newTargetArray.length === 0) {
                     console.error('running final case for targets');
                     try {
-                        const lastCaseTargetForPlayer = await fecthAlivePlayersByAscendAssassinsLengthForRoom(roomID, player, playerData.assassins);
+                        const lastCaseTargetForPlayer = await fetchAlivePlayersByAscendAssassinsLengthForRoom(roomID, player);
                         console.log(`lastCaseTargetForPlayer: `, lastCaseTargetForPlayer);
                         let index = 0;
                         for (const target of lastCaseTargetForPlayer) {
@@ -143,7 +143,7 @@ const RemapPlayers = (handleRemapping, createAlert) => {
                 if (newAssassinArray.length === 0) {
                     console.error('running final case for assassins');
                     try {
-                        const lastCaseAssassinForPlayer = await fecthAlivePlayersByAscendTargetsLengthForRoom(roomID, player, playerData.targets);
+                        const lastCaseAssassinForPlayer = await fetchAlivePlayersByAscendTargetsLengthForRoom(roomID, player);
                         console.log(`lastCaseAssassinForPlayer: `, lastCaseAssassinForPlayer);
                         let index = 0;
                         for (const possibleLastCaseAssassin of lastCaseAssassinForPlayer) {
