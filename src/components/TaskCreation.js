@@ -51,8 +51,10 @@ const TaskCreation = ({roomID, onNewTaskAdded}) => {
 
     //handles task submisison
     const handleAddTask = async () => {
+        const titleTrimmedLowerCase = TaskTitle.replace(/\s/g, '').toLowerCase();
         let newTask = {
             title: TaskTitle,
+            titleTrimmedLowerCase: titleTrimmedLowerCase,
             description: TaskDescription,
             pointValue: PointValue,
             taskType: selectedTaskType,

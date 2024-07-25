@@ -16,7 +16,7 @@ import {AlertDialog,
         Thead
     } from '@chakra-ui/react';
 import { updateAssassinsForPlayer, updateTargetsForPlayer } from './dbCalls';
-const ResetTargetsButton = ({arrayOfPlayers, roomID}) => {
+const ResetTargetsButton = ({arrayOfPlayers, addLog, roomID}) => {
     //store player's data for three things: 
     //1. number of assassins (hits on a person)
     //2. index of last target
@@ -45,6 +45,11 @@ const ResetTargetsButton = ({arrayOfPlayers, roomID}) => {
     //actions that occur when clicking yes
     const onYesClose = async () => {
         await UpdateDatabase(arrayOfPlayers, targetMap);
+        await addLog("Reseting Targets");
+        for (const player of arrayOfPlayers) {
+            await addLog('New Target(s) for ' + player + ': ' + targetMap.get(player).join(', '));
+            console.log('looping for ' + player);
+        }
         onClose();
     }
     //updates targets in database

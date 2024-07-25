@@ -6,7 +6,7 @@ import { Image,
     } from '@chakra-ui/react';
 import whiteLogo from '../assets/mall-logo-white-2.png';
 import ResetTargetsButton from './ResetTargetsButton';
-const HeaderExecution = ({ roomID, arrayOfAlivePlayers }) => {
+const HeaderExecution = ({ roomID, addLog, arrayOfAlivePlayers }) => {
     return (  
         <HStack justifyContent = 'left'
                 p = '8px'
@@ -23,6 +23,7 @@ const HeaderExecution = ({ roomID, arrayOfAlivePlayers }) => {
             <ResetTargetsButton 
                 roomID = {roomID}
                 arrayOfPlayers = {arrayOfAlivePlayers}
+                addLog = {addLog}
             />
         </HStack>
     );

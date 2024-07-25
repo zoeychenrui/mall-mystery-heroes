@@ -215,7 +215,7 @@ const addTaskForRoom = async (task, roomID) => {
 const checkForTaskDupesForRoom = async (task, roomID) => {
     try {
         const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
-        const taskQuery = query(taskCollectionRef, where('title', '==', task.title));
+        const taskQuery = query(taskCollectionRef, where('titleTrimmedLowerCase', '==', task.titleTrimmedLowerCase));
         const taskSnapshot = await getDocs(taskQuery);
         if (taskSnapshot.empty) {
             return false;

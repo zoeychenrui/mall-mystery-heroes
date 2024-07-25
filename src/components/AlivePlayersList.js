@@ -14,6 +14,7 @@ import { onSnapshot } from "firebase/firestore";
 import { fetchAlivePlayersQueryByDescendPointsForRoom } from './dbCalls';
 
 const AlivePlayersList = ({roomID}) => {
+    const [expandedIndex, setExpandedIndex] = useState(-1);
     // Construct a query that gets all players in the room that are still alive, sorted by score
     const playerAlivePlayersQuery = fetchAlivePlayersQueryByDescendPointsForRoom(roomID);
 
@@ -35,14 +36,18 @@ const AlivePlayersList = ({roomID}) => {
             }));
             // Update the state with the new values
             setPlayers(updatedPlayers);
+            setExpandedIndex(-1);
         });
 
         // Clean up the subscription when the component unmounts
         return () => unsubscribe();
         // disabled next line because playerAlivePlayersQuery should not be in dependency array
         // eslint-disable-next-line
-    }, []); // empty dependency array means this effect will only run when the component mounts
+    }, []);
 
+    const handleAccordionChange = (value) => {
+        setExpandedIndex(value === expandedIndex ? -1 : value);
+    }
 
     if (players.length === 0) {
         return null;
@@ -59,6 +64,7 @@ const AlivePlayersList = ({roomID}) => {
                  <Accordion 
                     width = '100%' 
                     allowToggle
+                    index = {expandedIndex}
                 >
                     {players.map((player) => (
                         <AccordionItem 
@@ -71,6 +77,7 @@ const AlivePlayersList = ({roomID}) => {
                             >
                                 <AccordionButton 
                                     fontSize = '25px'
+                                    onClick = {() => handleAccordionChange(players.indexOf(player))}
                                 >
                                     <Box 
                                         as = 'span' 
