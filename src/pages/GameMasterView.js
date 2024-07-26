@@ -140,6 +140,7 @@ const GameMasterView = () => {
 
             <Box h = '6%'>
                 <HeaderExecution 
+                    addLog = {addLog}
                     roomID = {roomID}
                     arrayOfAlivePlayers = {arrayOfAlivePlayers}
                 />
