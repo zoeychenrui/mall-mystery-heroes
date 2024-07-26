@@ -121,9 +121,10 @@ const OpenSeason = ({ arrayOfAlivePlayers, roomID, handleOpenSzn }) => {
                 />
                 <Button
                     variant="solid"
-                    colorScheme="green"
+                    colorScheme="red"
                     onClick={endOpenSzn}
-                    style={{ cursor: 'pointer', marginLeft: '1rem' }}
+                    style={{ cursor: 'pointer', marginLeft: '1rem', width: '200px', height: '45px' }}
+                    size='lg'
                 >
                     End Season
                 </Button>
