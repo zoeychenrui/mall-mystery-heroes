@@ -45,7 +45,7 @@ const ResetTargetsButton = ({arrayOfPlayers, addLog, roomID}) => {
     //actions that occur when clicking yes
     const onYesClose = async () => {
         await UpdateDatabase(arrayOfPlayers, targetMap);
-        await addLog("Reseting Targets");
+        await addLog("Resetting Targets");
         for (const player of arrayOfPlayers) {
             await addLog('New Target(s) for ' + player + ': ' + targetMap.get(player).join(', '));
             console.log('looping for ' + player);
