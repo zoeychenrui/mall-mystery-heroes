@@ -4,7 +4,7 @@ import { db } from '../utils/firebase';
 import { collection, query, getDocs, where, updateDoc } from "firebase/firestore";
 import opensznimg from '../assets/openseason-white.svg';
 
-const OpenSeason = ({ arrayOfAlivePlayers, roomID, handleOpenSzn }) => {
+const OpenSeason = ({ arrayOfAlivePlayers, roomID, handleOpenSzn, handleOpenSznstarted, handleOpenSznended }) => {
     const [selectedOpenSeasonPlayer, setSelectedOpenSeasonPlayer] = useState('');
     const [loading, setLoading] = useState(false);
     const toast = useToast();
@@ -35,7 +35,7 @@ const OpenSeason = ({ arrayOfAlivePlayers, roomID, handleOpenSzn }) => {
 
             if (!sznSnapshot.empty) {
                 const sznRef = sznSnapshot.docs[0].ref;
-                await updateDoc(sznRef, { openSeason: true }); // sets player as open season in the database
+                await updateDoc(sznRef, { openSeason: true }); 
                 toast({
                     title: "Open season set.",
                     description: `${selectedOpenSeasonPlayer} is now open season.`,
@@ -43,6 +43,9 @@ const OpenSeason = ({ arrayOfAlivePlayers, roomID, handleOpenSzn }) => {
                     duration: 5000,
                     isClosable: true,
                 });
+                if (sznSnapshot.docs[0].get('openSeason') === false) {
+                    handleOpenSznstarted(selectedOpenSeasonPlayer);
+                }
             } else {
                 toast({
                     title: "Player not found.",
@@ -84,6 +87,9 @@ const OpenSeason = ({ arrayOfAlivePlayers, roomID, handleOpenSzn }) => {
                     duration: 5000,
                     isClosable: true,
                 });
+                if (sznSnapshot.docs[0].get('openSeason') === true) {
+                    handleOpenSznended(selectedOpenSeasonPlayer);
+                }
             } else {
                 toast({
                     title: "Player not found.",
@@ -121,9 +127,10 @@ const OpenSeason = ({ arrayOfAlivePlayers, roomID, handleOpenSzn }) => {
                 />
                 <Button
                     variant="solid"
-                    colorScheme="green"
+                    colorScheme="red"
                     onClick={endOpenSzn}
-                    style={{ cursor: 'pointer', marginLeft: '1rem' }}
+                    style={{ cursor: 'pointer', marginLeft: '1rem', width: '200px', height: '45px' }}
+                    size='lg'
                 >
                     End Season
                 </Button>

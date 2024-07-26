@@ -17,6 +17,7 @@ const DashBoard = () => {
       if (user) {
         const roomRef = await addDoc(collection(db, "rooms"), { 
           hostId: user.uid,
+          isGameActive : true,
           logs: [],
         });
         navigate(`/rooms/${roomRef.id}/lobby`);

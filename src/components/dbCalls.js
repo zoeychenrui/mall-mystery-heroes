@@ -273,7 +273,8 @@ const killPlayerForRoom = async (target, roomID) => {
         await unmapPlayers(target, roomID);
         await updateDoc(targetDoc, { 
             score: 0, 
-            isAlive: false 
+            isAlive: false, 
+            openSeason: false // I need to log that openseason has ended
         });
     }
     catch (error) {
@@ -420,6 +421,31 @@ const fetchAlivePlayersByAscendTargetsLengthForRoom = async (roomID, player) => 
     }
 }
 
+//ends the game
+const endGame = async (roomID) => {
+    try {
+        const roomRef = doc(db, 'rooms', roomID);
+        const roomSnapshot = await getDoc(roomRef);
+
+        if (roomSnapshot.exists()) {
+            await updateDoc(roomRef, { isGameActive: false });
+            console.log('Game ended successfully.');
+        } else {
+            console.log('No such document!');
+        }
+    } catch (error) {
+        console.error('Error ending game: ', error);
+    }
+};
+
+// const setOpenSznTrue = async (roomID, openSeasonPlayer) => {
+//     const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
+//     const sznQuery = query(playerCollectionRef, where('name', '==', selectedOpenSeasonPlayer));
+//     const sznSnapshot = await getDocs(sznQuery);
+//     //work in progress to refactor
+
+// }
+
 export { 
     fetchAllPlayersForRoom,
     fetchPlayersByStatusForRoom,
@@ -445,5 +471,6 @@ export {
     fetchAssassinsForPlayer,
     fetchReferenceForTask,
     fetchAlivePlayersByAscendAssassinsLengthForRoom,
-    fetchAlivePlayersByAscendTargetsLengthForRoom
+    fetchAlivePlayersByAscendTargetsLengthForRoom,
+    endGame
 };

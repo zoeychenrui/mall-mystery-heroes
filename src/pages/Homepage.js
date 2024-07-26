@@ -21,12 +21,6 @@ const Homepage = () => {
             alt='logo white'
             mb={5} // Adds margin bottom to the Image
           />
-          {/* <Heading
-            mb={8}
-            color="brand.100"
-          >
-            Mall Mystery Heroes
-          </Heading>  We need to decide if we want this*/}
         </Stack>
         <Divider orientation='vertical' height='440px' mx={8} />
         <Box textAlign="center">
