@@ -273,7 +273,8 @@ const killPlayerForRoom = async (target, roomID) => {
         await unmapPlayers(target, roomID);
         await updateDoc(targetDoc, { 
             score: 0, 
-            isAlive: false 
+            isAlive: false, 
+            openSeason: false // I need to log that openseason has ended
         });
     }
     catch (error) {
