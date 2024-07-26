@@ -22,6 +22,7 @@ const DeadPlayerReviveButton = (props) => {
 
     //handling for when revive image for player is clicked
     const handleReviveClicked = async () => {
+        console.error('playerName: ', player);
         if (player === '' || !player) {
             return createAlert('error', 'Error', 'player undefined', 1500);
         }
@@ -29,7 +30,7 @@ const DeadPlayerReviveButton = (props) => {
         //revives and remaps player
         await updateIsAliveForPlayer(player, true, roomID);
         const activePlayers = [...arrayOfAlivePlayers, player];
-        const [target, assassin] = await handleRegeneration(player, player, activePlayers, roomID);
+        const [target, assassin] = await handleRegeneration([player], [player], activePlayers, roomID);
         handleAddNewAssassins(assassin);
         handleAddNewTargets(target);
         handleSetShowMessageToTrue();

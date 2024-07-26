@@ -63,20 +63,18 @@ const RemapPlayers = (handleRemapping, createAlert) => {
                 }
 
                 //final case if no suitable matches were found
-                if (newTargetArray.length === 0) {
-                    console.error('running final case for targets');
+                if (newTargetArray.length < MAXTARGETS - 1) {
+                    console.error('running final case for targets on ', player);
                     try {
                         const lastCaseTargetForPlayer = await fetchAlivePlayersByAscendAssassinsLengthForRoom(roomID, player);
                         console.log(`lastCaseTargetForPlayer: `, lastCaseTargetForPlayer);
-                        let index = 0;
                         for (const target of lastCaseTargetForPlayer) {
                             if (target) {
                                 newTargetArray.push(target.name);
                                 await updateAssassinsForPlayer(target.name, [...target.assassins, player], roomID);
                                 await handleRemapping("New target for " + player + ": " + target.name);
-                                index++;
                             }
-                            if (index >= MAXTARGETS) {
+                            if (newTargetArray.length >= MAXTARGETS) {
                                 break;
                             }
                         }
@@ -140,21 +138,20 @@ const RemapPlayers = (handleRemapping, createAlert) => {
                 }
 
                 //final case if no suitable matches were found
-                if (newAssassinArray.length === 0) {
-                    console.error('running final case for assassins');
+                if (newAssassinArray.length < MAXTARGETS - 1) {
+                    console.error('running final case for assassins on ', player);
                     try {
                         const lastCaseAssassinForPlayer = await fetchAlivePlayersByAscendTargetsLengthForRoom(roomID, player);
                         console.log(`lastCaseAssassinForPlayer: `, lastCaseAssassinForPlayer);
-                        let index = 0;
                         for (const possibleLastCaseAssassin of lastCaseAssassinForPlayer) {
                             if (possibleLastCaseAssassin) {
                                 newAssassinArray.push(possibleLastCaseAssassin.name);
                                 await updateTargetsForPlayer(possibleLastCaseAssassin.name, [...possibleLastCaseAssassin.targets, player], roomID);
                                 await handleRemapping("New target for " + possibleLastCaseAssassin.name + ": " + player);
-                                index++
                             }
-                            if (index >= MAXTARGETS) {
+                            if (newAssassinArray.length >= MAXTARGETS) {
                                 break;
+                                console.error('breaking');
                             }
                         }
                     } catch (error) {

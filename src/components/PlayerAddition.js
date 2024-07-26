@@ -24,7 +24,7 @@ const PlayerAddition = (props) => {
 
     //handles function to add player
     const handleAddPlayer = async () => {
-        if (playerName === '') {
+        if (playerName.replace(/\s/g, '') === '') {
             return createAlert('error', 'Error', 'name cannot be blank', 1500);
         }
         try {

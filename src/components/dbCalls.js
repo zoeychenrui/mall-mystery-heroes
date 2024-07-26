@@ -257,7 +257,7 @@ const fetchPlayerForRoom = async (playerName, roomID) => {
         }
     }
     catch (error) {
-        console.error('Error fetching player: ', error);
+        console.error(`Error fetching player ${playerName}: `, error);
     }
 }
 
@@ -299,7 +299,9 @@ const addPlayerForRoom = async (player, roomID) => {
         isAlive: true,
         score: 10,
         targets: [],
+        targetsLength: 0,
         assassins: [],
+        assassinsLength: 0,
         openSeason: false
     })
     .then((docRef) => {
@@ -333,7 +335,10 @@ const updateAssassinsForPlayer = async (player, assassins, roomID) => {
         const playerQuery = query(playerCollectionRef, where('name', '==', player));
         const playerSnapshot = await getDocs(playerQuery);
         const playerdoc = playerSnapshot.docs[0].ref;
-        await updateDoc(playerdoc, { assassins: assassins });
+        await updateDoc(playerdoc, { 
+            assassins: assassins,
+            assassinsLength: assassins.length 
+        });
     }
     catch (error) {
         console.error('Error updating player assassins: ', error);
@@ -347,7 +352,11 @@ const updateTargetsForPlayer = async (player, targets, roomID) => {
         const playerQuery = query(playerCollectionRef, where('name', '==', player));
         const playerSnapshot = await getDocs(playerQuery);
         const playerdoc = playerSnapshot.docs[0].ref;
-        await updateDoc(playerdoc, { targets: targets });
+        await updateDoc(playerdoc, { 
+            targets: targets,
+            targetsLength: targets.length
+        });
+
     }
     catch (error) {
         console.error('Error updating player targets: ', error);
@@ -391,11 +400,13 @@ const fetchAlivePlayersByAscendAssassinsLengthForRoom = async (roomID, player) =
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const playerQuery = query(playerCollectionRef, 
                                   where('isAlive', '==', true),
-                                  orderBy('assassins'),
+                                  orderBy('assassinsLength', 'asc'),
+                                  orderBy('score', 'desc')
                                 );
         const playerSnapshot = await getDocs(playerQuery);
         const players = playerSnapshot.docs.map(doc => doc.data())
                                            .filter(doc => doc.name !== player);
+        console.log('players: ', players);
         return players;
     }
     catch (error) {
@@ -409,11 +420,13 @@ const fetchAlivePlayersByAscendTargetsLengthForRoom = async (roomID, player) => 
         const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
         const playerQuery = query(playerCollectionRef, 
                                   where('isAlive', '==', true),
-                                  orderBy('targets')
+                                  orderBy('targetsLength', 'asc'),
+                                  orderBy('score', 'asc')
                                 );
         const playerSnapshot = await getDocs(playerQuery);
         const players = playerSnapshot.docs.map(doc => doc.data())
                                            .filter(doc => doc.name !== player);
+        console.log('players: ', players);
         return players;
     }
     catch (error) {
