@@ -36,17 +36,14 @@ const Endgamebutton = (roomID) => {
 
     return (
         <Flex>
-            <Button bg = 'white'
-                    color = 'black'
+            <Button bg = 'red.500'
+                    color = 'white'
                     variant = 'solid'
-                    // size = 'lg'
+                    size = 'md'
                     borderRadius = '3xl'
-                    _hover = {{bg: 'brand.400', color: 'white'}}
-                    mt = '8px'
-                    mb= '8px'
-                    // pos = 'absolute' 
-                    // right = '20px'
+                    _hover = {{bg: 'white', color: 'black'}}
                     onClick = {handleClick}
+                    mr = '12px'
             >End Game
             </Button>
             <AlertDialog

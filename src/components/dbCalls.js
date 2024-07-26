@@ -459,6 +459,13 @@ const endGame = async (roomID) => {
 
 // }
 
+const checkOpenSzn = async (roomID, selectedOpenSeasonPlayer) => {
+    const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
+    const sznQuery = query(playerCollectionRef, where('name', '==', selectedOpenSeasonPlayer));
+    const sznSnapshot = await getDocs(sznQuery);
+    return sznSnapshot.docs[0].get('openSeason');
+}
+
 export { 
     fetchAllPlayersForRoom,
     fetchPlayersByStatusForRoom,
@@ -485,5 +492,6 @@ export {
     fetchReferenceForTask,
     fetchAlivePlayersByAscendAssassinsLengthForRoom,
     fetchAlivePlayersByAscendTargetsLengthForRoom,
-    endGame
+    endGame,
+    checkOpenSzn
 };
