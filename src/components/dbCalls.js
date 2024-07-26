@@ -421,6 +421,7 @@ const fetchAlivePlayersByAscendTargetsLengthForRoom = async (roomID, player) => 
     }
 }
 
+//ends the game
 const endGame = async (roomID) => {
     try {
         const roomRef = doc(db, 'rooms', roomID);
@@ -437,7 +438,13 @@ const endGame = async (roomID) => {
     }
 };
 
+// const setOpenSznTrue = async (roomID, openSeasonPlayer) => {
+//     const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
+//     const sznQuery = query(playerCollectionRef, where('name', '==', selectedOpenSeasonPlayer));
+//     const sznSnapshot = await getDocs(sznQuery);
+//     //work in progress to refactor
 
+// }
 
 export { 
     fetchAllPlayersForRoom,

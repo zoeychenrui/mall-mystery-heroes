@@ -76,6 +76,14 @@ const GameMasterView = () => {
         await addLog(killedPlayerName + " was killed by " + assassinName);
     };
 
+    const handleOpenSznstarted = async (openSznplayer) => {
+        await addLog(openSznplayer + " has open season on them");
+    }
+
+    const handleOpenSznended = async (openSznplayer) => {
+        await addLog("open season has ended for " + openSznplayer);
+    }
+
     //updates ArrayOfDeadPlayers and adds player to arrayOfAlivePlayers
     const handlePlayerRevive = async (revivedPlayerName) => {
         setArrayOfDeadPlayers((prevArrayOfDeadPlayers) => 
@@ -221,6 +229,8 @@ const GameMasterView = () => {
                             handleAddNewAssassins = {handleAddNewAssassins}
                             handleAddNewTargets = {handleAddNewTargets}
                             handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
+                            handleOpenSznstarted = {handleOpenSznstarted}
+                            handleOpenSznended = {handleOpenSznended}
            />
                     </Box>
                 </VStack>

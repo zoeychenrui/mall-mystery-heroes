@@ -33,7 +33,9 @@ const Execution = (props) => {
             handleRemapping,
             handleAddNewTargets,
             handleAddNewAssassins,
-            handleSetShowMessageToTrue
+            handleSetShowMessageToTrue,
+            handleOpenSznstarted,
+            handleOpenSznended
         } = props;
     const [action, setAction] = useState('completeKill');
     const [openSznTargets, setOpenSznTargets] = useState('');
@@ -183,6 +185,8 @@ const Execution = (props) => {
                         arrayOfAlivePlayers = {arrayOfAlivePlayers}
                         roomID = {roomID}
                         handleOpenSzn = {handleOpenSzn}
+                        handleOpenSznstarted = {handleOpenSznstarted}
+                        handleOpenSznended = {handleOpenSznended}
                     />
                 </Flex>
             }
