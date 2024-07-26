@@ -39,13 +39,13 @@ const Endgamebutton = (roomID) => {
             <Button bg = 'white'
                     color = 'black'
                     variant = 'solid'
-                    size = 'lg'
+                    // size = 'lg'
                     borderRadius = '3xl'
                     _hover = {{bg: 'brand.400', color: 'white'}}
                     mt = '8px'
                     mb= '8px'
-                    pos = 'absolute' 
-                    right = '20px'
+                    // pos = 'absolute' 
+                    // right = '20px'
                     onClick = {handleClick}
             >End Game
             </Button>
@@ -56,7 +56,8 @@ const Endgamebutton = (roomID) => {
                 size = '3xl'
             >
 
-                <AlertDialogOverlay/>
+                <AlertDialogOverlay  alignItems='center'
+                                            justifyContent='center'/>
                     <AlertDialogContent 
                         bg = '#202030'
                     >
