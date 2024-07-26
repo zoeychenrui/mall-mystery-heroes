@@ -420,6 +420,24 @@ const fetchAlivePlayersByAscendTargetsLengthForRoom = async (roomID, player) => 
     }
 }
 
+const endGame = async (roomID) => {
+    try {
+        const roomRef = doc(db, 'rooms', roomID);
+        const roomSnapshot = await getDoc(roomRef);
+
+        if (roomSnapshot.exists()) {
+            await updateDoc(roomRef, { isGameActive: false });
+            console.log('Game ended successfully.');
+        } else {
+            console.log('No such document!');
+        }
+    } catch (error) {
+        console.error('Error ending game: ', error);
+    }
+};
+
+
+
 export { 
     fetchAllPlayersForRoom,
     fetchPlayersByStatusForRoom,
@@ -445,5 +463,6 @@ export {
     fetchAssassinsForPlayer,
     fetchReferenceForTask,
     fetchAlivePlayersByAscendAssassinsLengthForRoom,
-    fetchAlivePlayersByAscendTargetsLengthForRoom
+    fetchAlivePlayersByAscendTargetsLengthForRoom,
+    endGame
 };

@@ -21,6 +21,7 @@ import { fetchPlayersByStatusForRoom,
          updateLogsForRoom 
     } from '../components/dbCalls';
 import RemapPlayerModal from '../components/RemapPlayerModal';
+import Endgamebutton from '../components/Endgamebutton';
 
 const GameMasterView = () => {
     const { roomID } = useParams(); 
@@ -131,19 +132,29 @@ const GameMasterView = () => {
              display = 'flex' 
              flexDirection = 'column'
         >
-            <RemapPlayerModal 
-                showRemapModal = {showRemapModal}
-                newTargets = {newTargets}
-                newAssassins = {newAssassins}
-                onClose = {() => setShowRemapModal(false)}
-            />
+            <Box flexDirection='row'
+                 display = 'flex'>
+                <RemapPlayerModal 
+                    showRemapModal = {showRemapModal}
+                    newTargets = {newTargets}
+                    newAssassins = {newAssassins}
+                    onClose = {() => setShowRemapModal(false)}
+                />
 
+<<<<<<< Updated upstream
             <Box h = '6%'>
                 <HeaderExecution 
                     addLog = {addLog}
                     roomID = {roomID}
                     arrayOfAlivePlayers = {arrayOfAlivePlayers}
                 />
+=======
+                <Box h = '6%'>
+                    <HeaderExecution roomID = {roomID}/>
+                </Box>
+
+                <Endgamebutton roomID = {roomID}/>
+>>>>>>> Stashed changes
             </Box>
 
             <HStack alignItems = 'left'
