@@ -18,7 +18,7 @@ import UnmapPlayers from '../components/UnmapPlayers';
 import { fetchPlayersByStatusForRoom, 
          fetchAllTasksForRoom, 
          fetchAllLogsForRoom, 
-         updateLogsForRoom 
+         updateLogsForRoom,
     } from '../components/dbCalls';
 import RemapPlayerModal from '../components/RemapPlayerModal';
 
@@ -70,9 +70,14 @@ const GameMasterView = () => {
     }
 
     //removes player from alivePlayers and adds them to deadPlayers
-    const handleKillPlayer = async (killedPlayerName, assassinName) => {
+    const handleKillPlayer = async (killedPlayerName, assassinName, openSznstatus) => {
         setArrayOfDeadPlayers(arrayOfDeadPlayers => [...arrayOfDeadPlayers, killedPlayerName]);
         setArrayOfAlivePlayers(arrayOfAlivePlayers.filter((name) => name !== killedPlayerName));
+        if (openSznstatus === true) {
+            console.log('checkpoint 2');
+            handleOpenSznended(killedPlayerName);
+            await addLog("open season has ended for " + killedPlayerName); 
+        }
         await addLog(killedPlayerName + " was killed by " + assassinName);
     };
 

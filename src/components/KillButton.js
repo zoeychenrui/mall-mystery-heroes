@@ -5,7 +5,8 @@ import kill from '../assets/kill-white.png';
 import killHover from '../assets/kill-hover.png';
 import { fetchPlayerForRoom, 
          killPlayerForRoom, 
-         updatePointsForPlayer 
+         updatePointsForPlayer,
+         checkOpenSzn
     } from './dbCalls';
 import RemapPlayers from './RemapPlayers';
 
@@ -47,11 +48,12 @@ const KillButton = (props) => {
             const playersNeedingTarget = targetData.assassins;
             const playersNeedingAssassins = targetData.targets;
             await updatePointsForPlayer(assassinPlayerNamed, targetData.score, roomID);
+            const openSznstatus = await checkOpenSzn(roomID, selectedTarget);
             await killPlayerForRoom(selectedTarget, roomID);
             const targets = possibleTargets.filter(target => target !== selectedTarget);
             getPossibleTargets(targets);
             handleChoiceReset();
-            handleKillPlayer(selectedTarget, assassinPlayerNamed);
+            handleKillPlayer(selectedTarget, assassinPlayerNamed, openSznstatus);
             handleRemap(playersNeedingTarget, playersNeedingAssassins);
         }
         catch (error) {
