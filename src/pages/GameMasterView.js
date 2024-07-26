@@ -74,7 +74,6 @@ const GameMasterView = () => {
         setArrayOfDeadPlayers(arrayOfDeadPlayers => [...arrayOfDeadPlayers, killedPlayerName]);
         setArrayOfAlivePlayers(arrayOfAlivePlayers.filter((name) => name !== killedPlayerName));
         if (openSznstatus === true) {
-            console.log('checkpoint 2');
             handleOpenSznended(killedPlayerName);
             await addLog("open season has ended for " + killedPlayerName); 
         }
