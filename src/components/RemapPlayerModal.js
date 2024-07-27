@@ -43,15 +43,15 @@ const RemapPlayerModal = ({ newTargets, newAssassins, showRemapModal, onClose })
         console.log('playerList: ', playerList);
     }, [playerList]);
 
-    const mappedPlayers = Object.entries(playerList).map(([player, targetList]) => (
-        <Tr key = {player}>
-            <Td>{player}</Td>
-            <Td>{targetList.join(', ') || 'None'}</Td>
-        </Tr>
-    ));
-
-    
-
+    const mappedPlayers = Object.entries(playerList)
+                                .filter(([player, targetList]) => targetList.length > 0)
+                                .map(([player, targetList]) => ( 
+                                    <Tr key = {player}>
+                                        <Td>{player}</Td>
+                                        <Td>{targetList.join(', ') || 'None'}</Td>
+                                    </Tr>
+                                ));
+                                
     return ( 
         <Modal isOpen = {showRemapModal} 
                 onClose = {onClose}
