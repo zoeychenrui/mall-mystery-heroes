@@ -45,6 +45,7 @@ const RemapPlayers = (handleRemapping, createAlert) => {
                         possibleTarget === player || //checks if target is the same as player
                         newTargetArray.length >= MAXTARGETS //checks if player has max targets
                         ) {
+                            console.log('continue');
                             continue;
                     }
                     //adds possible target to targets
@@ -63,7 +64,7 @@ const RemapPlayers = (handleRemapping, createAlert) => {
                 }
 
                 //final case if no suitable matches were found
-                if (newTargetArray.length < MAXTARGETS - 1) {
+                if (newTargetArray.length < MAXTARGETS - 1 || newTargetArray.length === 0) {
                     console.error('running final case for targets on ', player);
                     try {
                         const lastCaseTargetForPlayer = await fetchAlivePlayersByAscendAssassinsLengthForRoom(roomID, player);
@@ -138,7 +139,7 @@ const RemapPlayers = (handleRemapping, createAlert) => {
                 }
 
                 //final case if no suitable matches were found
-                if (newAssassinArray.length < MAXTARGETS - 1) {
+                if (newAssassinArray.length < MAXTARGETS - 1 || newAssassinArray.length === 0) {
                     console.error('running final case for assassins on ', player);
                     try {
                         const lastCaseAssassinForPlayer = await fetchAlivePlayersByAscendTargetsLengthForRoom(roomID, player);
@@ -151,7 +152,6 @@ const RemapPlayers = (handleRemapping, createAlert) => {
                             }
                             if (newAssassinArray.length >= MAXTARGETS) {
                                 break;
-                                console.error('breaking');
                             }
                         }
                     } catch (error) {

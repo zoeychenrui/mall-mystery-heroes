@@ -22,7 +22,6 @@ const DeadPlayerReviveButton = (props) => {
 
     //handling for when revive image for player is clicked
     const handleReviveClicked = async () => {
-        console.error('playerName: ', player);
         if (player === '' || !player) {
             return createAlert('error', 'Error', 'player undefined', 1500);
         }
