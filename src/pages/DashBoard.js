@@ -6,22 +6,46 @@ import Auth from '../components/auth';
 import { useNavigate } from 'react-router-dom';
 import {signOut} from 'firebase/auth';
 import { NumberDictionary, adjectives, animals, colors, uniqueNamesGenerator } from 'unique-names-generator';
+import { checkForRoomIDDupes } from '../components/dbCalls';
+import CreateAlert from '../components/CreateAlert';
 
 const DashBoard = () => {
-
   const navigate = useNavigate();
+  const createAlert = CreateAlert();
 
   const handleHostRoom = async () => {
     try {
       const user = auth.currentUser;
 
       if (user) {
+
         let randomRoomNumber = Math.floor(Math.random() * 90000) + 10000;
-        const roomID = uniqueNamesGenerator({ 
+        let roomID = uniqueNamesGenerator({ 
           dictionaries: [adjectives, [randomRoomNumber.toString()]],
           separator: '',
           style: 'capital'
         });
+        let check = await checkForRoomIDDupes(roomID);
+        console.log(check);
+        let runningTime = 1;
+
+        while(!check) {
+          runningTime++;
+          if (runningTime > 300) {
+            console.log('timed out');
+            return createAlert('error', 'Timed Out', 'No Available Room Found', 1500);
+          }
+          randomRoomNumber = Math.floor(Math.random() * 90000) + 10000;
+          console.log('running');
+          roomID = uniqueNamesGenerator({ 
+            dictionaries: [adjectives, [randomRoomNumber.toString()]],
+            separator: '',
+            style: 'capital'
+          });
+          check = await checkForRoomIDDupes(roomID);
+
+        }
+
         const roomRef = doc(db, "rooms", roomID);
         await setDoc(roomRef, {
           hostId: user.uid,
