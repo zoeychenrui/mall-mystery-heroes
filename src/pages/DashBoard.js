@@ -1,10 +1,11 @@
 import React from 'react';
 import { auth, db } from "../utils/firebase";
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, setDoc, doc } from 'firebase/firestore';
 import { Button, ButtonGroup, Flex, Heading } from '@chakra-ui/react';
 import Auth from '../components/auth';
 import { useNavigate } from 'react-router-dom';
 import {signOut} from 'firebase/auth';
+import { NumberDictionary, adjectives, animals, colors, uniqueNamesGenerator } from 'unique-names-generator';
 
 const DashBoard = () => {
 
@@ -15,7 +16,14 @@ const DashBoard = () => {
       const user = auth.currentUser;
 
       if (user) {
-        const roomRef = await addDoc(collection(db, "rooms"), { 
+        let randomRoomNumber = Math.floor(Math.random() * 90000) + 10000;
+        const roomID = uniqueNamesGenerator({ 
+          dictionaries: [adjectives, [randomRoomNumber.toString()]],
+          separator: '',
+          style: 'capital'
+        });
+        const roomRef = doc(db, "rooms", roomID);
+        await setDoc(roomRef, {
           hostId: user.uid,
           isGameActive : true,
           logs: [],
