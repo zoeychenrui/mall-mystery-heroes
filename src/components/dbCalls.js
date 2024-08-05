@@ -466,6 +466,12 @@ const checkOpenSzn = async (roomID, selectedOpenSeasonPlayer) => {
     return sznSnapshot.docs[0].get('openSeason');
 }
 
+const checkForRoomIDDupes = async (roomID) => {
+    const roomDocRef = doc(db, 'rooms', roomID);
+    const roomSnapshot = await getDoc(roomDocRef);
+    return !roomSnapshot.exists();
+}
+
 export { 
     fetchAllPlayersForRoom,
     fetchPlayersByStatusForRoom,
@@ -493,5 +499,6 @@ export {
     fetchAlivePlayersByAscendAssassinsLengthForRoom,
     fetchAlivePlayersByAscendTargetsLengthForRoom,
     endGame,
-    checkOpenSzn
+    checkOpenSzn,
+    checkForRoomIDDupes
 };
