@@ -1,11 +1,10 @@
 import React from 'react';
 import { auth, db } from "../utils/firebase";
-import { collection, addDoc, setDoc, doc } from 'firebase/firestore';
+import { setDoc, doc } from 'firebase/firestore';
 import { Button, ButtonGroup, Flex, Heading } from '@chakra-ui/react';
-import Auth from '../components/auth';
 import { useNavigate } from 'react-router-dom';
 import {signOut} from 'firebase/auth';
-import { NumberDictionary, adjectives, animals, colors, uniqueNamesGenerator } from 'unique-names-generator';
+import { adjectives, uniqueNamesGenerator } from 'unique-names-generator';
 import { checkForRoomIDDupes } from '../components/dbCalls';
 import CreateAlert from '../components/CreateAlert';
 
@@ -18,16 +17,10 @@ const DashBoard = () => {
       const user = auth.currentUser;
 
       if (user) {
-
-        let randomRoomNumber = Math.floor(Math.random() * 90000) + 10000;
-        let roomID = uniqueNamesGenerator({ 
-          dictionaries: [adjectives, [randomRoomNumber.toString()]],
-          separator: '',
-          style: 'capital'
-        });
-        let check = await checkForRoomIDDupes(roomID);
-        console.log(check);
-        let runningTime = 1;
+        let randomRoomNumber;
+        let roomID;
+        let check = false;
+        let runningTime = 0;
 
         while(!check) {
           runningTime++;
@@ -43,7 +36,6 @@ const DashBoard = () => {
             style: 'capital'
           });
           check = await checkForRoomIDDupes(roomID);
-
         }
 
         const roomRef = doc(db, "rooms", roomID);

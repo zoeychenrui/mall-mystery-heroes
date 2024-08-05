@@ -54,7 +54,7 @@ const RemapPlayerModal = ({ newTargets, newAssassins, showRemapModal, onClose })
                                 
     return ( 
         <Modal isOpen = {showRemapModal} 
-                onClose = {onClose}
+               onClose = {onClose}
         >
             <ModalOverlay />
             <ModalContent bg = '#202030'>
