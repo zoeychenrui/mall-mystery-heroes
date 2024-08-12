@@ -68,8 +68,8 @@ const GameMasterView = () => {
     }, [roomID]);
     
     //updates loglist with new log
-    const addLog = async (newLog) => {
-        const newLogs = await updateLogsForRoom(newLog, roomID);
+    const addLog = async (newLog, color) => {
+        const newLogs = await updateLogsForRoom(newLog, color, roomID);
         setLogList(newLogs);
         return;
     }
@@ -80,17 +80,17 @@ const GameMasterView = () => {
         setArrayOfAlivePlayers(arrayOfAlivePlayers.filter((name) => name !== killedPlayerName));
         if (openSznstatus === true) {
             handleOpenSznended(killedPlayerName);
-            await addLog("open season has ended for " + killedPlayerName); 
+            await addLog("open season has ended for " + killedPlayerName, 'pink.400'); 
         }
-        await addLog(killedPlayerName + " was killed by " + assassinName);
+        await addLog(killedPlayerName + " was killed by " + assassinName, 'red.400');
     };
 
     const handleOpenSznstarted = async (openSznplayer) => {
-        await addLog(openSznplayer + " has open season on them");
+        await addLog(openSznplayer + " has open season on them", 'lightblue');
     }
 
     const handleOpenSznended = async (openSznplayer) => {
-        await addLog("open season has ended for " + openSznplayer);
+        await addLog("open season has ended for " + openSznplayer, 'pink.400');
     }
 
     //updates ArrayOfDeadPlayers and adds player to arrayOfAlivePlayers
@@ -101,19 +101,19 @@ const GameMasterView = () => {
         setArrayOfAlivePlayers(arrayOfAlivePlayers => 
             [...arrayOfAlivePlayers, revivedPlayerName]
         );
-        await addLog(revivedPlayerName + " was revived");
+        await addLog(revivedPlayerName + " was revived", 'blue.300');
     };
 
     //updates arrayOfTasks when new task is added to db
     const handleNewTaskAdded = async (newTask) => {
         setArrayOfTasks(arrayOfTasks => [...arrayOfTasks, newTask]);
-        await addLog("Added new task: " + newTask.title);
+        await addLog("Added new task: " + newTask.title, 'yellow.400');
     };
 
     //updates completedTasks
     const handleTaskCompleted  = async (task) => {
         setCompletedTasks(completedTasks => [...completedTasks, task]);
-        await addLog("Completed task: " + task);
+        await addLog("Completed task: " + task, 'green.400');
     }
 
     //removes player from alivePlayers and adds them to deadPlayers
@@ -123,12 +123,12 @@ const GameMasterView = () => {
         if (revivedPlayerName) {
             unmapPlayers(revivedPlayerName, roomID);
         }
-        await addLog(revivedPlayerName + "'s revive was undone");
+        await addLog(revivedPlayerName + "'s revive was undone", 'gray');
     }
 
     //updates logList with remapped targets
     const handleRemapping = async (log) => {
-        await addLog(log);
+        await addLog(log, 'blue.500');
     }
 
     //updates newTargets and newAssassins, and shows RemapPlayerModal

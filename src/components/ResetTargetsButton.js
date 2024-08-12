@@ -49,7 +49,7 @@ const ResetTargetsButton = ({arrayOfPlayers, addLog}) => {
         await UpdateDatabase(arrayOfPlayers, targetMap);
         await addLog("Resetting Targets");
         for (const player of arrayOfPlayers) {
-            await addLog('New Target(s) for ' + player + ': ' + targetMap.get(player).join(', '));
+            await addLog('New Target(s) for ' + player + ': ' + targetMap.get(player).join(', '), 'blue.400');
             console.log('looping for ' + player);
         }
         onClose();

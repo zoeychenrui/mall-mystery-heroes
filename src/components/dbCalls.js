@@ -62,7 +62,7 @@ const fetchAllLogsForRoom = async (roomID) => {
 }
 
 //add new log to database
-const updateLogsForRoom = async (newLog, roomID) => {
+const updateLogsForRoom = async (newLog, color, roomID) => {
     try {
         const date = new Date();
         const time = date.toLocaleTimeString();
@@ -71,7 +71,8 @@ const updateLogsForRoom = async (newLog, roomID) => {
         const currLogs = docSnapshot.data().logs;
         const newAddition = {
             time: time,
-            log: newLog
+            log: newLog,
+            color: color
         }
         const newLogs = [...currLogs, newAddition];
         await updateDoc(docRef, { logs: newLogs });
