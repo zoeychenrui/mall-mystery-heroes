@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import {
     Tabs,
     Tab,
@@ -8,12 +8,15 @@ import {
     TabList
     } from '@chakra-ui/react';
 import TaskAccordion from './TaskAccordion';
-import { fetchTasksByCompletionForRoom } from './dbCalls';
+import { fetchTasksByCompletionForRoom, fetchTasksQueryForRoom } from './dbCalls';
+import { onSnapshot } from 'firebase/firestore';
+import { gameContext } from './Contexts';
 
-const TaskList = (props) => {
-    const { roomID, arrayOfTasks, completedTasks } = props;
+const TaskList = () => {
+    const { roomID } = useContext(gameContext);
     const [arrayOfActiveTasks, setArrayOfActiveTasks] = useState([]);
     const [arrayOfInactiveTasks, setArrayOfInactiveTasks] = useState([]);
+    const taskQuery = fetchTasksQueryForRoom(roomID);
 
     // Fetch tasks from Firestore
     const fetchTaskForRooms = async () => {
@@ -23,12 +26,14 @@ const TaskList = (props) => {
         setArrayOfInactiveTasks(inactiveTasks.docs.map(doc => doc.data()));
     }
 
-    //updates tasklists when task is added
     useEffect(() => {
-        console.log(`fetching tasks in useEffect: ${roomID}`);
-        fetchTaskForRooms();
-        // eslint-disable-next-line
-    }, [arrayOfTasks, completedTasks, roomID]);
+        const unsubscribe = onSnapshot(taskQuery, () => {
+            fetchTaskForRooms();
+            console.log('running unsubscribe');
+        })
+
+        return () => unsubscribe();
+    }, [])
 
     //makes an array where each item contains an accordion item of an active task object
     const listOfActiveTasks = arrayOfActiveTasks.map(eachTask => {

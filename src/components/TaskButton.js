@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Button, Checkbox, 
          Modal, 
          ModalBody, 
@@ -33,19 +33,21 @@ import { updateIsCompleteToTrueForTask,
          updateIsAliveForPlayer,
          fetchPlayerForRoom
     } from './dbCalls';
+import { executionContext, gameContext } from './Contexts';
 
 const TaskButton = (props) => {    
     const { taskID,
-            roomID,
-            arrayOfAlivePlayers,
+        } = props;
+    const { arrayOfAlivePlayers,
+            handleAddNewAssassins,
+            handleAddNewTargets,
+            handleRemapping,
             handlePlayerRevive,
             handleUndoRevive,
             handleTaskCompleted,
-            handleRemapping,
-            handleAddNewTargets,
-            handleAddNewAssassins,
             handleSetShowMessageToTrue
-        } = props;
+        } = useContext(executionContext);
+    const { roomID } = useContext(gameContext);
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [listOfChoices, setListOfchoices] = useState([]);
     const createAlert = CreateAlert();

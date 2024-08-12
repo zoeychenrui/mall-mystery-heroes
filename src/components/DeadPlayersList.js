@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import {
     ListItem,
     Box,
@@ -6,19 +6,11 @@ import {
 } from '@chakra-ui/react';
 
 import DeadPlayerReviveButton from './DeadPlayerReviveButton';
+import { deadPlayerListContext } from './Contexts';
 
 
-const DeadPlayersList = (props) => {
-    const {roomID, 
-           handlePlayerRevive, 
-           arrayOfAlivePlayers,
-           handleRemapping, 
-           arrayOfDeadPlayers,
-           handleAddNewTargets,
-           handleAddNewAssassins,
-           handleSetShowMessageToTrue
-        } = props;
-
+const DeadPlayersList = () => {
+    const { arrayOfDeadPlayers } = useContext(deadPlayerListContext);
     if (arrayOfDeadPlayers.length === 0) return null;
 
     return (
@@ -31,16 +23,7 @@ const DeadPlayersList = (props) => {
                                 {player}
                             </Box>
 
-                            <DeadPlayerReviveButton
-                                player = {player}
-                                roomID = {roomID}
-                                handlePlayerRevive = {handlePlayerRevive}
-                                arrayOfAlivePlayers = {arrayOfAlivePlayers}
-                                handleRemapping = {handleRemapping}
-                                handleAddNewTargets = {handleAddNewTargets}
-                                handleAddNewAssassins = {handleAddNewAssassins}
-                                handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
-                            />
+                            <DeadPlayerReviveButton player = {player} />
                         </Box>
                     </ListItem>
                 ))}

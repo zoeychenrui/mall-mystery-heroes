@@ -243,6 +243,17 @@ const fetchAlivePlayersQueryByDescendPointsForRoom = (roomID) => {
     }
 }
 
+//returns a query of all tasks for room
+const fetchTasksQueryForRoom = (roomID) => {
+    try {
+        const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
+        return query(taskCollectionRef);
+    }
+    catch (error) {
+        console.error('Error fetching tasks: ', error);
+    }
+}
+
 //returns document of player
 const fetchPlayerForRoom = async (playerName, roomID) => {
     try {
@@ -466,6 +477,7 @@ const checkOpenSzn = async (roomID, selectedOpenSeasonPlayer) => {
     return sznSnapshot.docs[0].get('openSeason');
 }
 
+//checks if roomID already exists
 const checkForRoomIDDupes = async (roomID) => {
     const roomDocRef = doc(db, 'rooms', roomID);
     const roomSnapshot = await getDoc(roomDocRef);
@@ -500,5 +512,6 @@ export {
     fetchAlivePlayersByAscendTargetsLengthForRoom,
     endGame,
     checkOpenSzn,
-    checkForRoomIDDupes
+    checkForRoomIDDupes,
+    fetchTasksQueryForRoom
 };

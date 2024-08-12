@@ -1,21 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { Flex, Select } from '@chakra-ui/react';
 import TaskButton from './TaskButton';
 import { fetchTasksByCompletionForRoom } from './dbCalls';
+import { executionContext, gameContext } from './Contexts';
 
-const TaskCompletion = (props) => {
-    const { roomID,
-            arrayOfAlivePlayers,
-            handlePlayerRevive,
-            handleUndoRevive,
-            arrayOfTasks,
-            handleTaskCompleted,
-            completedTasks,
-            handleRemapping,
-            handleAddNewTargets,
-            handleAddNewAssassins,
-            handleSetShowMessageToTrue
-        } = props;
+const TaskCompletion = () => {
+    const { arrayOfTasks, completedTasks } = useContext(executionContext);
+    const { roomID } = useContext(gameContext);
     const [taskList, setTaskList] = useState([]);
     const [selectedTask, setSelectedTask] = useState('');
 
@@ -65,15 +56,6 @@ const TaskCompletion = (props) => {
             
             <TaskButton 
                 taskID = {selectedTask}
-                roomID = {roomID}
-                handlePlayerRevive = {handlePlayerRevive}
-                handleUndoRevive = {handleUndoRevive}
-                arrayOfAlivePlayers = {arrayOfAlivePlayers}
-                handleTaskCompleted = {handleTaskCompleted}
-                handleRemapping = {handleRemapping}
-                handleAddNewAssassins = {handleAddNewAssassins}
-                handleAddNewTargets = {handleAddNewTargets}
-                handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
             />
         </Flex>
     );

@@ -1,10 +1,16 @@
 import { Flex, HStack, Select, Image, Spinner, useToast, Button } from "@chakra-ui/react";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { db } from '../utils/firebase';
 import { collection, query, getDocs, where, updateDoc } from "firebase/firestore";
 import opensznimg from '../assets/openseason-white.svg';
+import { executionContext, gameContext } from "./Contexts";
 
-const OpenSeason = ({ arrayOfAlivePlayers, roomID, handleOpenSzn, handleOpenSznstarted, handleOpenSznended }) => {
+const OpenSeason = ({ handleOpenSzn }) => {
+    const { arrayOfAlivePlayers,
+            handleOpenSznstarted,
+            handleOpenSznended
+        } = useContext(executionContext);
+    const { roomID } = useContext(gameContext);
     const [selectedOpenSeasonPlayer, setSelectedOpenSeasonPlayer] = useState('');
     const [loading, setLoading] = useState(false);
     const toast = useToast();

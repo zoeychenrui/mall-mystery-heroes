@@ -11,13 +11,15 @@ import {
     useDisclosure,
 
 } from '@chakra-ui/react';
-import React from 'react';
+import React, { useContext } from 'react';
 import { endGame } from './dbCalls';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { gameContext } from './Contexts';
 
 
 
-const Endgamebutton = (roomID) => {
+const Endgamebutton = () => {
+    const { roomID } = useContext(gameContext);
     const cancelRef = React.useRef();
     const navigate = useNavigate();
 

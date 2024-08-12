@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { Image,
          Heading,
          HStack,   
@@ -7,8 +7,10 @@ import { Image,
 import whiteLogo from '../assets/mall-logo-white-2.png';
 import ResetTargetsButton from './ResetTargetsButton';
 import Endgamebutton from './Endgamebutton';
+import { gameContext } from './Contexts';
 
-const HeaderExecution = ({ roomID,addLog, arrayOfAlivePlayers }) => {
+const HeaderExecution = ({ addLog, arrayOfAlivePlayers }) => {
+    const { roomID } = useContext(gameContext);
     return (  
         <HStack justifyContent = 'left'
                 p = '8px'
@@ -23,11 +25,10 @@ const HeaderExecution = ({ roomID,addLog, arrayOfAlivePlayers }) => {
             <Heading>Lobby #: {roomID}</Heading>
             <Spacer />
             <ResetTargetsButton 
-                roomID = {roomID}
                 arrayOfPlayers = {arrayOfAlivePlayers}
                 addLog = {addLog}
             />
-            <Endgamebutton roomID = {roomID}></Endgamebutton>
+            <Endgamebutton />
         </HStack>
     );
 }

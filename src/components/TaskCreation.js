@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import {Input, 
         Button, 
         Flex,
@@ -11,8 +11,11 @@ import {Input,
     } from '@chakra-ui/react';
 import CreateAlert from './CreateAlert';
 import { addTaskForRoom, checkForTaskDupesForRoom } from './dbCalls';
+import { gameContext, taskContext } from './Contexts';
 
-const TaskCreation = ({roomID, onNewTaskAdded}) => {
+const TaskCreation = () => {
+    const { handleNewTaskAdded } = useContext(taskContext);
+    const { roomID } = useContext(gameContext);
     const [TaskTitle, setTaskTitle] = useState('');
     const [TaskDescription, setTaskDescription] = useState('');
     const [PointValue, setPointValue] = useState('0');
@@ -87,7 +90,7 @@ const TaskCreation = ({roomID, onNewTaskAdded}) => {
         const dupeExists = await checkForTaskDupesForRoom(newTask, roomID);
         if (!dupeExists) {
             await addTaskForRoom(newTask, roomID);
-            onNewTaskAdded(newTask);
+            handleNewTaskAdded(newTask);
             setTaskTitle('');
             setTaskDescription('');
             setPointValue('0');

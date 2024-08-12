@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useContext, useState } from 'react';
 import {AlertDialog, 
         Button,
         AlertDialogBody,
@@ -16,7 +16,9 @@ import {AlertDialog,
         Thead
     } from '@chakra-ui/react';
 import { updateAssassinsForPlayer, updateTargetsForPlayer } from './dbCalls';
-const ResetTargetsButton = ({arrayOfPlayers, addLog, roomID}) => {
+import { gameContext } from './Contexts';
+const ResetTargetsButton = ({arrayOfPlayers, addLog}) => {
+    const { roomID } = useContext(gameContext);
     //store player's data for three things: 
     //1. number of assassins (hits on a person)
     //2. index of last target
