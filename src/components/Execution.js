@@ -3,7 +3,7 @@ import { Menu,
         MenuButton,
         MenuList, 
         MenuItem, 
-        Button, 
+        Button,
         Image,
         HStack,
         Tooltip,
@@ -21,22 +21,7 @@ import KillActionExecution from './KillActionExecution';
 import OpenSeason from './OpenSeason';
 
     
-const Execution = (props) => {
-    const { roomID, 
-            arrayOfAlivePlayers, 
-            handleKillPlayer, 
-            handlePlayerRevive, 
-            arrayOfTasks, 
-            handleTaskCompleted, 
-            completedTasks, 
-            handleUndoRevive,
-            handleRemapping,
-            handleAddNewTargets,
-            handleAddNewAssassins,
-            handleSetShowMessageToTrue,
-            handleOpenSznstarted,
-            handleOpenSznended
-        } = props;
+const Execution = () => {
     const [action, setAction] = useState('completeKill');
     const [openSznTargets, setOpenSznTargets] = useState('');
 
@@ -148,45 +133,20 @@ const Execution = (props) => {
                     alignItems = 'center'
                     h = '100%'
                 >
-                    <KillActionExecution 
-                        roomID = {roomID}
-                        arrayOfAlivePlayers = {arrayOfAlivePlayers}
-                        handleKillPlayer = {handleKillPlayer}
-                        handleAddNewAssassins = {handleAddNewAssassins}
-                        handleAddNewTargets = {handleAddNewTargets}
-                        handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
-                        handleRemapping = {handleRemapping}
-
-                    />
+                    <KillActionExecution />
                 </Flex>
             }
             {action === 'completeMission' && 
                 <Flex 
                     h = '100%'
                 >
-                    <TaskCompletion 
-                        roomID = {roomID}
-                        handlePlayerRevive = {handlePlayerRevive}
-                        handleUndoRevive = {handleUndoRevive}
-                        arrayOfAlivePlayers = {arrayOfAlivePlayers}
-                        arrayOfTasks = {arrayOfTasks}
-                        handleTaskCompleted = {handleTaskCompleted}
-                        completedTasks = {completedTasks}
-                        handleRemapping = {handleRemapping}
-                        handleAddNewAssassins = {handleAddNewAssassins}
-                        handleAddNewTargets = {handleAddNewTargets}
-                        handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
-                    />
+                    <TaskCompletion />
                 </Flex>
             }
             {action === 'openSeason' && 
                 <Flex>
                     <OpenSeason
-                        arrayOfAlivePlayers = {arrayOfAlivePlayers}
-                        roomID = {roomID}
                         handleOpenSzn = {handleOpenSzn}
-                        handleOpenSznstarted = {handleOpenSznstarted}
-                        handleOpenSznended = {handleOpenSznended}
                     />
                 </Flex>
             }

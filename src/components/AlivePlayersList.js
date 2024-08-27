@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
     Accordion,
     AccordionItem,
@@ -12,8 +12,10 @@ import {
 } from '@chakra-ui/react';
 import { onSnapshot } from "firebase/firestore";
 import { fetchAlivePlayersQueryByDescendPointsForRoom } from './dbCalls';
+import { gameContext } from './Contexts';
 
-const AlivePlayersList = ({roomID}) => {
+const AlivePlayersList = () => {
+    const { roomID } = useContext(gameContext);
     const [expandedIndex, setExpandedIndex] = useState(-1);
     // Construct a query that gets all players in the room that are still alive, sorted by score
     const playerAlivePlayersQuery = fetchAlivePlayersQueryByDescendPointsForRoom(roomID);

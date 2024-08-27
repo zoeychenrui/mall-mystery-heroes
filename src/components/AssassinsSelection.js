@@ -1,10 +1,17 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { Flex, Select } from '@chakra-ui/react';
 import { fetchTargetsForPlayer } from './dbCalls';
 import CreateAlert from './CreateAlert';
+import { executionContext, gameContext } from './Contexts';
 
 const AssassinSelection = (props) => {
-    const { roomID, getAssassinPlayerName, arrayOfAlivePlayers, getPossibleTargets, assassinPlayerNamed, getSelectedTarget } = props;
+    const { getAssassinPlayerName, 
+            getPossibleTargets, 
+            assassinPlayerNamed, 
+            getSelectedTarget 
+        } = props;
+    const { arrayOfAlivePlayers } = useContext(executionContext);
+    const { roomID } = useContext(gameContext);
     const createAlert = CreateAlert();
 
     const handleChange = async (event) => {

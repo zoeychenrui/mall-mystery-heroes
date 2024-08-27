@@ -1,21 +1,22 @@
-import React, { useState } from 'react';
+import React, { useContext, useState } from 'react';
 import { Image, Box} from '@chakra-ui/react';
 import revive from '../assets/revive-gray.png';
 import reviveHover from '../assets/revive-white.png';
 import CreateAlert from './CreateAlert';
 import { updateIsAliveForPlayer } from './dbCalls';
 import RemapPlayers from './RemapPlayers';
+import { deadPlayerListContext, gameContext } from './Contexts';
 
-const DeadPlayerReviveButton = (props) => {
-    const {player, 
-           roomID, 
-           arrayOfAlivePlayers, 
-           handlePlayerRevive, 
-           handleRemapping,
-           handleAddNewTargets,
-           handleAddNewAssassins,
-           handleSetShowMessageToTrue
-        } = props;
+const DeadPlayerReviveButton = ({ player }) => {
+    const { roomID } = useContext(gameContext);
+    const { handlePlayerRevive,
+            arrayOfAlivePlayers,
+            handleRemapping,
+            handleAddNewTargets,
+            handleAddNewAssassins,
+            handleSetShowMessageToTrue
+        } = useContext(deadPlayerListContext);
+
     const [isHovering, setIsHovering] = useState(false);
     const createAlert = CreateAlert();
     const handleRegeneration = RemapPlayers(handleRemapping, createAlert);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useContext, useState } from 'react';
 import {AlertDialog, 
         Button,
         AlertDialogBody,
@@ -16,7 +16,9 @@ import {AlertDialog,
         Thead
     } from '@chakra-ui/react';
 import { updateAssassinsForPlayer, updateTargetsForPlayer } from './dbCalls';
-const ResetTargetsButton = ({arrayOfPlayers, addLog, roomID}) => {
+import { gameContext } from './Contexts';
+const ResetTargetsButton = ({arrayOfPlayers, addLog}) => {
+    const { roomID } = useContext(gameContext);
     //store player's data for three things: 
     //1. number of assassins (hits on a person)
     //2. index of last target
@@ -47,7 +49,7 @@ const ResetTargetsButton = ({arrayOfPlayers, addLog, roomID}) => {
         await UpdateDatabase(arrayOfPlayers, targetMap);
         await addLog("Resetting Targets");
         for (const player of arrayOfPlayers) {
-            await addLog('New Target(s) for ' + player + ': ' + targetMap.get(player).join(', '));
+            await addLog('New Target(s) for ' + player + ': ' + targetMap.get(player).join(', '), 'blue.400');
             console.log('looping for ' + player);
         }
         onClose();

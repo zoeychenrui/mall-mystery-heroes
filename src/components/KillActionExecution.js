@@ -4,15 +4,7 @@ import KillButton from "./KillButton";
 import TargetSelection from "./TargetSelection";
 import { Flex } from '@chakra-ui/react';
 
-const KillActionExecution = (props) => {
-    const { roomID, 
-            arrayOfAlivePlayers, 
-            handleKillPlayer,
-            handleAddNewAssassins,
-            handleAddNewTargets,
-            handleSetShowMessageToTrue,
-            handleRemapping 
-        } = props;
+const KillActionExecution = () => {
     const [assassinPlayerNamed, setAssassinPlayerNamed] = useState('');
     const [possibleTargets, setPossibleTargets] = useState([]);
     const [selectedTarget, setSelectedTarget] = useState('');
@@ -47,9 +39,7 @@ const KillActionExecution = (props) => {
                 w = '30%'
             >
                 <AssassinSelection
-                    roomID = {roomID}
                     getAssassinPlayerName = {getAssassinPlayerName}
-                    arrayOfAlivePlayers = {arrayOfAlivePlayers} 
                     getPossibleTargets = {getPossibleTargets}
                     assassinPlayerNamed = {assassinPlayerNamed}
                     getSelectedTarget = {getSelectedTarget}
@@ -59,16 +49,9 @@ const KillActionExecution = (props) => {
                 <KillButton 
                     assassinPlayerNamed = {assassinPlayerNamed}
                     selectedTarget = {selectedTarget}
-                    handleKillPlayer = {handleKillPlayer}
                     possibleTargets = {possibleTargets}
-                    roomID = {roomID}
                     getPossibleTargets = {getPossibleTargets}
                     handleChoiceReset = {handleChoiceReset}
-                    handleRemapping = {handleRemapping}
-                    handleAddNewAssassins = {handleAddNewAssassins}
-                    handleAddNewTargets = {handleAddNewTargets}
-                    handleSetShowMessageToTrue = {handleSetShowMessageToTrue}
-                    arrayOfAlivePlayers = {arrayOfAlivePlayers}
                 />
             </Flex>
             <Flex>

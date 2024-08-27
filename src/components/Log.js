@@ -3,7 +3,12 @@ import React from 'react';
 
 const Log = ({ logList }) => {
     const logs = logList.map((log, index) => (
-        <ListItem key = {index} mb = '4px'>[{log.time}]: {log.log}</ListItem>
+        <ListItem key = {index} 
+                  mb = '4px'
+                  color = {log.color}
+        >
+            [{log.time}]: {log.log}
+        </ListItem>
     ));
 
     return (

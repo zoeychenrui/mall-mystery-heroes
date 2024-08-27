@@ -1,4 +1,4 @@
-import React, { useState} from 'react';
+import React, { useContext, useState} from 'react';
 import { Box, Tooltip } from '@chakra-ui/react';
 import CreateAlert from './CreateAlert';
 import kill from '../assets/kill-white.png';
@@ -9,21 +9,23 @@ import { fetchPlayerForRoom,
          checkOpenSzn
     } from './dbCalls';
 import RemapPlayers from './RemapPlayers';
+import { executionContext, gameContext } from './Contexts';
 
 const KillButton = (props) => {
-    const { roomID, 
-            assassinPlayerNamed, 
-            handleKillPlayer, 
+    const { assassinPlayerNamed, 
             selectedTarget, 
             possibleTargets, 
             getPossibleTargets, 
-            handleChoiceReset,
-            handleRemapping,
+            handleChoiceReset
+        } = props;
+    const { roomID } = useContext(gameContext);
+    const { arrayOfAlivePlayers, 
+            handleKillPlayer,
             handleAddNewAssassins,
             handleAddNewTargets,
-            handleSetShowMessageToTrue,
-            arrayOfAlivePlayers
-        } = props;
+            handleRemapping,
+            handleSetShowMessageToTrue
+        } = useContext(executionContext);
     const [isHovering, setIsHovering] = useState(false);
     const createAlert = CreateAlert();
     const handleRegeneration = RemapPlayers(handleRemapping, createAlert);

@@ -62,7 +62,7 @@ const fetchAllLogsForRoom = async (roomID) => {
 }
 
 //add new log to database
-const updateLogsForRoom = async (newLog, roomID) => {
+const updateLogsForRoom = async (newLog, color, roomID) => {
     try {
         const date = new Date();
         const time = date.toLocaleTimeString();
@@ -71,7 +71,8 @@ const updateLogsForRoom = async (newLog, roomID) => {
         const currLogs = docSnapshot.data().logs;
         const newAddition = {
             time: time,
-            log: newLog
+            log: newLog,
+            color: color
         }
         const newLogs = [...currLogs, newAddition];
         await updateDoc(docRef, { logs: newLogs });
@@ -240,6 +241,17 @@ const fetchAlivePlayersQueryByDescendPointsForRoom = (roomID) => {
     }
     catch (error) {
         console.error('Error fetching alive players: ', error);
+    }
+}
+
+//returns a query of all tasks for room
+const fetchTasksQueryForRoom = (roomID) => {
+    try {
+        const taskCollectionRef = collection(db, 'rooms', roomID, 'tasks');
+        return query(taskCollectionRef);
+    }
+    catch (error) {
+        console.error('Error fetching tasks: ', error);
     }
 }
 
@@ -466,6 +478,7 @@ const checkOpenSzn = async (roomID, selectedOpenSeasonPlayer) => {
     return sznSnapshot.docs[0].get('openSeason');
 }
 
+//checks if roomID already exists
 const checkForRoomIDDupes = async (roomID) => {
     const roomDocRef = doc(db, 'rooms', roomID);
     const roomSnapshot = await getDoc(roomDocRef);
@@ -500,5 +513,6 @@ export {
     fetchAlivePlayersByAscendTargetsLengthForRoom,
     endGame,
     checkOpenSzn,
-    checkForRoomIDDupes
+    checkForRoomIDDupes,
+    fetchTasksQueryForRoom
 };
