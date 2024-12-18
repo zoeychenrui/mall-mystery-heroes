@@ -18,7 +18,6 @@ import {
 import { useEffect, useState } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import FilledEnterButton from "./FilledEnterButton";
-import { testStorageCall } from "./storageCalls";
 
 const Auth = (props) => {
   const [email, setEmail] = useState("");
@@ -46,7 +45,6 @@ const Auth = (props) => {
   const signUp = async () => {
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      await testStorageCall();
       console.log("Account successfully created");
       navigate('/dashboard');
     } catch (err) {
