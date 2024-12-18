@@ -64,7 +64,7 @@ const TaskButton = (props) => {
             setCheckedPlayers(task.completedBy);
         }       
         if (taskID) fetchCheckedPlayers();
-    }, [roomID,taskID])
+    }, [roomID, taskID])
 
     //cancels actions made in modal when cancel button is clicked
     const handleCancel = () => {
@@ -91,7 +91,8 @@ const TaskButton = (props) => {
             if (taskDocRef === null) {
                 return createAlert('error', 'Error', 'task does not exist', 1500);
             }
-            let points = parseInt(task.pointValue);
+            const points = parseInt(task.pointValue);
+            const NegativePoints = points * -1;
 
             //updates player scores for task types
             if (task.taskType === 'Task') {
@@ -103,8 +104,7 @@ const TaskButton = (props) => {
                 for (const player of newRemovedPlayers) {
                     const playerDoc = await fetchPlayerForRoom(player, roomID);
                     if (playerDoc.data().isAlive === false) continue;
-                    points = points * -1;
-                    await updatePointsForPlayer(player, points, roomID);
+                    await updatePointsForPlayer(player, NegativePoints, roomID);
                 }
             }
             //updates player live status for revival missions

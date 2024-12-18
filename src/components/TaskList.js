@@ -33,6 +33,7 @@ const TaskList = () => {
         })
 
         return () => unsubscribe();
+        //eslint-disable-next-line
     }, [])
 
     //makes an array where each item contains an accordion item of an active task object

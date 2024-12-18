@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Center, Stack, Image, Box, Flex, Divider } from '@chakra-ui/react';
+import { Button, Stack, Image, Box, Flex, Divider } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import logo from '../assets/mall-logo-white-2.png';
 

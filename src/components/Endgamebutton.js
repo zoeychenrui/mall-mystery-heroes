@@ -1,9 +1,7 @@
 import {
     Flex,
     Button,
-    ModalOverlay,
     AlertDialog,
-    AlertDialogBody,
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogOverlay, 
@@ -13,7 +11,7 @@ import {
 } from '@chakra-ui/react';
 import React, { useContext } from 'react';
 import { endGame } from './dbCalls';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { gameContext } from './Contexts';
 
 

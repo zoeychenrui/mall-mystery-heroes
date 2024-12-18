@@ -20,11 +20,17 @@
       "port": 5001
     },
     "firestore": {
-      "port": 8080
+      "port": 8081
     },
     "ui": {
       "enabled": true
     },
-    "singleProjectMode": true
+    "singleProjectMode": true,
+    "storage": {
+      "port": 9199
+    }
+  },
+  "storage": {
+    "rules": "storage.rules"
   }
 }

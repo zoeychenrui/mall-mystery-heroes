@@ -13,12 +13,12 @@ import {
 } from '@chakra-ui/react';
 import {
   createUserWithEmailAndPassword,
-  signOut,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import FilledEnterButton from "./FilledEnterButton";
+import { testStorageCall } from "./storageCalls";
 
 const Auth = (props) => {
   const [email, setEmail] = useState("");
@@ -46,6 +46,7 @@ const Auth = (props) => {
   const signUp = async () => {
     try {
       await createUserWithEmailAndPassword(auth, email, password);
+      await testStorageCall();
       console.log("Account successfully created");
       navigate('/dashboard');
     } catch (err) {
@@ -58,14 +59,16 @@ const Auth = (props) => {
     navigate('/login/password-reset');
   };
 
-  const logout = async () => {
-    try {
-      await signOut(auth);
-      console.log("User successfully logged out");
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  /* not used right now
+    const logout = async () => {
+      try {
+        await signOut(auth);
+        console.log("User successfully logged out");
+      } catch (err) {
+        console.error(err);
+      }
+    };
+  */
 
   const checkPass = () => {
     if (password !== password2) {
