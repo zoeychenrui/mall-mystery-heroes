@@ -13,7 +13,6 @@ import {
 } from '@chakra-ui/react';
 import {
   createUserWithEmailAndPassword,
-  signOut,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { useEffect, useState } from 'react';
@@ -58,14 +57,16 @@ const Auth = (props) => {
     navigate('/login/password-reset');
   };
 
-  const logout = async () => {
-    try {
-      await signOut(auth);
-      console.log("User successfully logged out");
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  /* not used right now
+    const logout = async () => {
+      try {
+        await signOut(auth);
+        console.log("User successfully logged out");
+      } catch (err) {
+        console.error(err);
+      }
+    };
+  */
 
   const checkPass = () => {
     if (password !== password2) {

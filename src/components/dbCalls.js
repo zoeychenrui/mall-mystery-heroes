@@ -9,6 +9,7 @@ import { collection,
          addDoc,
          orderBy,
          deleteDoc,
+         arrayUnion,
     } from 'firebase/firestore';
 import UnmapPlayers from './UnmapPlayers';
 
@@ -73,9 +74,11 @@ const updateLogsForRoom = async (newLog, color, roomID) => {
             time: time,
             log: newLog,
             color: color
-        }
+        };
         const newLogs = [...currLogs, newAddition];
-        await updateDoc(docRef, { logs: newLogs });
+        await updateDoc(docRef, {
+            logs: arrayUnion(newAddition)
+        });
         return newLogs;
     }
     catch (error) {

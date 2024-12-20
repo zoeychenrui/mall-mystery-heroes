@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Heading, Button, Stack, Input, Flex, Box, useToast } from '@chakra-ui/react';
+import { Heading, Stack, Input, Flex, Box, useToast } from '@chakra-ui/react';
 import { getAuth, sendPasswordResetEmail } from "firebase/auth";
 import bgimg from '../assets/logo-3.png'; // Ensure this path is correct
 import FilledEnterButton from '../components/FilledEnterButton';

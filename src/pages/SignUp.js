@@ -1,14 +1,10 @@
-import React, { useState } from 'react';
-import { Heading, Box, Flex, Text } from '@chakra-ui/react';
+import React from 'react';
+import { Heading, Box, Flex } from '@chakra-ui/react';
 import Auth from '../components/auth';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import bgimg from '../assets/logo-3.png'; // Ensure this path is correct
 
 
 const LoginPage = () => {
-    const [isLoginPage, setIsLoginPage] = useState(false);
-    const navigate = useNavigate();
-
 
     return (
         <Box 
@@ -36,7 +32,7 @@ const LoginPage = () => {
                     maxWidth="400px"
                     mb={3}
                 >
-                    <Auth isLoginPage={isLoginPage}/>
+                    <Auth isLoginPage={false}/>
                 </Box>
             </Flex>
         </Box>

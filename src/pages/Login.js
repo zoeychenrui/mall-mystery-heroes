@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Heading, Box, Flex, Image } from '@chakra-ui/react';
 import Auth from '../components/auth';
 import bgimg from '../assets/logo-3.png'; // Ensure this path is correct
 import logo from '../assets/mall-logo-white-2.png';
 
 const LoginPage = () => {
-    const [isLoginPage, setIsLoginPage] = useState(true);
 
     return (
         <Box 
@@ -40,7 +39,7 @@ const LoginPage = () => {
                         Mall Mystery Heroes
                     </Heading>
                     <Box display="flex" justifyContent="center" width="100%">
-                        <Auth isLoginPage={isLoginPage} />
+                        <Auth isLoginPage={true} />
                     </Box>
                 </Box>
             </Flex>
