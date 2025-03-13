@@ -4,7 +4,7 @@ import { Flex,
         Select
     } from '@chakra-ui/react';
 import CreateAlert from './CreateAlert';
-import { removePlayerForRoom } from './dbCalls';
+import { removePlayerForRoom } from './firebase_calls/dbCalls';
 
 //import {playerData} from './PlayerList';
 const PlayerRemove = ({onPlayerRemoved, arrayOfPlayers, roomID}) => {

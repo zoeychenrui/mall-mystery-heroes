@@ -7,7 +7,7 @@ import {Box,
 import CreateAlert from './CreateAlert';
 import enter from '../assets/enter-black.png';
 import enterHovering from '../assets/enter-black-hover.png';
-import { addPlayerForRoom } from './dbCalls';
+import { addPlayerForRoom } from './firebase_calls/dbCalls';
 
 //adds player to database
 const PlayerAddition = (props) => {

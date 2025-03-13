@@ -15,8 +15,8 @@ import {AlertDialog,
         Table,
         Thead
     } from '@chakra-ui/react';
-import { updateAssassinsForPlayer, updateTargetsForPlayer } from './dbCalls';
-import { gameContext } from './Contexts';
+import { updateAssassinsForPlayer, updateTargetsForPlayer } from '../firebase_calls/dbCalls';
+import { gameContext } from '../Contexts';
 const ResetTargetsButton = ({arrayOfPlayers, addLog}) => {
     const { roomID } = useContext(gameContext);
     //store player's data for three things: 

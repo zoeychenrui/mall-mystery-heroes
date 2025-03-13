@@ -9,7 +9,7 @@ const TaskExecution = () => {
     return (  
         <>
             <Box flex = '1' overflow = 'auto'>
-                <Heading size = 'lg' textAlign = 'center'>Missions</Heading>
+                <Heading size = 'md' textAlign = 'center'>Missions</Heading>
                 <TaskList />
             </Box>
             <Box >

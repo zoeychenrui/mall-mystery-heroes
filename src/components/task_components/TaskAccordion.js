@@ -13,7 +13,7 @@ const TaskAccordion = (props) => {
         <AccordionItem key = {task.title} fontSize = 'md'>
             <AccordionButton>
                 <Text as="span" flex='1' textAlign='left' m = '4px'>
-                    {task.title}
+                    {task.taskIndex}. {task.title}
                 </Text>
                 <Text m = '4px' mr = '10px'>
                     {task.pointValue}

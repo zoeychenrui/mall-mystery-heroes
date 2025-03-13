@@ -1,9 +1,11 @@
+import { useContext } from 'react';
 import { fetchAlivePlayersByAscendAssassinsLengthForRoom, 
          fetchAlivePlayersByAscendTargetsLengthForRoom, 
          fetchPlayerForRoom, 
          updateAssassinsForPlayer, 
          updateTargetsForPlayer 
-    } from './dbCalls';
+    } from './firebase_calls/dbCalls';
+import CreateAlert from './CreateAlert';
 
 const RemapPlayers = (handleRemapping, createAlert) => {
     const tempNewTargets = {};

@@ -8,9 +8,9 @@ import {
     TabList
     } from '@chakra-ui/react';
 import TaskAccordion from './TaskAccordion';
-import { fetchTasksByCompletionForRoom, fetchTasksQueryForRoom } from './dbCalls';
+import { fetchTasksByCompletionForRoom, fetchTasksQueryForRoom } from '../firebase_calls/dbCalls';
 import { onSnapshot } from 'firebase/firestore';
-import { gameContext } from './Contexts';
+import { gameContext } from '../Contexts';
 
 const TaskList = () => {
     const { roomID } = useContext(gameContext);
@@ -59,8 +59,8 @@ const TaskList = () => {
      return (  
         <Tabs>
             <TabList>
-                <Tab fontSize = 'md' fontWeight = 'bold'>Active Tasks ({arrayOfActiveTasks.length})</Tab>
-                <Tab fontSize = 'md' fontWeight = 'bold'>Completed Tasks ({arrayOfInactiveTasks.length})</Tab>
+                <Tab fontSize = 'sm' fontWeight = 'bold'> Active ({arrayOfActiveTasks.length})</Tab>
+                <Tab fontSize = 'sm' fontWeight = 'bold'>Completed ({arrayOfInactiveTasks.length})</Tab>
             </TabList>
             <TabPanels>
                 <TabPanel>

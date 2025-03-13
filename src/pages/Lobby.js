@@ -14,7 +14,7 @@ import PlayerAddition from '../components/PlayerAddition';
 import PlayerList from '../components/PlayerList';
 import PlayerRemove from "../components/PlayerRemove";
 import TargetGenerator from "../components/TargetGenerator";
-import { fetchAllPlayersForRoom } from "../components/dbCalls";
+import { fetchAllPlayersForRoom } from "../components/firebase_calls/dbCalls";
 import { auth } from "../utils/firebase";
 
 const Lobby = () => {

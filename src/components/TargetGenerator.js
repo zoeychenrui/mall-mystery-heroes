@@ -15,7 +15,7 @@ import {AlertDialog,
         Table,
         Thead
     } from '@chakra-ui/react';
-import { updateAssassinsForPlayer, updateTargetsForPlayer } from './dbCalls';
+import { updateAssassinsForPlayer, updateTargetsForPlayer } from './firebase_calls/dbCalls';
 const TargetGenerator = ({arrayOfPlayers, roomID, handleLobbyRoom}) => {
     //store player's data for three things: 
     //1. number of assassins (hits on a person)

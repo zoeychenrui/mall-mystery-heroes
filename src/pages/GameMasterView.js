@@ -1,31 +1,18 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
-import AlivePlayersList from '../components/AlivePlayersList';
+import PlayersList from '../components/player_listing/PlayersList';
 import { useParams, 
          useLocation } from 'react-router-dom';
-import DeadPlayersList from '../components/DeadPlayersList';
-import { HStack,   
-         Heading,
-         VStack,
-         Box,
-         Divider,
-    } from '@chakra-ui/react';
-import Execution from '../components/Execution';
-import TaskExecution from '../components/TaskExecution';
-import HeaderExecution from '../components/HeaderExecution';
-import Log from '../components/Log';
+import { HStack, Heading, VStack, Box, Divider} from '@chakra-ui/react';
+import TaskExecution from '../components/task_components/TaskExecution';
+import HeaderExecution from '../components/header_components/HeaderExecution';
+import Log from '../components/logs_components/Log';
 import UnmapPlayers from '../components/UnmapPlayers';
-import { fetchPlayersByStatusForRoom, 
-         fetchAllTasksForRoom, 
-         fetchAllLogsForRoom, 
-         updateLogsForRoom,
-    } from '../components/dbCalls';
+import { fetchPlayersByStatusForRoom, fetchAllTasksForRoom, fetchAllLogsForRoom, updateLogsForRoom } from '../components/firebase_calls/dbCalls';
 import RemapPlayerModal from '../components/RemapPlayerModal';
-import { gameContext, 
-         taskContext, 
-         deadPlayerListContext,
-         executionContext
-    } from '../components/Contexts';
+import { gameContext, taskContext, executionContext } from '../components/Contexts';
+import ChatInput from '../components/logs_components/ChatInput';
+import PhotosDisplay from '../components/photos_display_component/PhotosDisplay';
 
 const GameMasterView = () => {
     const { roomID } = useParams(); 
@@ -143,16 +130,22 @@ const GameMasterView = () => {
         console.log('set show message to true');
     }
 
+    // values for executionContext Provider
+    const executionContextProviderValues = {
+        handleKillPlayer, 
+        handleAddNewAssassins, 
+        handleAddNewTargets,
+        handleRemapping,
+        handlePlayerRevive,
+        handleTaskCompleted,
+        handleSetShowMessageToTrue,
+        handleOpenSznstarted,
+        handleOpenSznended
+    }
+
     return (
-        <gameContext.Provider
-            value = {{
-                roomID
-            }}
-        >
-            <Box h = '100vh' 
-                display = 'flex' 
-                flexDirection = 'column'
-            >
+        <gameContext.Provider value = {{roomID}}>
+            <Box sx = {styles.container}>
                 <RemapPlayerModal 
                     showRemapModal = {showRemapModal}
                     newTargets = {newTargets}
@@ -160,139 +153,45 @@ const GameMasterView = () => {
                     onClose = {() => setShowRemapModal(false)}
                 />
 
-                <Box h = '6%'>
+                <Box h = '6%' m = '2px' marginX = '4px'>
                     <HeaderExecution 
                         addLog = {addLog}
                         arrayOfAlivePlayers = {arrayOfAlivePlayers}
                     />
                 </Box>
 
-                <HStack alignItems = 'left'
-                        p = '5px'
-                        flex = '1'
-                        overflow = 'hidden'
-                >
-                    <Box w = {{base: '100%', md: '25%'}}
-                        h = {{base: '94%', md: '95%'}}
-                        borderWidth = '2px' 
-                        borderRadius = '2xl' 
-                        overflow = 'auto' 
-                        px = '2px'
-                        mx = '16px' 
-                    >
-                        <Heading 
-                            size = 'lg' 
-                            textAlign = 'center'
-                            m = '4px'
-                        >
-                            Alive Players ({arrayOfAlivePlayers.length})
+                <HStack sx = {styles.gameDisplayWrapper}>
+                    <Box sx = {styles.playersListWrapper}>
+                        <Heading sx = {styles.playerListHeader}>
+                            Players ({arrayOfPlayers.length})
                         </Heading>
-                        <AlivePlayersList />
+                        <Divider />
+                        <PlayersList />
                     </Box>
 
-                    <VStack ml = '10px' 
-                            mr = '10px' 
-                            w = {{base: '100%', md: '46%'}}  
-                            h = {{base: '95%', md: '95%'}}
-                    >
-                        <Box borderWidth = '2px' 
-                            borderRadius = '2xl' 
-                            p = '4px' 
-                            w = '100%' 
-                            h = {{base: '34%', md: '100%'}} 
-                            mb = '10px'
-                            overflow = 'hidden'
+                    <Box sx = {styles.logsWrapper}>
+                        <Heading sx = {styles.chatHeaderText}>Logs</Heading>
+                        <Divider/>
+                        <Box sx = {styles.logsBox}>
+                            <Log logList = {logList}/>
+                        </Box>
+                        <Divider/>
+                        <executionContext.Provider
+                            value = {executionContextProviderValues}
                         >
-                            <Heading 
-                                size = 'lg' 
-                                textAlign = 'center'
-                                mb = '4px'
-                            >
-                                History Log
-                            </Heading>
-                            <Divider/>
-                            <Box
-                                overflow = 'auto'
-                                h = 'calc(100% - 50px)'
-                                maxH = 'calc(100% - 50px)'
-                            >
-                                <Log 
-                                    logList = {logList}
-                                />
+                            <Box sx = {styles.logInput}>
+                                <ChatInput />
                             </Box>
+                        </executionContext.Provider>
+                    </Box>
 
+                    <VStack sx = {styles.rightHandStack}>
+                        <Box sx = {styles.photosBox}>
+                            <PhotosDisplay />
                         </Box>
 
-                        <Box borderWidth = '2px' 
-                            borderRadius = '2xl' 
-                            p = '4px' 
-                            w = '100%' 
-                            h = {{base: '40%', md: '40%'}}
-                        >
-                            <executionContext.Provider
-                                value = {{
-                                    arrayOfAlivePlayers,
-                                    handleKillPlayer,
-                                    handleAddNewAssassins,
-                                    handleAddNewTargets,
-                                    handleRemapping,
-                                    handlePlayerRevive,
-                                    handleUndoRevive,
-                                    handleTaskCompleted,
-                                    arrayOfTasks,
-                                    handleSetShowMessageToTrue,
-                                    handleOpenSznstarted,
-                                    handleOpenSznended
-                                }}
-                            >
-                                <Execution />
-                            </executionContext.Provider>
-                        </Box>
-                    </VStack>
-
-                    <VStack ml = '10px' 
-                            mr = '16px' 
-                            w = {{ base: '100%', md: '29%' }}
-                            h = {{base: '95%', md: '95%'}}
-                    >
-                        <Box w = {{base: '100%', md: '100%'}}
-                            h = {{base: '34%', md: '70%'}} 
-                            borderWidth = '2px' 
-                            borderRadius = '2xl'
-                            overflow = 'auto' 
-                            p = '4px' 
-                            mb = '10px'
-                        >
-                            <Heading size = 'lg' textAlign = 'center'>Dead Players ({arrayOfDeadPlayers.length})</Heading>
-                            <deadPlayerListContext.Provider
-                                value = {{
-                                    handlePlayerRevive,
-                                    arrayOfAlivePlayers,
-                                    handleRemapping,
-                                    arrayOfDeadPlayers,
-                                    handleAddNewAssassins,
-                                    handleAddNewTargets,
-                                    handleSetShowMessageToTrue
-                                }}
-                            >
-                                <DeadPlayersList />
-                            </deadPlayerListContext.Provider>
-                        </Box>
-
-                        <Box w = {{base: '100%', md: '100%'}}
-                            h = {{base: '34%', md: '100%'}} 
-                            borderWidth = '2px' 
-                            borderRadius = '2xl'
-                            overflow = 'auto' 
-                            p = '4px' 
-                            display = 'flex' 
-                            flexDirection = 'column'
-                        >
-                            <taskContext.Provider
-                                value = {{
-                                    handleNewTaskAdded
-                                }}
-                            >
+                        <Box sx = {styles.taskBox}>
+                            <taskContext.Provider value = {{handleNewTaskAdded}}>
                                 <TaskExecution />
                             </taskContext.Provider>
                         </Box>
@@ -304,3 +203,77 @@ const GameMasterView = () => {
 }
 
 export default GameMasterView;
+
+const styles = {
+    gameDisplayWrapper: {
+        alignItems: 'left',
+        p: '5px',
+        flex: '1',
+        m: '2px',
+        overflow: 'hidden'
+    },
+    container: {
+        h: '100vh',
+        display: 'flex', 
+        flexDirection:'column'
+    },
+    playersListWrapper: {
+        w: '20%',
+        minW: '20%',
+        h: '100%',
+        borderWidth: '2px', 
+        borderRadius: '1.5rem',
+        px: '2px',
+        mx: '8px'
+    },
+    playerListHeader: {
+        fontSize: '26px',
+        textAlign: 'center',
+        m: '4px',
+    },
+    chatHeaderText: {
+        size: 'lg' ,
+        textAlign: 'center',
+        mb: '4px'
+    },
+    logsWrapper: {
+        borderWidth: '2px' ,
+        borderRadius: '2xl' ,
+        p: '4px',
+        w: '55%',
+        h: '100%',
+        mx: '4px',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
+    },
+    logsBox: {
+        overflow: 'auto',
+        h: '85%',
+        minH: '85%'
+    },
+    logInput: {
+        flex: '1',
+    },
+    taskBox: {
+        w: {base: '100%', md: '100%'},
+        h: '60%',
+        borderWidth: '2px',
+        borderRadius: '2xl',
+        overflow: 'auto',
+        p: '4px', 
+        display: 'flex', 
+        flexDirection: 'column'
+    },
+    rightHandStack: {
+        ml: '10px',
+        mr: '16px',
+        w: '25%',
+        minW: '25%',
+        h: {base: '100%', md: '100%'}
+    },
+    photosBox: {
+        w: {base: '100%', md: '100%'},
+        h : '90%'
+    }
+}
