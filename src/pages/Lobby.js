@@ -1,18 +1,12 @@
-import {
-    Button,
-    Divider,
-    Flex,
-    Heading,
-    Image,
-} from '@chakra-ui/react';
+import { Button, Divider, Flex, Heading, Image } from '@chakra-ui/react';
 import { signOut } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import mallLogo from '../assets/mall-logo-black-green.png';
 import CreateAlert from '../components/CreateAlert';
-import PlayerAddition from '../components/PlayerAddition';
-import PlayerList from '../components/PlayerList';
-import PlayerRemove from "../components/PlayerRemove";
+import PlayerAddition from '../components/lobby_components/PlayerAddition';
+import PlayerList from '../components/lobby_components/PlayerList';
+import PlayerRemove from "../components/lobby_components/PlayerRemove";
 import TargetGenerator from "../components/TargetGenerator";
 import { fetchAllPlayersForRoom } from "../components/firebase_calls/dbCalls";
 import { auth } from "../utils/firebase";
