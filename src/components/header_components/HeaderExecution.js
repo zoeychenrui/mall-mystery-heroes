@@ -4,10 +4,10 @@ import { Image,
          HStack,   
          Spacer
     } from '@chakra-ui/react';
-import whiteLogo from '../assets/mall-logo-white-2.png';
+import whiteLogo from '../../assets/mall-logo-white-2.png';
 import ResetTargetsButton from './ResetTargetsButton';
 import Endgamebutton from './Endgamebutton';
-import { gameContext } from './Contexts';
+import { gameContext } from '../Contexts';
 
 const HeaderExecution = ({ addLog, arrayOfAlivePlayers }) => {
     const { roomID } = useContext(gameContext);

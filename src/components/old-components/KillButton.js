@@ -1,15 +1,15 @@
 import React, { useContext, useState} from 'react';
 import { Box, Tooltip } from '@chakra-ui/react';
-import CreateAlert from './CreateAlert';
+import CreateAlert from '../CreateAlert';
 import kill from '../assets/kill-white.png';
 import killHover from '../assets/kill-hover.png';
 import { fetchPlayerForRoom, 
          killPlayerForRoom, 
          updatePointsForPlayer,
          checkOpenSzn
-    } from './dbCalls';
-import RemapPlayers from './RemapPlayers';
-import { executionContext, gameContext } from './Contexts';
+    } from '../dbCalls';
+import RemapPlayers from '../RemapPlayers';
+import { executionContext, gameContext } from '../Contexts';
 
 const KillButton = (props) => {
     const { assassinPlayerNamed, 
@@ -55,7 +55,7 @@ const KillButton = (props) => {
             const targets = possibleTargets.filter(target => target !== selectedTarget);
             getPossibleTargets(targets);
             handleChoiceReset();
-            handleKillPlayer(selectedTarget, assassinPlayerNamed, openSznstatus);
+            (selectedTarget, assassinPlayerNamed, openSznstatus);
             handleRemap(playersNeedingTarget, playersNeedingAssassins);
         }
         catch (error) {

@@ -2,10 +2,10 @@ import React, { useContext, useState } from 'react';
 import { Image, Box} from '@chakra-ui/react';
 import revive from '../assets/revive-gray.png';
 import reviveHover from '../assets/revive-white.png';
-import CreateAlert from './CreateAlert';
+import CreateAlert from '../CreateAlert';
 import { updateIsAliveForPlayer } from './dbCalls';
-import RemapPlayers from './RemapPlayers';
-import { deadPlayerListContext, gameContext } from './Contexts';
+import RemapPlayers from '../RemapPlayers';
+import { deadPlayerListContext, gameContext } from '../Contexts';
 
 const DeadPlayerReviveButton = ({ player }) => {
     const { roomID } = useContext(gameContext);

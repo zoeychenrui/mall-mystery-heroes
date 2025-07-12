@@ -5,7 +5,7 @@ import { Button, ButtonGroup, Flex, Heading } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import {signOut} from 'firebase/auth';
 import { adjectives, uniqueNamesGenerator } from 'unique-names-generator';
-import { checkForRoomIDDupes } from '../components/dbCalls';
+import { checkForRoomIDDupes } from '../components/firebase_calls/dbCalls';
 import CreateAlert from '../components/CreateAlert';
 
 const DashBoard = () => {
@@ -43,6 +43,8 @@ const DashBoard = () => {
           hostId: user.uid,
           isGameActive : true,
           logs: [],
+          taskIndex: 1,
+          storageReference: []
         });
         navigate(`/rooms/${roomRef.id}/lobby`);
       } else {

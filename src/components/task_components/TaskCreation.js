@@ -7,11 +7,12 @@ import {Input,
         NumberDecrementStepper,
         NumberIncrementStepper,
         NumberInputStepper,
-        Select
+        Select,
+        Box
     } from '@chakra-ui/react';
-import CreateAlert from './CreateAlert';
-import { addTaskForRoom, checkForTaskDupesForRoom } from './dbCalls';
-import { gameContext, taskContext } from './Contexts';
+import CreateAlert from '../CreateAlert';
+import { addTaskForRoom, checkForTaskDupesForRoom, fetchTaskIndexThenIncrement } from '../firebase_calls/dbCalls';
+import { gameContext, taskContext } from '../Contexts';
 
 const TaskCreation = () => {
     const { handleNewTaskAdded } = useContext(taskContext);
@@ -55,12 +56,15 @@ const TaskCreation = () => {
     //handles task submisison
     const handleAddTask = async () => {
         const titleTrimmedLowerCase = TaskTitle.replace(/\s/g, '').toLowerCase();
+        const taskIndex = await fetchTaskIndexThenIncrement(roomID);
+
         let newTask = {
             title: TaskTitle,
             titleTrimmedLowerCase: titleTrimmedLowerCase,
             description: TaskDescription,
             pointValue: PointValue,
             taskType: selectedTaskType,
+            taskIndex: taskIndex,
             dateCreated: time.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
             isComplete: false,
             completedBy: []
@@ -110,42 +114,36 @@ const TaskCreation = () => {
         <Flex m = '6px' direction = 'column'>
             <Flex mb = '4px'>
                 <Input 
-                    size = 'md'
-                    borderRadius = '2xl'
-                    placeholder = 'Task Title'
+                    sx = {styles.titleInput}
                     value = {TaskTitle}
                     onChange = {handleTitleChange}
-                    m = '2px'
+                    placeholder = "Task Title"
                 />
                 <Input 
-                    size = 'md'
-                    borderRadius = '2xl'
-                    placeholder='Description'
+                    placeholder = 'Description'
                     value = {TaskDescription}
                     onChange= {handleDescriptionChange}
-                    m = '2px'
                 />
             </Flex>
 
             <Flex>
-                <Select size='md'
-                        borderRadius = '2xl'
-                        placeholder = 'Select Task Type'
-                        value = {selectedTaskType}
-                        onChange = {handleChangeTaskType}
-                        m = '2px'
-
+                <Select
+                    sx = {styles.taskTypeSelection}
+                    placeholder = 'Select Task Type'
+                    value = {selectedTaskType}
+                    onChange = {handleChangeTaskType}
                 >
                     <option value = 'Task'>Task</option>
                     <option value = 'Revival Mission'>Revival Mission</option>
                 </Select>
-                <NumberInput value = {PointValue}
-                             onChange = {handlePointChange}
-                             defaultValue = '15'
-                             min= '0'
-                             size = 'md'
-                             m = '2px'
-                             isDisabled = {disableNumberInput}
+                
+                <NumberInput 
+                    style = {styles.pointInput}
+                    value = {PointValue}
+                    onChange = {handlePointChange}
+                    isDisabled = {disableNumberInput}
+                    m = '2px'
+                    marginX = '4px'
                 >
                     <NumberInputField />
                     <NumberInputStepper>
@@ -153,11 +151,11 @@ const TaskCreation = () => {
                         <NumberDecrementStepper color = 'white'/>
                     </NumberInputStepper>
                 </NumberInput>
-                <Button size = 'md'
-                        onClick = {handleAddTask}
-                        colorScheme= 'blue'
-                        width = '20%'
-                        m = '2px'
+                
+                <Button 
+                    sx = {styles.addButton}
+                    onClick = {handleAddTask}
+                    colorScheme = 'blue'
                 >
                     Add
                 </Button>
@@ -166,4 +164,30 @@ const TaskCreation = () => {
     );
 }
  
+const styles = {
+    titleInput: {
+        size: 'md',
+        borderRadius: '2xl',
+        m: '2px'
+    },
+    descInput: {
+        borderRadius: '2xl',
+        m: '2px'
+    },
+    taskTypeSelection: {
+        size: 'md',
+        borderRadius: '2xl',
+        m: '2px'
+    },
+    addButton: {
+        size: 'md',
+        width: '20%',
+        m: '2px'
+    },
+    pointInput: {
+        defaultValue: '15',
+        min: '0',
+        size: 'md',
+    }
+}
 export default TaskCreation;

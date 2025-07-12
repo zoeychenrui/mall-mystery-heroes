@@ -10,9 +10,9 @@ import {
 
 } from '@chakra-ui/react';
 import React, { useContext } from 'react';
-import { endGame } from './dbCalls';
+import { endGame } from '../firebase_calls/dbCalls';
 import { useNavigate } from 'react-router-dom';
-import { gameContext } from './Contexts';
+import { gameContext } from '../Contexts';
 
 
 

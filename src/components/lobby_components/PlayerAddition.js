@@ -1,13 +1,13 @@
 import React, {useState} from 'react';
-import {Box, 
-        Flex, 
-        Image, 
-        Input,
-    } from '@chakra-ui/react';
-import CreateAlert from './CreateAlert';
-import enter from '../assets/enter-black.png';
-import enterHovering from '../assets/enter-black-hover.png';
-import { addPlayerForRoom } from './dbCalls';
+import {
+    Box, 
+    Flex, 
+    Image, 
+    Input,
+} from '@chakra-ui/react';
+import CreateAlert from '../CreateAlert';
+import enter from '../../assets/enter-black.png';
+import { addPlayerForRoom } from '../firebase_calls/dbCalls';
 
 //adds player to database
 const PlayerAddition = (props) => {
@@ -53,6 +53,7 @@ const PlayerAddition = (props) => {
                 >
                     <Input
                         placeholder = "Enter Player Name"
+                        fontSize = '16'
                         value = {playerName}
                         onChange = {handleInputChange}
                         size = 'lg'
@@ -62,18 +63,21 @@ const PlayerAddition = (props) => {
                         color = 'black'
                         borderWidth = '2px'
                         bg = '#9FF0AB'
-                        _hover = {{borderColor: 'white', bg: '#9FF0AB'}}
+                        _hover = {{borderColor: 'gray', bg: '#9FF0AB'}}
                     />
                     <Box 
                         ml = '6px'
                     >
                         <Image 
-                            src = {isHover ? enterHovering : enter}
+                            src = {enter}
+                            alt = "Enter Image"
                             onMouseEnter = {() => setIsHover(true)}
                             onMouseLeave = {() => setIsHover(false)}
                             onClick = {handleSubmit}
                             w = '30%'
                             h = '100%'
+                            opacity = {isHover ? '40%' : '100%'}
+                            transition = "opacity 0.2s ease"
                         />
                     </Box>
                 </Flex> 
