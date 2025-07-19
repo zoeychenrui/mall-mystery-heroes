@@ -190,11 +190,11 @@ const GameMasterView = () => {
                             <PhotosDisplay />
                         </Box>
 
-                        <Box sx = {styles.taskBox}>
+                        {/*<Box sx = {styles.taskBox}>
                             <taskContext.Provider value = {{handleNewTaskAdded}}>
                                 <TaskExecution />
                             </taskContext.Provider>
-                        </Box>
+                        </Box>*/}
                     </VStack>
                 </HStack>
             </Box>
@@ -220,7 +220,7 @@ const styles = {
     playersListWrapper: {
         w: '20%',
         minW: '20%',
-        h: '100%',
+        h: '95%',
         borderWidth: '2px', 
         borderRadius: '1.5rem',
         px: '2px',
@@ -241,7 +241,7 @@ const styles = {
         borderRadius: '2xl' ,
         p: '4px',
         w: '55%',
-        h: '100%',
+        h: '95%',
         mx: '4px',
         overflow: 'hidden',
         display: 'flex',
@@ -274,6 +274,6 @@ const styles = {
     },
     photosBox: {
         w: {base: '100%', md: '100%'},
-        h : '90%'
+        h : '95%'
     }
 }
