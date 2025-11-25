@@ -10,8 +10,10 @@ import { collection,
          orderBy,
          deleteDoc,
          arrayUnion,
+         setDoc,
     } from 'firebase/firestore';
 import UnmapPlayers from '../UnmapPlayers';
+import { serverTimestamp } from 'firebase/firestore';
 
 //fetches all players from database
 export const fetchAllPlayersForRoom = async (roomID) => {
@@ -324,6 +326,32 @@ export const fetchPhotosQueryByAscendingTimestampForRoom = (roomID) => {
     }
 }
 
+// updates a photo's status in Firestore
+export const updatePhotoStatusForRoom = async (roomID, photoID, status) => {
+    try {
+        const photoRef = doc(db, 'rooms', roomID, 'photos', photoID);
+        await updateDoc(photoRef, { status: status });
+    } catch (error) {
+        console.error(`Error updating photo status: `, error);
+    }
+};
+
+// adds photo for testing without mobile app
+export const addPhotoForRoom = async (roomID, url, assassin, target) => {
+    try {
+        const photosCollectionRef = collection(db, 'rooms', roomID, 'photos');
+        await addDoc(photosCollectionRef, {
+            url,
+            assassin,
+            target,
+            timestamp: serverTimestamp(),
+            status: "pending"
+        });
+    } catch (error) {
+        console.error('Error adding photo: ', error);
+    }
+};
+
 //returns a query of all tasks for room
 export const fetchTasksQueryForRoom = (roomID) => {
     try {
@@ -611,3 +639,50 @@ export const fetchTaskIndexThenIncrement = async (roomID) => {
         console.error("Error fetching Task Index: ", error);
     }
 }
+
+// Creates a new room document with default fields like logs
+export const createRoomWithDefaults = async (roomID) => {
+    try {
+        const roomRef = doc(db, 'rooms', roomID);
+        await setDoc(roomRef, {
+            logs: [
+                {
+                    time: new Date().toLocaleTimeString(),
+                    log: "Game has begun!",
+                    color: "gray.400"
+                }
+            ],
+            isGameActive: true,
+            taskIndex: 0
+        });
+        console.log(`Room ${roomID} created with default logs.`);
+    } catch (error) {
+        console.error('Error creating room:', error);
+    }
+};
+
+export const remapPlayerAsTarget = async (revivedPlayerName, roomID, originalAssassins) => {
+    try {
+      const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
+      const snapshot = await getDocs(playerCollectionRef);
+  
+      for (const docSnap of snapshot.docs) {
+        const player = docSnap.data();
+        const docRef = docSnap.ref;
+  
+        const isAlive = player.isAlive;
+        const alreadyTargeted = player.targets?.includes(revivedPlayerName);
+  
+        if (isAlive && originalAssassins.includes(player.name) && !alreadyTargeted) {
+          const updatedTargets = [...(player.targets || []), revivedPlayerName];
+          await updateDoc(docRef, {
+            targets: updatedTargets,
+            targetsLength: updatedTargets.length
+          });
+          console.log(`✅ Remapped ${revivedPlayerName} to ${player.name}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error remapping revived player as target:', error);
+    }
+  };  

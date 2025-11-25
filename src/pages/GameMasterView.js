@@ -8,7 +8,7 @@ import TaskExecution from '../components/task_components/TaskExecution';
 import HeaderExecution from '../components/header_components/HeaderExecution';
 import Log from '../components/logs_components/Log';
 import UnmapPlayers from '../components/UnmapPlayers';
-import { fetchPlayersByStatusForRoom, fetchAllTasksForRoom, fetchAllLogsForRoom, updateLogsForRoom } from '../components/firebase_calls/dbCalls';
+import { fetchPlayersByStatusForRoom, fetchAllTasksForRoom, fetchAllLogsForRoom, updateLogsForRoom, updateIsAliveForPlayer } from '../components/firebase_calls/dbCalls';
 import RemapPlayerModal from '../components/RemapPlayerModal';
 import { gameContext, taskContext, executionContext } from '../components/Contexts';
 import ChatInput from '../components/logs_components/ChatInput';
@@ -82,6 +82,7 @@ const GameMasterView = () => {
 
     //updates ArrayOfDeadPlayers and adds player to arrayOfAlivePlayers
     const handlePlayerRevive = async (revivedPlayerName) => {
+        await updateIsAliveForPlayer(revivedPlayerName, true, roomID);
         setArrayOfDeadPlayers((prevArrayOfDeadPlayers) => 
             prevArrayOfDeadPlayers.filter((name) => name !== revivedPlayerName)
         );
@@ -140,7 +141,10 @@ const GameMasterView = () => {
         handleTaskCompleted,
         handleSetShowMessageToTrue,
         handleOpenSznstarted,
-        handleOpenSznended
+        handleOpenSznended,
+        setArrayOfAlivePlayers,
+        setArrayOfDeadPlayers,
+        addLog
     }
 
     return (
@@ -185,17 +189,19 @@ const GameMasterView = () => {
                         </executionContext.Provider>
                     </Box>
 
-                    <VStack sx = {styles.rightHandStack}>
-                        <Box sx = {styles.photosBox}>
-                            <PhotosDisplay />
-                        </Box>
+                    <executionContext.Provider value={executionContextProviderValues}>
+                        <VStack sx = {styles.rightHandStack}>
+                            <Box sx = {styles.photosBox}>
+                                <PhotosDisplay />
+                            </Box>
 
-                        <Box sx = {styles.taskBox}>
-                            <taskContext.Provider value = {{handleNewTaskAdded}}>
-                                <TaskExecution />
-                            </taskContext.Provider>
-                        </Box>
-                    </VStack>
+                            {/*<Box sx = {styles.taskBox}>
+                                <taskContext.Provider value = {{handleNewTaskAdded}}>
+                                    <TaskExecution />
+                                </taskContext.Provider>
+                            </Box>*/}
+                        </VStack>
+                    </executionContext.Provider>
                 </HStack>
             </Box>
         </gameContext.Provider>
@@ -220,7 +226,7 @@ const styles = {
     playersListWrapper: {
         w: '20%',
         minW: '20%',
-        h: '100%',
+        h: '95%',
         borderWidth: '2px', 
         borderRadius: '1.5rem',
         px: '2px',
@@ -241,7 +247,7 @@ const styles = {
         borderRadius: '2xl' ,
         p: '4px',
         w: '55%',
-        h: '100%',
+        h: '95%',
         mx: '4px',
         overflow: 'hidden',
         display: 'flex',
@@ -274,6 +280,6 @@ const styles = {
     },
     photosBox: {
         w: {base: '100%', md: '100%'},
-        h : '90%'
+        h : '95%'
     }
 }
