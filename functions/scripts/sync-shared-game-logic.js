@@ -25,6 +25,7 @@ const FILES = [
     'rateLimit.js',
     'killPhotoUrl.js',
     'missionCompletion.js',
+    'gameBoundary.js',
 ];
 
 fs.mkdirSync(DEST_DIR, { recursive: true });
