@@ -235,3 +235,128 @@ describe('validateBoundaryShape', () => {
         expect(validateBoundaryShape('freehand', crossing).ok).toBe(false);
     });
 });
+
+const {
+    GAME_BOUNDARY_CONFIG,
+    classifyFix,
+    initialBoundaryState,
+    nextBoundaryState,
+    deriveFreshStatus,
+} = require('./gameBoundary');
+
+// A roughly 100 m north-south by 77 m east-west rectangle, around 40N.
+const plot = shapeToPolygon('rectangle', {
+    corners: [
+        { lat: 40.0, lng: -74.0 },
+        { lat: 40.0009, lng: -73.9991 },
+    ],
+});
+const plotCenter = { lat: 40.00045, lng: -73.99955 };
+const fix = (overrides) => ({
+    lat: plotCenter.lat,
+    lng: plotCenter.lng,
+    accuracyM: 5,
+    ...overrides,
+});
+// One degree of latitude is about 111,195 m, so 0.0009 deg ≈ 100 m.
+const metersNorthOfPlot = (m) => ({ lat: 40.0009 + m / 111195, lng: -73.99955 });
+
+describe('classifyFix', () => {
+    it('classifies a point well inside as inside', () => {
+        expect(classifyFix(plot, fix()).kind).toBe('inside');
+    });
+
+    it('classifies a point within tolerance just inside the edge as near', () => {
+        const p = { lat: 40.0009 - 5 / 111195, lng: -73.99955 };
+        expect(classifyFix(plot, fix(p)).kind).toBe('near');
+    });
+
+    it('classifies a point well beyond tolerance outside as outside', () => {
+        expect(classifyFix(plot, fix(metersNorthOfPlot(60))).kind).toBe('outside');
+    });
+
+    it('treats a point just outside the edge within tolerance as near, not outside', () => {
+        expect(classifyFix(plot, fix(metersNorthOfPlot(5))).kind).toBe('near');
+    });
+
+    it('expands tolerance to the reported accuracy when that is larger', () => {
+        // 30 m outside with 40 m accuracy: inside the expanded tolerance, so near.
+        expect(classifyFix(plot, fix({ ...metersNorthOfPlot(30), accuracyM: 40 })).kind).toBe(
+            'near'
+        );
+    });
+
+    it('marks readings worse than the maximum accuracy as unusable', () => {
+        const result = classifyFix(plot, fix({ accuracyM: 80 }));
+        expect(result).toEqual({ kind: 'unusable', reason: 'poor_accuracy' });
+    });
+
+    it('marks non-finite fixes as unusable', () => {
+        expect(classifyFix(plot, fix({ lat: NaN })).kind).toBe('unusable');
+    });
+});
+
+describe('nextBoundaryState', () => {
+    const at = (ms) => ({ sampleMs: ms, receivedMs: ms });
+
+    it('does not flag outside on a single outside reading', () => {
+        const s = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, at(0));
+        expect(s.status).not.toBe('outside');
+        expect(s.status).toBe('near');
+    });
+
+    it('confirms outside after two outside readings spanning at least 20 seconds', () => {
+        let s = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, at(0));
+        s = nextBoundaryState(s, { kind: 'outside' }, at(20000));
+        expect(s.status).toBe('outside');
+        expect(s.outsideConfirmedAt).toBe(20000);
+    });
+
+    it('does not confirm if the second outside reading comes too soon', () => {
+        let s = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, at(0));
+        s = nextBoundaryState(s, { kind: 'outside' }, at(10000));
+        expect(s.status).not.toBe('outside');
+    });
+
+    it('restarts the confirmation period after a gap over 30 seconds', () => {
+        let s = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, at(0));
+        s = nextBoundaryState(s, { kind: 'outside' }, at(40000));
+        expect(s.status).not.toBe('outside');
+    });
+
+    it('resets pending confirmation on an inside reading', () => {
+        let s = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, at(0));
+        s = nextBoundaryState(s, { kind: 'inside' }, at(5000));
+        expect(s.outsideSampleCount).toBe(0);
+        expect(s.outsideSinceMs).toBeNull();
+    });
+
+    it('keeps a confirmed outside flag through near readings until clearly inside', () => {
+        let s = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, at(0));
+        s = nextBoundaryState(s, { kind: 'outside' }, at(20000));
+        s = nextBoundaryState(s, { kind: 'near' }, at(25000));
+        expect(s.status).toBe('outside');
+        s = nextBoundaryState(s, { kind: 'inside' }, at(30000));
+        expect(s.status).toBe('inside');
+        expect(s.outsideConfirmedAt).toBeNull();
+    });
+
+    it('ignores unusable readings for outside confirmation', () => {
+        let s = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, at(0));
+        s = nextBoundaryState(s, { kind: 'unusable' }, at(10000));
+        expect(s.outsideSampleCount).toBe(0);
+    });
+});
+
+describe('deriveFreshStatus', () => {
+    it('reports unavailable once the last usable reading is older than the freshness window', () => {
+        const s = { ...initialBoundaryState(), status: 'inside', lastUsableMs: 0 };
+        const derived = deriveFreshStatus(s, GAME_BOUNDARY_CONFIG.freshnessMs + 1);
+        expect(derived).toEqual({ status: 'unavailable', reason: 'stale' });
+    });
+
+    it('keeps the stored status while the last usable reading is fresh', () => {
+        const s = { ...initialBoundaryState(), status: 'inside', lastUsableMs: 0 };
+        expect(deriveFreshStatus(s, 1000)).toEqual({ status: 'inside', reason: null });
+    });
+});

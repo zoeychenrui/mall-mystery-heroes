@@ -215,6 +215,173 @@ const validateBoundaryShape = (shapeType, vertices) => {
     return { ok: true };
 };
 
+const GAME_BOUNDARY_CONFIG = {
+    edgeToleranceM: 15,
+    maxAccuracyM: 50,
+    confirmMinSpanMs: 20000,
+    confirmMaxGapMs: 30000,
+    freshnessMs: 30000,
+    sampleMaxAgeMs: 30000,
+    sampleMaxFutureMs: 5000,
+    reportRateLimit: { max: 20, windowMs: 60000 },
+};
+
+const ringOrigin = (ring) => ({
+    lat: ring.reduce((sum, p) => sum + p.lat, 0) / ring.length,
+    lng: ring.reduce((sum, p) => sum + p.lng, 0) / ring.length,
+});
+
+// Ray casting in projected meters.
+const isPointInPolygon = (point, ring) => {
+    const origin = ringOrigin(ring);
+    const p = projectToMeters(point, origin);
+    const pts = ring.map((v) => projectToMeters(v, origin));
+    let inside = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i, i += 1) {
+        const a = pts[i];
+        const b = pts[j];
+        if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+            inside = !inside;
+        }
+    }
+    return inside;
+};
+
+const pointSegmentDistance = (p, a, b) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lengthSq = dx * dx + dy * dy;
+    const t =
+        lengthSq === 0
+            ? 0
+            : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+};
+
+const distanceToRingMeters = (point, ring) => {
+    const origin = ringOrigin(ring);
+    const p = projectToMeters(point, origin);
+    const pts = ring.map((v) => projectToMeters(v, origin));
+    let best = Infinity;
+    for (let i = 0; i < pts.length - 1; i += 1) {
+        best = Math.min(best, pointSegmentDistance(p, pts[i], pts[i + 1]));
+    }
+    return best;
+};
+
+const classifyFix = (ring, fix) => {
+    if (
+        !fix ||
+        !isFiniteNumber(fix.lat) ||
+        !isFiniteNumber(fix.lng) ||
+        !isFiniteNumber(fix.accuracyM)
+    ) {
+        return { kind: 'unusable', reason: 'invalid_fix' };
+    }
+    if (fix.accuracyM > GAME_BOUNDARY_CONFIG.maxAccuracyM) {
+        return { kind: 'unusable', reason: 'poor_accuracy' };
+    }
+    const tolerance = Math.max(GAME_BOUNDARY_CONFIG.edgeToleranceM, fix.accuracyM);
+    const point = { lat: fix.lat, lng: fix.lng };
+    const distance = distanceToRingMeters(point, ring);
+    const inside = isPointInPolygon(point, ring);
+    if (distance <= tolerance) return { kind: 'near', reason: null };
+    return { kind: inside ? 'inside' : 'outside', reason: null };
+};
+
+const initialBoundaryState = () => ({
+    status: 'unavailable',
+    reason: 'no_fix',
+    outsideSinceMs: null,
+    lastOutsideSampleMs: null,
+    outsideSampleCount: 0,
+    lastUsableMs: null,
+    lastSampleMs: null,
+    outsideConfirmedAt: null,
+});
+
+// Pure transition. Time comes only from the `times` argument: `sampleMs`
+// is the device's own sample time, `receivedMs` is server receipt time.
+const nextBoundaryState = (prev, classification, times) => {
+    const { confirmMinSpanMs, confirmMaxGapMs } = GAME_BOUNDARY_CONFIG;
+    const t = times.sampleMs;
+
+    if (classification.kind === 'unusable') {
+        return {
+            ...prev,
+            status: 'unavailable',
+            reason: classification.reason,
+            outsideSinceMs: null,
+            outsideSampleCount: 0,
+        };
+    }
+
+    const usable = { ...prev, lastUsableMs: t, lastSampleMs: t };
+
+    if (classification.kind === 'inside') {
+        return {
+            ...usable,
+            status: 'inside',
+            reason: null,
+            outsideSinceMs: null,
+            lastOutsideSampleMs: null,
+            outsideSampleCount: 0,
+            outsideConfirmedAt: null,
+        };
+    }
+    if (classification.kind === 'near') {
+        const status = prev.status === 'outside' ? 'outside' : 'near';
+        return {
+            ...usable,
+            status,
+            reason: null,
+            outsideSinceMs: null,
+            outsideSampleCount: 0,
+        };
+    }
+
+    // outside candidate
+    const gapTooLarge =
+        prev.lastOutsideSampleMs !== null && t - prev.lastOutsideSampleMs > confirmMaxGapMs;
+    const restart = prev.outsideSinceMs === null || gapTooLarge;
+    const outsideSinceMs = restart ? t : prev.outsideSinceMs;
+    const outsideSampleCount = restart ? 1 : prev.outsideSampleCount + 1;
+    const confirmed = outsideSampleCount >= 2 && t - outsideSinceMs >= confirmMinSpanMs;
+
+    if (confirmed) {
+        const outsideConfirmedAt = prev.status === 'outside' ? prev.outsideConfirmedAt : t;
+        return {
+            ...usable,
+            status: 'outside',
+            reason: null,
+            outsideSinceMs,
+            lastOutsideSampleMs: t,
+            outsideSampleCount,
+            outsideConfirmedAt,
+        };
+    }
+    return {
+        ...usable,
+        status: prev.status === 'outside' ? 'outside' : 'near',
+        reason: null,
+        outsideSinceMs,
+        lastOutsideSampleMs: t,
+        outsideSampleCount,
+    };
+};
+
+const deriveFreshStatus = (state, nowMs) => {
+    if (
+        state.lastUsableMs === null ||
+        nowMs - state.lastUsableMs > GAME_BOUNDARY_CONFIG.freshnessMs
+    ) {
+        return { status: 'unavailable', reason: 'stale' };
+    }
+    // A reason only explains an unavailable status; other statuses carry none.
+    const reason = state.status === 'unavailable' ? (state.reason ?? null) : null;
+    return { status: state.status, reason };
+};
+
 module.exports = {
     EARTH_RADIUS_M,
     MAX_VERTICES,
@@ -222,4 +389,11 @@ module.exports = {
     shapeToPolygon,
     validateBoundaryShape,
     projectToMeters,
+    GAME_BOUNDARY_CONFIG,
+    isPointInPolygon,
+    distanceToRingMeters,
+    classifyFix,
+    initialBoundaryState,
+    nextBoundaryState,
+    deriveFreshStatus,
 };
