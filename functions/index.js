@@ -39,5 +39,9 @@ exports.requestReconnect = requestReconnect
 exports.approveReconnectRequest = approveReconnectRequest
 exports.denyReconnectRequest = denyReconnectRequest
 
+const { publishGameBoundary, disableGameBoundary } = require('./callableFunctions/gameBoundary')
+exports.publishGameBoundary = publishGameBoundary
+exports.disableGameBoundary = disableGameBoundary
+
 const { cleanupEndedRooms } = require("./scheduledFunctions/cleanupEndedRooms")
 exports.cleanupEndedRooms = cleanupEndedRooms
