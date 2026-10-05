@@ -143,7 +143,12 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
         let next;
         let accuracyMeters = null;
         if (isErrorReport) {
-            next = { ...prev, status: 'unavailable', reason: error, lastSampleMs: sampleMs };
+            // An error report is an unusable fix: same transition, reason is the error code.
+            next = nextBoundaryState(
+                prev,
+                { kind: 'unusable', reason: error },
+                { sampleMs, receivedMs }
+            );
         } else {
             if (prev.lastSampleMs !== null && sampleMs <= prev.lastSampleMs) {
                 throw new functions.https.HttpsError(
@@ -191,7 +196,10 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
             statusChangedAt,
         });
 
-        if (prev.status !== 'outside' && next.status === 'outside') {
+        // Events fire on the confirmation edge, not on status: an error report
+        // keeps a confirmed outside (ruling g), so a later outside fix must not
+        // write a second 'outside' event for the same episode.
+        if (prev.outsideConfirmedAt === null && next.outsideConfirmedAt !== null) {
             transaction.create(roomRef.collection('boundaryEvents').doc(), {
                 type: 'outside',
                 playerName: playerData.name,
@@ -199,7 +207,7 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
                 timestamp: FieldValue.serverTimestamp(),
             });
         }
-        if (prev.status === 'outside' && next.status === 'inside') {
+        if (prev.outsideConfirmedAt !== null && next.status === 'inside') {
             transaction.create(roomRef.collection('boundaryEvents').doc(), {
                 type: 'returnedInside',
                 playerName: playerData.name,

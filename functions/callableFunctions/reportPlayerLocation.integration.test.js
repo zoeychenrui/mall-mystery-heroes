@@ -225,6 +225,35 @@ describe('reportPlayerLocation', () => {
         expect(events).toHaveLength(1);
     });
 
+    it('an error report does not end a confirmed outside episode: the next outside fix is outside again with no new outside event', async () => {
+        const alice = await newIdentity();
+        await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
+        const call = reportAs(alice);
+        const T0 = Date.now() - 25000;
+        await call(fix(OUTSIDE, T0));
+        const twentySecondsAgo = Timestamp.fromMillis(Date.now() - 20000);
+        await updateDoc(statusRef('alice'), {
+            outsideSince: twentySecondsAgo,
+            lastOutsideSampleAt: twentySecondsAgo,
+        });
+        await call(fix(OUTSIDE, T0 + 20000));
+        expect(await readEvents()).toHaveLength(1);
+
+        await call({
+            roomId: ROOM,
+            boundaryRevision: 1,
+            sampleMs: T0 + 21000,
+            error: 'permission_denied',
+        });
+        const result = await call(fix(OUTSIDE, T0 + 23000));
+
+        expect(result.data.status).toBe('outside');
+        expect((await readStatus('alice')).status).toBe('outside');
+        const types = (await readEvents()).map((event) => event.type);
+        expect(types.filter((type) => type === 'outside')).toHaveLength(1);
+        expect(types).not.toContain('returnedInside');
+    });
+
     it('an inside fix after a confirmed outside writes one returnedInside event and status inside', async () => {
         const alice = await newIdentity();
         await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
