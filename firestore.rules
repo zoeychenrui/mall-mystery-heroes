@@ -60,6 +60,15 @@ service cloud.firestore {
         request.auth.uid in get(roomPath).data.get('joinedUids', []);
     }
 
+    // A player's boundary status doc is keyed by the same playerId as their
+    // players/{playerId} doc; the player's auth uid is stored on that doc
+    // (joinRoom), so ownership is checked there. Same null-safety rule as
+    // the two functions above: exists() first, short-circuited by &&.
+    function isOwnBoundaryStatus(roomId, playerId) {
+      let playerPath = /databases/$(database)/documents/rooms/$(roomId)/players/$(playerId);
+      return exists(playerPath) && get(playerPath).data.uid == request.auth.uid;
+    }
+
     function isHostOrPlayerOfRoom(roomId) {
       return isHostOfExistingRoom(roomId) || isPlayerOfRoom(roomId);
     }
@@ -85,11 +94,32 @@ service cloud.firestore {
       // list capability exists or is needed here.
       allow list: if isSignedIn() && resource.data.hostId == request.auth.uid;
       allow create: if isSignedIn() && request.resource.data.hostId == request.auth.uid;
-      allow update, delete: if isHostOfExistingRoom(roomId);
+      // The gameBoundary field is written only by the gameBoundary Cloud
+      // Functions (Admin SDK, bypasses these rules), so the client may not
+      // change it. Split from delete on purpose: the old single clause
+      // granted both, and delete must stay host-only with no field restriction.
+      allow update: if isHostOfExistingRoom(roomId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gameBoundary']);
+      allow delete: if isHostOfExistingRoom(roomId);
 
       match /players/{playerId} {
         allow read: if isHostOrPlayerOfRoom(roomId);
         allow write: if isHostOfExistingRoom(roomId);
+      }
+
+      // Game boundary status and events are written only by the Cloud
+      // Functions (Admin SDK). A player reads only their own status doc, and
+      // there is no list grant for players, so the roster of statuses stays
+      // host-only.
+      match /boundaryStatuses/{playerId} {
+        allow read: if isHostOfExistingRoom(roomId) ||
+          (isSignedIn() && isOwnBoundaryStatus(roomId, playerId));
+        allow write: if false;
+      }
+
+      match /boundaryEvents/{eventId} {
+        allow read: if isHostOfExistingRoom(roomId);
+        allow write: if false;
       }
 
       match /tasks/{taskId} {

@@ -40,6 +40,7 @@ const {
     query,
     where,
     collectionGroup,
+    deleteDoc,
 } = require('firebase/firestore');
 
 const PROJECT_ID = 'demo-mall-mystery-heroes';
@@ -271,7 +272,9 @@ describe('rooms/{roomId}/players/{playerId}', () => {
 
     it('allows a player who has joined this room to list the full players collection', async () => {
         const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
-        const snapshot = await assertSucceeds(getDocs(collection(db, 'rooms', 'room-a', 'players')));
+        const snapshot = await assertSucceeds(
+            getDocs(collection(db, 'rooms', 'room-a', 'players'))
+        );
         expect(snapshot.docs.map((d) => d.id).sort()).toEqual(['alice', 'bob']);
     });
 
@@ -303,16 +306,12 @@ describe('rooms/{roomId}/reconnectRequests/{requestId}', () => {
 
     it('allows the host to read', async () => {
         const db = testEnv.authenticatedContext(HOST_UID).firestore();
-        await assertSucceeds(
-            getDoc(doc(db, 'rooms', 'room-a', 'reconnectRequests', 'request-1'))
-        );
+        await assertSucceeds(getDoc(doc(db, 'rooms', 'room-a', 'reconnectRequests', 'request-1')));
     });
 
     it('allows the requester named on the request to read their own request', async () => {
         const db = testEnv.authenticatedContext(OTHER_UID).firestore();
-        await assertSucceeds(
-            getDoc(doc(db, 'rooms', 'room-a', 'reconnectRequests', 'request-1'))
-        );
+        await assertSucceeds(getDoc(doc(db, 'rooms', 'room-a', 'reconnectRequests', 'request-1')));
     });
 
     it("denies a signed-in stranger who isn't the host or the requester", async () => {
@@ -518,5 +517,148 @@ describe('players collection group (session recovery)', () => {
         const db = testEnv.unauthenticatedContext().firestore();
         const playersQuery = query(collectionGroup(db, 'players'), where('uid', '==', PLAYER_UID));
         await assertFails(getDocs(playersQuery));
+    });
+});
+
+describe('game boundary: rooms/{roomId}/boundaryStatuses and boundaryEvents, and the gameBoundary field', () => {
+    // Denials are asserted as permission-denied specifically, not just "failed",
+    // so a typo or a wrong-path error cannot pass as a rules denial.
+    async function expectPermissionDenied(promise) {
+        const error = await assertFails(promise);
+        expect(error.code).toBe('permission-denied');
+    }
+
+    beforeEach(async () => {
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+            const db = context.firestore();
+            await setDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'alice'), {
+                status: 'inside',
+            });
+            await setDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'bob'), {
+                status: 'outside',
+            });
+            await setDoc(doc(db, 'rooms', 'room-a', 'boundaryEvents', 'event-1'), {
+                playerId: 'bob',
+                kind: 'exit',
+            });
+        });
+    });
+
+    it('allows the host to read all boundaryStatuses in their room', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        const snapshot = await assertSucceeds(
+            getDocs(collection(db, 'rooms', 'room-a', 'boundaryStatuses'))
+        );
+        expect(snapshot.docs.map((d) => d.id).sort()).toEqual(['alice', 'bob']);
+    });
+
+    it('allows the host to read all boundaryEvents in their room', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        const snapshot = await assertSucceeds(
+            getDocs(collection(db, 'rooms', 'room-a', 'boundaryEvents'))
+        );
+        expect(snapshot.docs.map((d) => d.id)).toEqual(['event-1']);
+    });
+
+    it('allows a player to read their own boundaryStatuses doc', async () => {
+        // bob's players/bob doc carries uid: PLAYER_UID, which is what the
+        // ownership check resolves against.
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        await assertSucceeds(getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'bob')));
+    });
+
+    it("denies a player reading another player's boundaryStatuses doc", async () => {
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        await expectPermissionDenied(
+            getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'alice'))
+        );
+    });
+
+    it('denies a player listing boundaryStatuses', async () => {
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        await expectPermissionDenied(
+            getDocs(collection(db, 'rooms', 'room-a', 'boundaryStatuses'))
+        );
+    });
+
+    it('denies a signed-in non-member reading any boundaryStatuses or boundaryEvents in another room', async () => {
+        const db = testEnv.authenticatedContext(OTHER_UID).firestore();
+        await expectPermissionDenied(getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'bob')));
+        await expectPermissionDenied(
+            getDocs(collection(db, 'rooms', 'room-a', 'boundaryStatuses'))
+        );
+        await expectPermissionDenied(getDocs(collection(db, 'rooms', 'room-a', 'boundaryEvents')));
+    });
+
+    it('denies a host writing boundaryStatuses (update, create)', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        await expectPermissionDenied(
+            updateDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'bob'), { status: 'inside' })
+        );
+        await expectPermissionDenied(
+            setDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'carol'), { status: 'inside' })
+        );
+    });
+
+    it('denies a player writing their own boundaryStatuses doc', async () => {
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        await expectPermissionDenied(
+            updateDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'bob'), { status: 'inside' })
+        );
+    });
+
+    it('denies a host writing boundaryEvents (create, update)', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        await expectPermissionDenied(
+            addDoc(collection(db, 'rooms', 'room-a', 'boundaryEvents'), {
+                playerId: 'alice',
+                kind: 'exit',
+            })
+        );
+        await expectPermissionDenied(
+            updateDoc(doc(db, 'rooms', 'room-a', 'boundaryEvents', 'event-1'), { kind: 'enter' })
+        );
+    });
+
+    it('denies a player writing boundaryEvents', async () => {
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        await expectPermissionDenied(
+            addDoc(collection(db, 'rooms', 'room-a', 'boundaryEvents'), {
+                playerId: 'bob',
+                kind: 'exit',
+            })
+        );
+    });
+
+    it('denies a host updating the gameBoundary field directly', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        await expectPermissionDenied(
+            updateDoc(doc(db, 'rooms', 'room-a'), { gameBoundary: { enabled: true } })
+        );
+    });
+
+    it('denies a host mixing a gameBoundary change into an ordinary room update', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        await expectPermissionDenied(
+            updateDoc(doc(db, 'rooms', 'room-a'), {
+                taskIndex: 2,
+                gameBoundary: { enabled: true },
+            })
+        );
+    });
+
+    it('allows a host updating an ordinary room field (taskIndex)', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        await assertSucceeds(updateDoc(doc(db, 'rooms', 'room-a'), { taskIndex: 2 }));
+    });
+
+    it('allows the host to delete their own room (delete is not restricted by the gameBoundary rule)', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        await assertSucceeds(deleteDoc(doc(db, 'rooms', 'room-a')));
+    });
+
+    it('denies a non-host deleting the room', async () => {
+        const db = testEnv.authenticatedContext(OTHER_UID).firestore();
+        await expectPermissionDenied(deleteDoc(doc(db, 'rooms', 'room-a')));
     });
 });
