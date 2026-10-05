@@ -245,7 +245,7 @@ Gaps that remain, per [improvements.md](./improvements.md):
 
 ## Cloud Functions
 
-`functions/` contains thirteen callables and one scheduled function:
+`functions/` contains sixteen callables and one scheduled function:
 
 - `killPlayer` (`functions/callableFunctions/killPlayer.js`) — the atomic
   replacement for the client-side kill flow (`improvements.md` item 4).
@@ -379,6 +379,30 @@ Gaps that remain, per [improvements.md](./improvements.md):
   GM-originated `playerMessages` writes (broadcast, whisper, leaderboard,
   mission) are untouched — they still go through
   `dbCalls.addPlayerMessageForRoom` under the host-only rule.
+- `publishGameBoundary` / `disableGameBoundary`
+  (`functions/callableFunctions/gameBoundary.js`) — host-only writes of the
+  room's game-area boundary (the `gameBoundary` field on the room document;
+  docs/superpowers/specs/2026-09-30-game-boundaries-design.md). Publish
+  validates the submitted shape server-side (finite coordinates, valid
+  ranges, nonzero area, no self-intersections, at most 500 vertices including
+  closure, no antimeridian crossing, spanning no more than 10 km) and writes
+  it with an incremented `revision`. Disable sets `enabled` to `false` and
+  increments `revision`. Both take an `expectedRevision` and fail with
+  `revision_conflict` if the room has moved on, so a stale editor cannot
+  overwrite a newer boundary. The client has no direct write path to
+  `gameBoundary`: `firestore.rules` denies it. No client wrapper exists yet;
+  the boundary editor is a later phase.
+- `reportPlayerLocation` (`functions/callableFunctions/reportPlayerLocation.js`)
+  — lets a signed-in player of an active game report one location fix, or an
+  error in place of a fix. The function looks up the caller's player document
+  by `uid`, rejects a report whose `boundaryRevision` is not the room's
+  current one, rejects stale or reordered sample times, and rate-limits
+  reports through `rateLimits.boundaryReport` on the player document. It
+  evaluates the fix against the boundary on the server, so the device's
+  coordinates never reach a stored document: only the resulting status is
+  written, to `boundaryStatuses/{playerId}`, along with a `boundaryEvents`
+  entry on a confirmed outside or return-inside transition. No client wrapper
+  exists yet, so the feature is unreachable from the UI in this phase.
 - `cleanupEndedRooms` (`functions/scheduledFunctions/cleanupEndedRooms.js`)
   — runs once every 24 hours, deleting any room (and everything under it)
   whose `endedAt` is older than a retention window. The window is a
