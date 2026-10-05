@@ -346,6 +346,16 @@ describe('nextBoundaryState', () => {
         s = nextBoundaryState(s, { kind: 'unusable' }, at(10000));
         expect(s.outsideSampleCount).toBe(0);
     });
+
+    it('keeps a confirmed outside flag through unusable readings', () => {
+        let s = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, at(0));
+        s = nextBoundaryState(s, { kind: 'outside' }, at(20000));
+        s = nextBoundaryState(s, { kind: 'unusable', reason: 'poor_accuracy' }, at(25000));
+        expect(s.outsideConfirmedAt).toBe(20000);
+        s = nextBoundaryState(s, { kind: 'near' }, at(30000));
+        expect(s.status).toBe('outside');
+        expect(s.outsideConfirmedAt).toBe(20000);
+    });
 });
 
 describe('deriveFreshStatus', () => {

@@ -330,7 +330,7 @@ const nextBoundaryState = (prev, classification, times) => {
         };
     }
     if (classification.kind === 'near') {
-        const status = prev.status === 'outside' ? 'outside' : 'near';
+        const status = prev.outsideConfirmedAt !== null ? 'outside' : 'near';
         return {
             ...usable,
             status,
@@ -349,7 +349,7 @@ const nextBoundaryState = (prev, classification, times) => {
     const confirmed = outsideSampleCount >= 2 && t - outsideSinceMs >= confirmMinSpanMs;
 
     if (confirmed) {
-        const outsideConfirmedAt = prev.status === 'outside' ? prev.outsideConfirmedAt : t;
+        const outsideConfirmedAt = prev.outsideConfirmedAt !== null ? prev.outsideConfirmedAt : t;
         return {
             ...usable,
             status: 'outside',
@@ -362,7 +362,7 @@ const nextBoundaryState = (prev, classification, times) => {
     }
     return {
         ...usable,
-        status: prev.status === 'outside' ? 'outside' : 'near',
+        status: prev.outsideConfirmedAt !== null ? 'outside' : 'near',
         reason: null,
         outsideSinceMs,
         lastOutsideSampleMs: t,
