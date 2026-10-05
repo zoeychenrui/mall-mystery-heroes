@@ -291,8 +291,19 @@ describe('classifyFix', () => {
         expect(result).toEqual({ kind: 'unusable', reason: 'poor_accuracy' });
     });
 
+    it('accepts accuracy exactly at the cap and rejects anything above it', () => {
+        expect(classifyFix(plot, fix({ accuracyM: 50 })).kind).not.toBe('unusable');
+        expect(classifyFix(plot, fix({ accuracyM: 50.5 }))).toEqual({
+            kind: 'unusable',
+            reason: 'poor_accuracy',
+        });
+    });
+
     it('marks non-finite fixes as unusable', () => {
-        expect(classifyFix(plot, fix({ lat: NaN })).kind).toBe('unusable');
+        expect(classifyFix(plot, fix({ lat: NaN }))).toEqual({
+            kind: 'unusable',
+            reason: 'invalid_fix',
+        });
     });
 });
 
@@ -351,10 +362,29 @@ describe('nextBoundaryState', () => {
         let s = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, at(0));
         s = nextBoundaryState(s, { kind: 'outside' }, at(20000));
         s = nextBoundaryState(s, { kind: 'unusable', reason: 'poor_accuracy' }, at(25000));
+        expect(s.status).toBe('unavailable');
         expect(s.outsideConfirmedAt).toBe(20000);
         s = nextBoundaryState(s, { kind: 'near' }, at(30000));
         expect(s.status).toBe('outside');
         expect(s.outsideConfirmedAt).toBe(20000);
+    });
+
+    it('confirms on server receipt spacing, ignoring device sample times', () => {
+        // Same receipt spacing (0 then 20 s), but device clocks disagree wildly.
+        const onTime = { sampleMs: 0, receivedMs: 0 };
+        const onTime2 = { sampleMs: 20000, receivedMs: 20000 };
+        const skewed = { sampleMs: 9000000, receivedMs: 0 };
+        const skewed2 = { sampleMs: 5, receivedMs: 20000 };
+
+        let a = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, onTime);
+        a = nextBoundaryState(a, { kind: 'outside' }, onTime2);
+        let b = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, skewed);
+        b = nextBoundaryState(b, { kind: 'outside' }, skewed2);
+
+        expect(b.status).toBe(a.status);
+        expect(b.status).toBe('outside');
+        expect(b.outsideConfirmedAt).toBe(a.outsideConfirmedAt);
+        expect(b.outsideConfirmedAt).toBe(20000);
     });
 });
 
@@ -368,5 +398,25 @@ describe('deriveFreshStatus', () => {
     it('keeps the stored status while the last usable reading is fresh', () => {
         const s = { ...initialBoundaryState(), status: 'inside', lastUsableMs: 0 };
         expect(deriveFreshStatus(s, 1000)).toEqual({ status: 'inside', reason: null });
+    });
+
+    it('returns the stored reason for an unavailable status', () => {
+        const s = {
+            ...initialBoundaryState(),
+            status: 'unavailable',
+            reason: 'poor_accuracy',
+            lastUsableMs: 0,
+        };
+        expect(deriveFreshStatus(s, 1000)).toEqual({
+            status: 'unavailable',
+            reason: 'poor_accuracy',
+        });
+    });
+
+    it('treats exactly the freshness window as fresh and one millisecond more as stale', () => {
+        const s = { ...initialBoundaryState(), status: 'inside', lastUsableMs: 0 };
+        expect(GAME_BOUNDARY_CONFIG.freshnessMs).toBe(30000);
+        expect(deriveFreshStatus(s, 30000)).toEqual({ status: 'inside', reason: null });
+        expect(deriveFreshStatus(s, 30001)).toEqual({ status: 'unavailable', reason: 'stale' });
     });
 });

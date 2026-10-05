@@ -300,11 +300,13 @@ const initialBoundaryState = () => ({
     outsideConfirmedAt: null,
 });
 
-// Pure transition. Time comes only from the `times` argument: `sampleMs`
-// is the device's own sample time, `receivedMs` is server receipt time.
+// Pure transition. All timing uses `receivedMs` (server receipt time), so device
+// clock skew cannot affect confirmation. `sampleMs` is only recorded in
+// lastSampleMs for the callable's out-of-order check. This transition does not
+// reject out-of-order samples; the callable does.
 const nextBoundaryState = (prev, classification, times) => {
     const { confirmMinSpanMs, confirmMaxGapMs } = GAME_BOUNDARY_CONFIG;
-    const t = times.sampleMs;
+    const t = times.receivedMs;
 
     if (classification.kind === 'unusable') {
         return {
@@ -316,7 +318,7 @@ const nextBoundaryState = (prev, classification, times) => {
         };
     }
 
-    const usable = { ...prev, lastUsableMs: t, lastSampleMs: t };
+    const usable = { ...prev, lastUsableMs: t, lastSampleMs: times.sampleMs };
 
     if (classification.kind === 'inside') {
         return {
