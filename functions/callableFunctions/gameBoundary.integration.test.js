@@ -9,6 +9,7 @@ const { initializeApp } = require('firebase/app');
 const { connectFunctionsEmulator, getFunctions, httpsCallable } = require('firebase/functions');
 const { doc, getDoc, Timestamp } = require('firebase/firestore');
 const { db, functions } = require('../../src/utils/firebase');
+const { shapeToPolygon } = require('../vendor/game/gameBoundary');
 const {
     callableAsNonHost,
     clearFirestore,
@@ -210,6 +211,53 @@ describe('publishGameBoundary', () => {
         ).rejects.toMatchObject({ code: 'functions/not-found' });
 
         expect((await getDoc(doc(db, 'rooms', 'no-such-room'))).exists()).toBe(false);
+    });
+
+    it('host publishes a valid circle built from its parameters', async () => {
+        await seedRoom(ROOM, [{ name: 'bob' }]);
+        const shapeParameters = {
+            center: { lat: 0.0015, lng: 0.0015 },
+            radiusMeters: 50,
+        };
+        const vertices = shapeToPolygon('circle', shapeParameters);
+
+        const result = await publish()({
+            roomId: ROOM,
+            expectedRevision: 0,
+            shapeType: 'circle',
+            vertices,
+            shapeParameters,
+        });
+
+        expect(result.data).toEqual({ revision: 1 });
+        const room = await readRoom();
+        expect(room.gameBoundary).toMatchObject({
+            enabled: true,
+            revision: 1,
+            shapeType: 'circle',
+        });
+    });
+
+    it('host publishes a valid oval built from its parameters', async () => {
+        await seedRoom(ROOM, [{ name: 'bob' }]);
+        const shapeParameters = {
+            center: { lat: 0.0015, lng: 0.0015 },
+            radiusXMeters: 80,
+            radiusYMeters: 40,
+        };
+        const vertices = shapeToPolygon('oval', shapeParameters);
+
+        const result = await publish()({
+            roomId: ROOM,
+            expectedRevision: 0,
+            shapeType: 'oval',
+            vertices,
+            shapeParameters,
+        });
+
+        expect(result.data).toEqual({ revision: 1 });
+        const room = await readRoom();
+        expect(room.gameBoundary).toMatchObject({ enabled: true, revision: 1, shapeType: 'oval' });
     });
 });
 
