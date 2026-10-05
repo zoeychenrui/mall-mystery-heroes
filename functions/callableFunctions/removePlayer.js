@@ -135,6 +135,7 @@ const removeAndRemap = async (transaction, roomRef, playerDoc) => {
     }
 
     transaction.delete(playerDoc.ref);
+    transaction.delete(roomRef.collection('boundaryStatuses').doc(playerDoc.id));
 
     // Revoke the departing device's room access — unlike the reconnect
     // case (where a stale uid might legitimately belong to someone else

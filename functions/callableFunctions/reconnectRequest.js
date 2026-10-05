@@ -207,6 +207,7 @@ exports.approveReconnectRequest = functions.https.onCall(async (data, context) =
         }
 
         transaction.update(playerRef, { uid: requestData.requestingUid });
+        transaction.delete(roomRef.collection('boundaryStatuses').doc(playerRef.id));
         transaction.update(roomRef, {
             joinedUids: FieldValue.arrayUnion(requestData.requestingUid),
         });

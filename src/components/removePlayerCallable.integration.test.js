@@ -12,12 +12,27 @@ import { removePlayer } from './removePlayer';
 import { requestReconnect } from './requestReconnect';
 import { fetchPlayerForRoom } from './firebase_calls/dbCalls';
 import { auth, db } from '../utils/firebase';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
-import { callableAsNonHost, clearFirestore, seedRoom, shutdown } from '../../test/emulatorHelpers';
+import { collection, doc, getDoc, getDocs, setDoc, terminate } from 'firebase/firestore';
+import {
+    callableAsNonHost,
+    clearFirestore,
+    createRulesBypassDb,
+    seedRoom,
+    shutdown,
+} from '../../test/emulatorHelpers';
 
 const ROOM = 'test-room';
 
+// boundaryStatuses is written only by Cloud Functions, so the rules keep
+// clients out of it; this bypass instance seeds and reads it directly.
+let bypass;
+beforeAll(() => {
+    bypass = createRulesBypassDb();
+});
 beforeEach(clearFirestore);
+afterAll(async () => {
+    await terminate(bypass);
+});
 afterAll(shutdown);
 
 // leaveGame resolves which player to remove from the caller's own uid, so
@@ -160,6 +175,18 @@ describe('leaveGame', () => {
         );
         expect(requestSnapshot.data().status).toBe('denied');
     });
+
+    it("deletes the caller's boundary status doc in the same call", async () => {
+        await seedRoom(ROOM, [{ name: 'bob' }]);
+        await seedRoom(ROOM, [{ name: 'alice', uid: auth.currentUser.uid }]);
+        await setDoc(doc(bypass, 'rooms', ROOM, 'boundaryStatuses', 'alice'), { state: 'inside' });
+
+        await leaveGame(ROOM);
+
+        expect(
+            (await getDoc(doc(bypass, 'rooms', ROOM, 'boundaryStatuses', 'alice'))).exists()
+        ).toBe(false);
+    });
 });
 
 describe('removePlayer', () => {
@@ -230,6 +257,17 @@ describe('removePlayer', () => {
             doc(db, 'rooms', ROOM, 'reconnectRequests', requestId)
         );
         expect(requestSnapshot.data().status).toBe('denied');
+    });
+
+    it("deletes the removed player's boundary status doc in the same call", async () => {
+        await seedRoom(ROOM, [{ name: 'alice' }, { name: 'bob' }]);
+        await setDoc(doc(bypass, 'rooms', ROOM, 'boundaryStatuses', 'alice'), { state: 'inside' });
+
+        await removePlayer('alice', ROOM);
+
+        expect(
+            (await getDoc(doc(bypass, 'rooms', ROOM, 'boundaryStatuses', 'alice'))).exists()
+        ).toBe(false);
     });
 
     // Deliberate, user-approved decision: removal genuinely knows whose

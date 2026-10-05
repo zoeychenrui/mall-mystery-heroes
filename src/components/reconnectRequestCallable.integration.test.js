@@ -13,12 +13,27 @@ import { approveReconnectRequest } from './approveReconnectRequest';
 import { denyReconnectRequest } from './denyReconnectRequest';
 import { fetchPlayerForRoom } from './firebase_calls/dbCalls';
 import { auth, db } from '../utils/firebase';
-import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
-import { callableAsNonHost, clearFirestore, seedRoom, shutdown } from '../../test/emulatorHelpers';
+import { collection, doc, getDoc, getDocs, setDoc, terminate } from 'firebase/firestore';
+import {
+    callableAsNonHost,
+    clearFirestore,
+    createRulesBypassDb,
+    seedRoom,
+    shutdown,
+} from '../../test/emulatorHelpers';
 
 const ROOM = 'test-room';
 
+// boundaryStatuses is written only by Cloud Functions, so the rules keep
+// clients out of it; this bypass instance seeds and reads it directly.
+let bypass;
+beforeAll(() => {
+    bypass = createRulesBypassDb();
+});
 beforeEach(clearFirestore);
+afterAll(async () => {
+    await terminate(bypass);
+});
 afterAll(shutdown);
 
 // requestReconnect resolves the caller purely from context.auth.uid — it
@@ -154,6 +169,21 @@ describe('approveReconnectRequest', () => {
             doc(db, 'rooms', ROOM, 'reconnectRequests', requestId)
         );
         expect(requestSnapshot.data().status).toBe('approved');
+    });
+
+    // The old identity's status trail must not carry over to the new uid:
+    // approval deletes the player's boundaryStatuses doc, so the re-linked
+    // player starts fresh.
+    it("deletes the player's old boundary status doc on approval", async () => {
+        await seedRoom(ROOM, [{ name: 'alice' }], { gameStarted: true });
+        await setDoc(doc(bypass, 'rooms', ROOM, 'boundaryStatuses', 'alice'), { state: 'inside' });
+        const { requestId } = await requestReconnect(ROOM, 'alice');
+
+        await approveReconnectRequest(ROOM, requestId);
+
+        expect(
+            (await getDoc(doc(bypass, 'rooms', ROOM, 'boundaryStatuses', 'alice'))).exists()
+        ).toBe(false);
     });
 
     it('requires the caller to be host', async () => {
