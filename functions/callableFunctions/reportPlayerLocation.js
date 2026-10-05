@@ -140,6 +140,15 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
 
         // --- decide phase ---
 
+        // Applies to every report, error reports included, so a late error
+        // cannot overwrite a newer sample's status.
+        if (prev.lastSampleMs !== null && sampleMs <= prev.lastSampleMs) {
+            throw new functions.https.HttpsError(
+                'invalid-argument',
+                'Location sample is out of order.'
+            );
+        }
+
         let next;
         let accuracyMeters = null;
         if (isErrorReport) {
@@ -150,12 +159,6 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
                 { sampleMs, receivedMs }
             );
         } else {
-            if (prev.lastSampleMs !== null && sampleMs <= prev.lastSampleMs) {
-                throw new functions.https.HttpsError(
-                    'invalid-argument',
-                    'Location sample is out of order.'
-                );
-            }
             if (Number.isFinite(accuracyM)) {
                 accuracyMeters = accuracyM;
             }

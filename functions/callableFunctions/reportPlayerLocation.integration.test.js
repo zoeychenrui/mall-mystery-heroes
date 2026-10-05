@@ -254,6 +254,51 @@ describe('reportPlayerLocation', () => {
         expect(types).not.toContain('returnedInside');
     });
 
+    it('an error report older than the last stored sample is rejected as out-of-order and leaves the status unchanged', async () => {
+        const alice = await newIdentity();
+        await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
+        const call = reportAs(alice);
+        const T0 = Date.now() - 5000;
+        await call(fix(INSIDE, T0 + 200));
+        const before = await readStatus('alice');
+
+        await expect(
+            call({
+                roomId: ROOM,
+                boundaryRevision: 1,
+                sampleMs: T0 + 100,
+                error: 'permission_denied',
+            })
+        ).rejects.toMatchObject({ code: 'functions/invalid-argument' });
+
+        expect(await readStatus('alice')).toEqual(before);
+    });
+
+    it('a non-error unusable fix keeps a confirmed outside: the status doc stays outsideConfirmedAt-set and the next outside fix is outside with no new event', async () => {
+        const alice = await newIdentity();
+        await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
+        const call = reportAs(alice);
+        const T0 = Date.now() - 25000;
+        await call(fix(OUTSIDE, T0));
+        const twentySecondsAgo = Timestamp.fromMillis(Date.now() - 20000);
+        await updateDoc(statusRef('alice'), {
+            outsideSince: twentySecondsAgo,
+            lastOutsideSampleAt: twentySecondsAgo,
+        });
+        await call(fix(OUTSIDE, T0 + 20000));
+        expect(await readEvents()).toHaveLength(1);
+
+        const unusable = await call(fix(OUTSIDE, T0 + 21000, { accuracyM: 60 }));
+        expect(unusable.data).toEqual({ status: 'unavailable', reason: 'poor_accuracy' });
+        expect((await readStatus('alice')).outsideConfirmedAt).toBeInstanceOf(Timestamp);
+
+        const result = await call(fix(OUTSIDE, T0 + 23000));
+
+        expect(result.data.status).toBe('outside');
+        const types = (await readEvents()).map((event) => event.type);
+        expect(types.filter((type) => type === 'outside')).toHaveLength(1);
+    });
+
     it('an inside fix after a confirmed outside writes one returnedInside event and status inside', async () => {
         const alice = await newIdentity();
         await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
