@@ -5,7 +5,8 @@
  * and asserts on the room doc that actually landed in Firestore, not only
  * on whether the call threw.
  */
-const { httpsCallable } = require('firebase/functions');
+const { initializeApp } = require('firebase/app');
+const { connectFunctionsEmulator, getFunctions, httpsCallable } = require('firebase/functions');
 const { doc, getDoc, Timestamp } = require('firebase/firestore');
 const { db, functions } = require('../../src/utils/firebase');
 const {
@@ -143,6 +144,72 @@ describe('publishGameBoundary', () => {
         });
 
         expect(await readRoom()).toEqual(before);
+    });
+
+    it('rejects a rectangle whose shapeParameters corners do not match its vertices, and writes nothing', async () => {
+        await seedRoom(ROOM, [{ name: 'bob' }]);
+        const before = await readRoom();
+
+        await expect(
+            publish()({
+                ...RECTANGLE_PUBLISH,
+                shapeParameters: {
+                    corners: [
+                        { lat: 0.001, lng: 0.001 },
+                        { lat: 0.003, lng: 0.003 },
+                    ],
+                },
+            })
+        ).rejects.toMatchObject({ code: 'functions/invalid-argument' });
+
+        expect(await readRoom()).toEqual(before);
+    });
+
+    it('rejects a freehand boundary that carries non-null shapeParameters, and writes nothing', async () => {
+        await seedRoom(ROOM, [{ name: 'bob' }]);
+        const before = await readRoom();
+
+        await expect(
+            publish()({
+                roomId: ROOM,
+                expectedRevision: 0,
+                shapeType: 'freehand',
+                vertices: RECTANGLE_VERTICES,
+                shapeParameters: { corners: RECTANGLE_CORNERS },
+            })
+        ).rejects.toMatchObject({ code: 'functions/invalid-argument' });
+
+        expect(await readRoom()).toEqual(before);
+    });
+
+    it('rejects a caller with no auth token as unauthenticated, and writes nothing', async () => {
+        await seedRoom(ROOM, [{ name: 'bob' }]);
+        const before = await readRoom();
+        // A fresh Functions instance that never signs in: the request carries
+        // no auth token, so context.auth is undefined on the server.
+        const anonymousApp = initializeApp(
+            { projectId: 'demo-mall-mystery-heroes', apiKey: 'emulator-key' },
+            `unauthenticated-${Date.now()}-${Math.random()}`
+        );
+        const anonymousFunctions = getFunctions(anonymousApp);
+        connectFunctionsEmulator(anonymousFunctions, 'localhost', 5001);
+        const call = httpsCallable(anonymousFunctions, 'publishGameBoundary');
+
+        await expect(call(RECTANGLE_PUBLISH)).rejects.toMatchObject({
+            code: 'functions/unauthenticated',
+        });
+
+        expect(await readRoom()).toEqual(before);
+    });
+
+    it('rejects publishing to a room that does not exist as not-found, and creates nothing', async () => {
+        await seedRoom(ROOM, [{ name: 'bob' }]);
+
+        await expect(
+            publish()({ ...RECTANGLE_PUBLISH, roomId: 'no-such-room' })
+        ).rejects.toMatchObject({ code: 'functions/not-found' });
+
+        expect((await getDoc(doc(db, 'rooms', 'no-such-room'))).exists()).toBe(false);
     });
 });
 
