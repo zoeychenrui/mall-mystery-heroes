@@ -8,7 +8,8 @@
 
 **Tech Stack:** Node 20 Cloud Functions (1st gen `functions.https.onCall`, matching the existing callables), Firestore Admin SDK transactions, Jest (node project for pure logic, emulator integration for callables, rules project for `firestore.rules`).
 
-**Spec:** `docs/superpowers/specs/2026-09-30-game-boundaries-design.md`
+**Spec:** `docs/superpowers/specs/2026-09-30-game-boundaries-design.md` (Approved; map provider: Mapbox)
+**Status:** Approved
 
 **Phase scope:** This is Phase 1 of 4. Map rendering, the drawing editor, player tracking hook, and moderator status UI are separate later plans. Map provider selection is a prerequisite for those plans, not for this one.
 
