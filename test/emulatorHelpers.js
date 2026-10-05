@@ -119,6 +119,23 @@ export const seedRoom = async (roomID, players = [], roomOverrides = {}, dbInsta
 };
 
 /**
+ * A Firestore instance that bypasses firestore.rules, for reading and seeding
+ * collections the rules deliberately do not open to clients (for example
+ * rooms/{roomId}/boundaryStatuses and boundaryEvents, which only Cloud
+ * Functions write). The emulator treats the 'owner' mock token as admin.
+ * The caller owns the lifecycle: call `terminate(...)` when done.
+ */
+export const createRulesBypassDb = () => {
+    const app = initializeApp(
+        readFirebaseConfig(process.env),
+        `rules-bypass-${Date.now()}-${Math.random()}`
+    );
+    const bypassDb = getFirestore(app);
+    connectFirestoreEmulator(bypassDb, 'localhost', 8081, { mockUserToken: 'owner' });
+    return bypassDb;
+};
+
+/**
  * A second, independent signed-in identity with its own Firestore instance
  * — the Firestore-flavored sibling of `callableAsNonHost` above. Needed by
  * dbCalls.integration.test.js's player-authorized `addChatMessageForRoom`
