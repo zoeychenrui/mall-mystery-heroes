@@ -5,9 +5,10 @@
  * file through functions/vendor/game/.
  *
  * Distances use a local equirectangular projection around a chosen origin.
- * Against haversine, the error on a 10 km east-west edge is about 13 m at
- * 40 degrees latitude and about 27 m at 60 degrees. The 15 m edge tolerance
- * in later tasks must allow for this projection error.
+ * Against haversine, the error on an east-west edge 10 km north of the origin
+ * latitude is about 13 m at 40 degrees latitude and about 27 m at 60 degrees.
+ * The error grows with north-south distance from the origin, so the 15 m edge
+ * tolerance in later tasks must allow for this projection error.
  */
 const EARTH_RADIUS_M = 6371008.8;
 const MAX_VERTICES = 500;
