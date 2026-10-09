@@ -443,8 +443,11 @@ Each player's current status against the room's game boundary
 is the same normalized `trimmedNameLowerCase` key as the player's document in
 `players/`. Written only by the `reportPlayerLocation` Cloud Function
 (`functions/callableFunctions/reportPlayerLocation.js`) under the Admin SDK,
-and deleted by the shared removal step behind `leaveGame` and `removePlayer`.
-No client write is ever permitted.
+and deleted by the shared removal step behind `leaveGame` and `removePlayer`,
+and by `approveReconnectRequest` (`functions/callableFunctions/reconnectRequest.js`)
+when a player's identity transfers to a new uid — a stale status evaluated
+under the old device must not carry over to the new one. No client write is
+ever permitted.
 
 **No coordinates are stored in `boundaryStatuses` or `boundaryEvents`.** The
 device's position is evaluated on the server, and only the resulting status
@@ -456,21 +459,21 @@ current player document matches their auth `uid`, so a reconnect under a new
 uid revokes the old device's access immediately. There is no list grant for
 players.
 
-| Field                  | Type                                               | Notes                                                                                                                                                             |
-| ---------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `boundaryRevision`     | `number`                                           | The `gameBoundary.revision` the report was evaluated against. A report whose revision does not match the room's current one is rejected with `revision_conflict`. |
-| `uid`                  | `string`                                           | The reporting device's `auth.uid`.                                                                                                                                |
-| `status`               | `'inside' \| 'outside' \| 'near' \| 'unavailable'` | The evaluated status. `near` means within the edge tolerance and not yet confirmed outside.                                                                       |
-| `reason`               | `string \| null`                                   | Why the status is `unavailable` (e.g. `no_fix`, `poor_accuracy`, `stale`), or the error code a device reported. `null` otherwise.                                 |
-| `accuracyMeters`       | `number \| null`                                   | Reported horizontal accuracy of the fix.                                                                                                                          |
-| `lastSampleAt`         | `Timestamp`                                        | The device's own sample time. Used to reject stale or reordered reports; the device clock is not trusted for confirmation.                                        |
-| `receivedAt`           | `Timestamp`                                        | `serverTimestamp()` of the most recent accepted report.                                                                                                           |
-| `lastUsableReceivedAt` | `Timestamp \| null`                                | Server time the last usable (accurate, valid) fix was received.                                                                                                   |
-| `outsideSince`         | `Timestamp \| null`                                | Server receipt time of the first outside fix in the current outside run.                                                                                          |
-| `lastOutsideSampleAt`  | `Timestamp \| null`                                | Server receipt time of the most recent outside fix.                                                                                                               |
-| `outsideSampleCount`   | `number`                                           | Count of outside fixes in the current run. Written by the function but not listed in the spec's field list.                                                       |
-| `outsideConfirmedAt`   | `Timestamp \| null`                                | Server time the outside status was confirmed. Set once per outside episode; an error report or a later outside fix does not reset it. `null` until confirmed.     |
-| `statusChangedAt`      | `Timestamp`                                        | Server time `status` last changed.                                                                                                                                |
+| Field                  | Type                                               | Notes                                                                                                                                                                                                                                                     |
+| ---------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `boundaryRevision`     | `number`                                           | The `gameBoundary.revision` the report was evaluated against. A report whose revision does not match the room's current one is rejected with `revision_conflict`.                                                                                         |
+| `uid`                  | `string`                                           | The reporting device's `auth.uid`.                                                                                                                                                                                                                        |
+| `status`               | `'inside' \| 'outside' \| 'near' \| 'unavailable'` | The evaluated status. `near` means within the edge tolerance and not yet confirmed outside.                                                                                                                                                               |
+| `reason`               | `string \| null`                                   | Why the status is `unavailable` (e.g. `no_fix`, `poor_accuracy`, `clock_skew`), or the error code a device reported. `null` otherwise. `stale` is never stored — it's derived at read time by `deriveFreshStatus` from how old `lastUsableReceivedAt` is. |
+| `accuracyMeters`       | `number \| null`                                   | Reported horizontal accuracy of the fix.                                                                                                                                                                                                                  |
+| `lastSampleAt`         | `Timestamp`                                        | The device's own sample time. Used to reject stale or reordered reports; the device clock is not trusted for confirmation.                                                                                                                                |
+| `receivedAt`           | `Timestamp`                                        | `serverTimestamp()` of the most recent accepted report.                                                                                                                                                                                                   |
+| `lastUsableReceivedAt` | `Timestamp \| null`                                | Server time the last usable (accurate, valid) fix was received.                                                                                                                                                                                           |
+| `outsideSince`         | `Timestamp \| null`                                | Server receipt time of the first outside fix in the current outside run.                                                                                                                                                                                  |
+| `lastOutsideSampleAt`  | `Timestamp \| null`                                | Server receipt time of the most recent outside fix.                                                                                                                                                                                                       |
+| `outsideSampleCount`   | `number`                                           | Count of outside fixes in the current run. Written by the function but not listed in the spec's field list.                                                                                                                                               |
+| `outsideConfirmedAt`   | `Timestamp \| null`                                | Server time the outside status was confirmed. Set once per outside episode; an error report or a later outside fix does not reset it. `null` until confirmed.                                                                                             |
+| `statusChangedAt`      | `Timestamp`                                        | Server time `status` last changed.                                                                                                                                                                                                                        |
 
 ---
 
@@ -487,12 +490,13 @@ the public chat feed. No coordinates are stored here either, as with
 
 Reads: the host only. Clients can never write here.
 
-| Field              | Type                            | Notes                                                                                                                                                                           |
-| ------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `type`             | `'outside' \| 'returnedInside'` | Which crossing this records.                                                                                                                                                    |
-| `playerName`       | `string`                        | The player's display name, copied from their player document. Identifies the player by name only: the spec called for a player ID as well, but the function does not write one. |
-| `boundaryRevision` | `number`                        | The `gameBoundary.revision` in effect when the crossing was confirmed.                                                                                                          |
-| `timestamp`        | `Timestamp`                     | `serverTimestamp()`.                                                                                                                                                            |
+| Field              | Type                            | Notes                                                                                                                             |
+| ------------------ | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `type`             | `'outside' \| 'returnedInside'` | Which crossing this records.                                                                                                      |
+| `playerId`         | `string`                        | The player document's ID (the normalized `trimmedNameLowerCase` key), same as the `boundaryStatuses` document ID for this player. |
+| `playerName`       | `string`                        | The player's display name, copied from their player document.                                                                     |
+| `boundaryRevision` | `number`                        | The `gameBoundary.revision` in effect when the crossing was confirmed.                                                            |
+| `timestamp`        | `Timestamp`                     | `serverTimestamp()`.                                                                                                              |
 
 Events are removed with their room by `cleanupEndedRooms`. There is no
 separate retention for location data.

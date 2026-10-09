@@ -166,19 +166,42 @@ describe('reportPlayerLocation', () => {
         expect(await readStatusDocs()).toHaveLength(0);
     });
 
-    it('rejects a sample more than 30 s old or more than 5 s in the future with invalid-argument', async () => {
+    it('a sample more than 30 s old or more than 5 s in the future writes status unavailable with clock_skew, keeps lastSampleMs, and writes no event', async () => {
         const alice = await newIdentity();
         await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
         const call = reportAs(alice);
 
-        await expect(call(fix(INSIDE, Date.now() - 31000))).rejects.toMatchObject({
-            code: 'functions/invalid-argument',
-        });
-        await expect(call(fix(INSIDE, Date.now() + 6000))).rejects.toMatchObject({
-            code: 'functions/invalid-argument',
+        const old = await call(fix(INSIDE, Date.now() - 31000));
+        expect(old.data).toEqual({ status: 'unavailable', reason: 'clock_skew' });
+        expect(await readStatus('alice')).toMatchObject({
+            status: 'unavailable',
+            reason: 'clock_skew',
+            lastSampleAt: null,
         });
 
-        expect(await readStatusDocs()).toHaveLength(0);
+        const future = await call(fix(INSIDE, Date.now() + 6000));
+        expect(future.data).toEqual({ status: 'unavailable', reason: 'clock_skew' });
+        expect((await readStatus('alice')).lastSampleAt).toBeNull();
+
+        // A valid sample after the skewed ones is still accepted, so the skewed
+        // samples did not move lastSampleMs.
+        const valid = await call(fix(INSIDE, Date.now() - 5000));
+        expect(valid.data).toEqual({ status: 'inside', reason: null });
+        expect(await readEvents()).toEqual([]);
+    });
+
+    it('a clock-skew report leaves a stored lastSampleAt unchanged', async () => {
+        const alice = await newIdentity();
+        await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
+        const call = reportAs(alice);
+        const T0 = Date.now() - 5000;
+        await call(fix(INSIDE, T0));
+        const storedSample = (await readStatus('alice')).lastSampleAt.toMillis();
+
+        const skewed = await call(fix(INSIDE, Date.now() + 6000));
+
+        expect(skewed.data).toEqual({ status: 'unavailable', reason: 'clock_skew' });
+        expect((await readStatus('alice')).lastSampleAt.toMillis()).toBe(storedSample);
     });
 
     it('rejects a sample older than the last stored sample as out-of-order and leaves the status unchanged', async () => {
@@ -217,7 +240,11 @@ describe('reportPlayerLocation', () => {
         expect((await readStatus('alice')).status).toBe('outside');
         let events = await readEvents();
         expect(events).toHaveLength(1);
-        expect(events[0]).toMatchObject({ type: 'outside', playerName: 'alice' });
+        expect(events[0]).toMatchObject({
+            type: 'outside',
+            playerName: 'alice',
+            playerId: 'alice',
+        });
 
         await call(fix(OUTSIDE, T0 + 23000));
         expect((await readStatus('alice')).status).toBe('outside');
@@ -252,6 +279,38 @@ describe('reportPlayerLocation', () => {
         const types = (await readEvents()).map((event) => event.type);
         expect(types.filter((type) => type === 'outside')).toHaveLength(1);
         expect(types).not.toContain('returnedInside');
+    });
+
+    it('after the room revision changes, a stored outside run does not carry over: one outside fix is not outside and writes no event; two more 20 s apart confirm again', async () => {
+        const alice = await newIdentity();
+        await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
+        const call = reportAs(alice);
+        const T0 = Date.now() - 25000;
+        await call(fix(OUTSIDE, T0));
+        const twentySecondsAgo = Timestamp.fromMillis(Date.now() - 20000);
+        await updateDoc(statusRef('alice'), {
+            outsideSince: twentySecondsAgo,
+            lastOutsideSampleAt: twentySecondsAgo,
+        });
+        await call(fix(OUTSIDE, T0 + 20000));
+        expect(await readEvents()).toHaveLength(1);
+
+        // The GM republishes the area: the room moves to revision 2.
+        await updateDoc(doc(bypass, 'rooms', ROOM), { 'gameBoundary.revision': 2 });
+
+        const first = await call(fix(OUTSIDE, T0 + 24000, { boundaryRevision: 2 }));
+        expect(first.data.status).not.toBe('outside');
+        expect((await readStatus('alice')).status).not.toBe('outside');
+        expect((await readEvents()).filter((e) => e.type === 'outside')).toHaveLength(1);
+
+        // Two more usable outside fixes at revision 2, 20 s apart on the server clock.
+        const again = Timestamp.fromMillis(Date.now() - 20000);
+        await updateDoc(statusRef('alice'), { outsideSince: again, lastOutsideSampleAt: again });
+        const confirmed = await call(fix(OUTSIDE, T0 + 24500, { boundaryRevision: 2 }));
+
+        expect(confirmed.data.status).toBe('outside');
+        expect((await readStatus('alice')).status).toBe('outside');
+        expect((await readEvents()).filter((e) => e.type === 'outside')).toHaveLength(2);
     });
 
     it('an error report older than the last stored sample is rejected as out-of-order and leaves the status unchanged', async () => {
@@ -315,8 +374,12 @@ describe('reportPlayerLocation', () => {
         await call(fix(INSIDE, T0 + 23500));
 
         expect((await readStatus('alice')).status).toBe('inside');
-        const types = (await readEvents()).map((event) => event.type).sort();
-        expect(types).toEqual(['outside', 'returnedInside']);
+        const events = await readEvents();
+        expect(events.map((event) => event.type).sort()).toEqual(['outside', 'returnedInside']);
+        expect(events.find((event) => event.type === 'returnedInside')).toMatchObject({
+            playerId: 'alice',
+            playerName: 'alice',
+        });
     });
 
     it('a player with a disabled boundary is rejected with "Game area is not active." and nothing is written', async () => {

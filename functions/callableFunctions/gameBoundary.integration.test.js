@@ -74,6 +74,15 @@ describe('publishGameBoundary', () => {
         expect(room.gameBoundary.updatedAt).toBeInstanceOf(Timestamp);
     });
 
+    it('stores each vertex with only lat and lng, dropping any extra keys', async () => {
+        await seedRoom(ROOM, [{ name: 'bob' }]);
+        const withExtraKeys = RECTANGLE_VERTICES.map((p) => ({ ...p, accuracy: 3, note: 'x' }));
+
+        await publish()({ ...RECTANGLE_PUBLISH, vertices: withExtraKeys });
+
+        expect((await readRoom()).gameBoundary.vertices).toEqual(RECTANGLE_VERTICES);
+    });
+
     it('a second publish with expectedRevision 1 yields revision 2', async () => {
         await seedRoom(ROOM, [{ name: 'bob' }]);
         await publish()(RECTANGLE_PUBLISH);
@@ -262,6 +271,18 @@ describe('publishGameBoundary', () => {
 });
 
 describe('disableGameBoundary', () => {
+    it('rejects disabling a room that has no game area, and leaves the room unchanged', async () => {
+        await seedRoom(ROOM, [{ name: 'bob' }]);
+        const before = await readRoom();
+
+        await expect(disable()({ roomId: ROOM, expectedRevision: 0 })).rejects.toMatchObject({
+            code: 'functions/failed-precondition',
+            message: 'There is no game area to disable.',
+        });
+
+        expect(await readRoom()).toEqual(before);
+    });
+
     it('disable with the correct expectedRevision sets enabled false, increments revision, and keeps the shape', async () => {
         await seedRoom(ROOM, [{ name: 'bob' }], {
             gameBoundary: {

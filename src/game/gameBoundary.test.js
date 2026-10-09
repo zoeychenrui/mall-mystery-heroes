@@ -358,6 +358,15 @@ describe('nextBoundaryState', () => {
         expect(s.outsideSampleCount).toBe(0);
     });
 
+    it('an unusable reading records its sample time as lastSampleMs', () => {
+        const s = nextBoundaryState(
+            initialBoundaryState(),
+            { kind: 'unusable', reason: 'poor_accuracy' },
+            { sampleMs: 7000, receivedMs: 9000 }
+        );
+        expect(s.lastSampleMs).toBe(7000);
+    });
+
     it('keeps a confirmed outside flag through unusable readings', () => {
         let s = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, at(0));
         s = nextBoundaryState(s, { kind: 'outside' }, at(20000));
@@ -418,5 +427,42 @@ describe('deriveFreshStatus', () => {
         expect(GAME_BOUNDARY_CONFIG.freshnessMs).toBe(30000);
         expect(deriveFreshStatus(s, 30000)).toEqual({ status: 'inside', reason: null });
         expect(deriveFreshStatus(s, 30001)).toEqual({ status: 'unavailable', reason: 'stale' });
+    });
+
+    describe('with the current revision and uid', () => {
+        const fresh = (extra) => ({
+            ...initialBoundaryState(),
+            status: 'inside',
+            lastUsableMs: 0,
+            ...extra,
+        });
+
+        it('reports wrong_revision when the stored revision differs from the current one', () => {
+            const s = fresh({ boundaryRevision: 1, uid: 'device-a' });
+            expect(
+                deriveFreshStatus(s, 1000, { currentRevision: 2, currentUid: 'device-a' })
+            ).toEqual({ status: 'unavailable', reason: 'wrong_revision' });
+        });
+
+        it('reports wrong_uid when the stored uid differs from the current one', () => {
+            const s = fresh({ boundaryRevision: 2, uid: 'device-a' });
+            expect(
+                deriveFreshStatus(s, 1000, { currentRevision: 2, currentUid: 'device-b' })
+            ).toEqual({ status: 'unavailable', reason: 'wrong_uid' });
+        });
+
+        it('keeps the stored status when both the revision and the uid match', () => {
+            const s = fresh({ boundaryRevision: 2, uid: 'device-a' });
+            expect(
+                deriveFreshStatus(s, 1000, { currentRevision: 2, currentUid: 'device-a' })
+            ).toEqual({ status: 'inside', reason: null });
+        });
+
+        it('ignores the match when the stored state carries no revision or uid', () => {
+            const s = fresh({});
+            expect(
+                deriveFreshStatus(s, 1000, { currentRevision: 2, currentUid: 'device-a' })
+            ).toEqual({ status: 'inside', reason: null });
+        });
     });
 });

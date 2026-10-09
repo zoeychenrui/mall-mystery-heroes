@@ -111,7 +111,7 @@ exports.publishGameBoundary = functions.https.onCall(async (data, context) => {
                 enabled: true,
                 revision: nextRevision,
                 shapeType,
-                vertices,
+                vertices: vertices.map(({ lat, lng }) => ({ lat, lng })),
                 shapeParameters: shapeParameters ?? null,
                 updatedAt: FieldValue.serverTimestamp(),
             },
@@ -139,6 +139,12 @@ exports.disableGameBoundary = functions.https.onCall(async (data, context) => {
     return db.runTransaction(async (transaction) => {
         const roomSnapshot = await transaction.get(roomRef);
         const room = readRoomForHost(roomSnapshot, context.auth.uid);
+        if (!room.gameBoundary) {
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                'There is no game area to disable.'
+            );
+        }
         const revision = currentRevision(room);
         if (expectedRevision !== revision) {
             throw new functions.https.HttpsError('failed-precondition', 'revision_conflict');

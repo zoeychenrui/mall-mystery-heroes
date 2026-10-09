@@ -41,8 +41,9 @@ const stateFromDoc = (data) => ({
 
 /**
  * Accepts one location report from a player and records their boundary
- * status. Coordinates are evaluated here and never stored. Only a change of
- * status writes a boundaryEvents doc.
+ * status. Coordinates are evaluated here and never stored. A boundaryEvents
+ * doc fires only on the confirmation edge: outsideConfirmedAt moving from
+ * null to set, or from set to cleared by an inside status.
  *
  * Fix report: { roomId, boundaryRevision, sampleMs, lat, lng, accuracyM }.
  * Error report: { roomId, boundaryRevision, sampleMs, error } with no
@@ -72,12 +73,8 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
 
     const receivedMs = Date.now();
     const { sampleMaxAgeMs, sampleMaxFutureMs, reportRateLimit } = GAME_BOUNDARY_CONFIG;
-    if (receivedMs - sampleMs > sampleMaxAgeMs || sampleMs - receivedMs > sampleMaxFutureMs) {
-        throw new functions.https.HttpsError(
-            'invalid-argument',
-            'Location sample is too old or too far in the future.'
-        );
-    }
+    const isClockSkewed =
+        receivedMs - sampleMs > sampleMaxAgeMs || sampleMs - receivedMs > sampleMaxFutureMs;
 
     const roomRef = db.collection('rooms').doc(roomId);
     return db.runTransaction(async (transaction) => {
@@ -134,11 +131,47 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
 
         const statusRef = roomRef.collection('boundaryStatuses').doc(playerDoc.id);
         const statusSnapshot = await transaction.get(statusRef);
-        const prev = statusSnapshot.exists
-            ? stateFromDoc(statusSnapshot.data())
-            : initialBoundaryState();
+        const storedData = statusSnapshot.exists ? statusSnapshot.data() : null;
+        // A stored run from a different boundary revision cannot be carried
+        // forward — the area it was measured against no longer applies — but
+        // lastSampleMs survives so out-of-order rejection still works across
+        // the revision change.
+        const prev =
+            storedData === null
+                ? initialBoundaryState()
+                : storedData.boundaryRevision !== boundary.revision
+                  ? { ...initialBoundaryState(), lastSampleMs: toMs(storedData.lastSampleAt) }
+                  : stateFromDoc(storedData);
 
         // --- decide phase ---
+
+        // A clock-skewed sample can't be ordered against lastSampleMs (the
+        // device clock produced it, not the server), so it is accepted —
+        // the rate limit above already counted it — but written as
+        // unavailable/clock_skew without touching lastSampleAt or evaluating
+        // the fix, and compared against nothing for ordering.
+        if (isClockSkewed) {
+            transaction.update(playerDoc.ref, {
+                rateLimits: {
+                    ...rateLimits,
+                    boundaryReport: {
+                        windowStart: Timestamp.fromMillis(nextWindow.windowStartMs),
+                        count: nextWindow.count,
+                    },
+                },
+            });
+            transaction.set(
+                statusRef,
+                {
+                    status: 'unavailable',
+                    reason: 'clock_skew',
+                    boundaryRevision,
+                    lastSampleAt: toTimestamp(prev.lastSampleMs),
+                },
+                { merge: true }
+            );
+            return { status: 'unavailable', reason: 'clock_skew' };
+        }
 
         // Applies to every report, error reports included, so a late error
         // cannot overwrite a newer sample's status.
@@ -205,6 +238,7 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
         if (prev.outsideConfirmedAt === null && next.outsideConfirmedAt !== null) {
             transaction.create(roomRef.collection('boundaryEvents').doc(), {
                 type: 'outside',
+                playerId: playerDoc.id,
                 playerName: playerData.name,
                 boundaryRevision,
                 timestamp: FieldValue.serverTimestamp(),
@@ -213,6 +247,7 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
         if (prev.outsideConfirmedAt !== null && next.status === 'inside') {
             transaction.create(roomRef.collection('boundaryEvents').doc(), {
                 type: 'returnedInside',
+                playerId: playerDoc.id,
                 playerName: playerData.name,
                 boundaryRevision,
                 timestamp: FieldValue.serverTimestamp(),

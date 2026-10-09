@@ -315,6 +315,7 @@ const nextBoundaryState = (prev, classification, times) => {
             reason: classification.reason,
             outsideSinceMs: null,
             outsideSampleCount: 0,
+            lastSampleMs: times.sampleMs,
         };
     }
 
@@ -372,12 +373,23 @@ const nextBoundaryState = (prev, classification, times) => {
     };
 };
 
-const deriveFreshStatus = (state, nowMs) => {
+// `current` is optional. When both currentRevision and currentUid are given, a
+// stored state from another revision or another device is reported as
+// unavailable rather than as the stored status.
+const deriveFreshStatus = (state, nowMs, current = {}) => {
     if (
         state.lastUsableMs === null ||
         nowMs - state.lastUsableMs > GAME_BOUNDARY_CONFIG.freshnessMs
     ) {
         return { status: 'unavailable', reason: 'stale' };
+    }
+    if (current.currentRevision !== undefined && current.currentUid !== undefined) {
+        if (state.boundaryRevision != null && state.boundaryRevision !== current.currentRevision) {
+            return { status: 'unavailable', reason: 'wrong_revision' };
+        }
+        if (state.uid != null && state.uid !== current.currentUid) {
+            return { status: 'unavailable', reason: 'wrong_uid' };
+        }
     }
     // A reason only explains an unavailable status; other statuses carry none.
     const reason = state.status === 'unavailable' ? (state.reason ?? null) : null;
