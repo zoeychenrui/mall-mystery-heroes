@@ -65,9 +65,17 @@ REACT_APP_PROJECTID=
 REACT_APP_STORAGEBUCKET=
 REACT_APP_MESSAGINGSENDERID=
 REACT_APP_APPID=
+REACT_APP_MAPBOX_TOKEN=
 ```
 
 `.env` is gitignored.
+
+`REACT_APP_MAPBOX_TOKEN` is a public Mapbox access token, restricted to
+this app's origins in your Mapbox account's token settings
+(https://console.mapbox.com/account/access-tokens/). It is required for
+the game-boundary map (moderator editor and, later, player map) to
+render; without it, those screens show a "Map is not configured"
+message instead of a map, and every other feature works normally.
 
 ## Running locally
 

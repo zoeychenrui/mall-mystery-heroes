@@ -16,9 +16,11 @@
         "cors": "^2.8.5",
         "dotenv": "^16.4.5",
         "firebase": "^10.12.0",
+        "mapbox-gl": "^3.32.0",
         "react": "^18.3.1",
         "react-autosuggest": "^10.1.0",
         "react-dom": "^18.3.1",
+        "react-map-gl": "^7.1.9",
         "react-router-dom": "^6.23.1",
         "react-scripts": "^5.0.1",
         "web-vitals": "^2.1.4"
