@@ -73,9 +73,11 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary }) => {
     const [history, setHistory] = useState([]);
     const [activeTool, setActiveTool] = useState('move');
     // GameMap already renders its own full-screen "Map failed to load" /
-    // Retry UI internally on error (see GameMap.js); this modal has
-    // nothing further to show, so only the setter is kept.
-    const [, setMapError] = useState(false);
+    // Retry UI internally on error (see GameMap.js), but this modal still
+    // needs to know about it: there is nothing to draw on, so every
+    // toolbar button (including Undo and Clear Draft) is disabled while
+    // an error is active. Task 6 also reads this to gate Publish.
+    const [mapError, setMapError] = useState(false);
     const mapRef = useRef(null);
 
     // Reopening always starts from the latest published state, never a
@@ -241,16 +243,21 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary }) => {
                                 size="sm"
                                 colorScheme={activeTool === tool ? 'teal' : 'gray'}
                                 onClick={() => handleToolChange(tool)}
+                                isDisabled={mapError}
                             >
                                 {tool === 'move'
                                     ? 'Move Map'
                                     : tool.charAt(0).toUpperCase() + tool.slice(1)}
                             </Button>
                         ))}
-                        <Button size="sm" onClick={handleUndo} isDisabled={history.length === 0}>
+                        <Button
+                            size="sm"
+                            onClick={handleUndo}
+                            isDisabled={history.length === 0 || mapError}
+                        >
                             Undo
                         </Button>
-                        <Button size="sm" onClick={handleClearDraft}>
+                        <Button size="sm" onClick={handleClearDraft} isDisabled={mapError}>
                             Clear Draft
                         </Button>
                     </HStack>

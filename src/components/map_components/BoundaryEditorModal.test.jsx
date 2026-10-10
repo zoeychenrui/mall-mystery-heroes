@@ -171,6 +171,22 @@ describe('BoundaryEditorModal — drawing tools', () => {
         expect(lastProps.dragPan).toBe(true);
     });
 
+    it('disables every toolbar button when the map reports an error', () => {
+        renderModal();
+        fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -74 });
+
+        act(() => {
+            lastProps.onMapError();
+        });
+
+        ['Move Map', 'Freehand', 'Rectangle', 'Circle', 'Oval', 'Undo', 'Clear Draft'].forEach(
+            (name) => {
+                expect(screen.getByRole('button', { name })).toBeDisabled();
+            }
+        );
+    });
+
     it('Cancel discards the draft and calls onClose without publishing', () => {
         const onClose = jest.fn();
         renderModal({ onClose });
