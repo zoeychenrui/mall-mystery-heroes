@@ -14,7 +14,7 @@
 
 - A public Mapbox access token, restricted to this app's origins, is required to see a live map and is configured outside this repository (spec, "Open implementation choice"). No token exists in this repo today. **No task in this plan may assume a live token during automated tests.** Every test touching `GameMap.js` or `BoundaryEditorModal.js` mocks `react-map-gl` and `mapbox-gl` completely — the spec's own Testing section calls for exactly this ("UI tests with map/geolocation adapters mocked"). Manually confirming a real map renders is the user's job once they supply a token; it is not part of `npm test`/`npm run build`.
 - **Implementation-detail substitution, noted for the user's review:** the spec's "Open implementation choice" names `@mapbox/mapbox-gl-draw` as a candidate library for freehand/polygon editing, but frames the whole choice as a default to verify, not an approved product decision. This plan does **not** add that dependency. All four tools (freehand, rectangle, circle, oval) are built from one shared drag gesture — mapbox-gl's own `mousedown`/`mousemove`/`mouseup` map events, which hand back `lngLat` directly — interpreted differently per tool, plus Phase 1's own `projectToMeters`/`shapeToPolygon` math. Fewer moving parts, one gesture to get right instead of a second library's event model, and it delivers the same four tools with real drag-to-resize. If this substitution isn't acceptable, say so before implementation starts; swapping in `mapbox-gl-draw` later would touch only Task 5.
-- **Deliberate scope cut, noted for the user's review:** this plan does not implement "Use My Location" or address/place search for centering a fresh map (spec, "Moderator experience"). The moderator positions a fresh boundary by panning/zooming manually — explicitly allowed by the spec ("The moderator can also pan and zoom manually; denying their own location permission does not prevent drawing") — and an *existing* boundary still auto-fits on open. Geolocation plumbing belongs with Phase 3's `useBoundaryLocation.js` work; duplicating a slice of it here for one button was judged not worth it. Flag if this should be pulled into this phase instead.
+- **Deliberate scope cut, noted for the user's review:** this plan does not implement "Use My Location" or address/place search for centering a fresh map (spec, "Moderator experience"). The moderator positions a fresh boundary by panning/zooming manually — explicitly allowed by the spec ("The moderator can also pan and zoom manually; denying their own location permission does not prevent drawing") — and an _existing_ boundary still auto-fits on open. Geolocation plumbing belongs with Phase 3's `useBoundaryLocation.js` work; duplicating a slice of it here for one button was judged not worth it. Flag if this should be pulled into this phase instead.
 - Canonical field names and shapes, from `docs/data-model.md`'s `gameBoundary` row (Phase 1): `{ enabled: boolean, revision: number, shapeType: 'freehand'|'rectangle'|'circle'|'oval', vertices: Array<{lat, lng}>, shapeParameters: object|null, updatedAt: Timestamp }`.
 - `publishGameBoundary` callable: `{ roomId, expectedRevision, shapeType, vertices, shapeParameters }` → `{ revision }`. Errors: `unauthenticated`; `invalid-argument` (missing fields, failed `validateBoundaryShape`, or shape parameters that don't match the vertices); `not-found` (`'Room not found.'`); `permission-denied` (`'Only the room host can change the game area.'`); `failed-precondition` `'This game has ended.'`; `failed-precondition` `'revision_conflict'`.
 - `disableGameBoundary` callable: `{ roomId, expectedRevision }` → `{ revision }`. Same error set, plus `failed-precondition` `'There is no game area to disable.'` when the room never had one.
@@ -26,20 +26,22 @@
 ## Review Focus
 
 - A moderator reopening an existing boundary to edit it must get back the exact `shapeType` and `shapeParameters` it was published with, not just the vertices — otherwise a circle becomes an uneditable blob of points the moment someone reopens it. (Task 2's `draftFromPublished` test; Task 5's "reopens an existing boundary" test.)
-- Publish must be functionally disabled — not merely styled to look disabled — whenever the draft fails `validateBoundaryShape`, and the moderator should see *why* (the validator's own reason string), not a generic "invalid shape." (Task 5's publish-gating tests.)
+- Publish must be functionally disabled — not merely styled to look disabled — whenever the draft fails `validateBoundaryShape`, and the moderator should see _why_ (the validator's own reason string), not a generic "invalid shape." (Task 5's publish-gating tests.)
 - A revision conflict (another moderator tab published first) must retain the draft and show the conflict, never silently retry or discard what the moderator drew. (Task 6's conflict test.)
 - Switching drawing tools, or clicking Clear Draft, must fully detach the previous tool's map listeners before the next tool attaches its own — a leftover `mousedown`/`mousemove`/`mouseup` handler from the last tool firing during the next one's gesture is the single easiest bug to ship here. (Task 5's tool-switch test.)
-- Closing the editor (Cancel/X) must discard the local draft outright; reopening starts from the last *published* boundary, never from whatever was abandoned last time. (Task 6's cancel-then-reopen test.)
+- Closing the editor (Cancel/X) must discard the local draft outright; reopening starts from the last _published_ boundary, never from whatever was abandoned last time. (Task 6's cancel-then-reopen test.)
 
 ---
 
 ### Task 1: Mapbox dependencies and the token's documentation
 
 **Files:**
+
 - Modify: `package.json` (via `npm install`, not hand-edited)
 - Modify: `README.md:58-70`
 
 **Interfaces:**
+
 - Produces: `mapbox-gl` and `react-map-gl` available to import anywhere under `src/`; `process.env.REACT_APP_MAPBOX_TOKEN` as the documented env var name every later task reads.
 
 - [ ] **Step 1: Install the dependencies**
@@ -119,10 +121,12 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ### Task 2: Pure boundary-draft helper
 
 **Files:**
+
 - Create: `src/game/boundaryDraft.js`
 - Test: `src/game/boundaryDraft.test.js`
 
 **Interfaces:**
+
 - Consumes: `shapeToPolygon`, `validateBoundaryShape` (already exported from `src/game/gameBoundary.js`).
 - Produces: `emptyDraft()`, `draftFromPublished(published)`, `draftFromFreehand(points)`, `draftFromParameters(shapeType, shapeParameters)`, `isDraftPublishable(draft)`. Every draft object has the shape `{ shapeType: string|null, shapeParameters: object|null, vertices: Array<{lat,lng}>|null, validation: {ok: true} | {ok: false, reason: string} }`.
 
@@ -247,7 +251,7 @@ describe('draftFromParameters', () => {
         expect(isDraftPublishable(draft)).toBe(false);
     });
 
-    it('surfaces the geometry validator\'s own reason for a degenerate shape', () => {
+    it("surfaces the geometry validator's own reason for a degenerate shape", () => {
         const draft = draftFromParameters('rectangle', {
             corners: [
                 { lat: 40, lng: -74 },
@@ -389,10 +393,12 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ### Task 3: Callable wrapper files
 
 **Files:**
+
 - Create: `src/components/publishGameBoundary.js`
 - Create: `src/components/disableGameBoundary.js`
 
 **Interfaces:**
+
 - Consumes: the `publishGameBoundary`/`disableGameBoundary` Cloud Functions (Phase 1, registered in `functions/index.js`).
 - Produces: `publishGameBoundary({ roomId, expectedRevision, shapeType, vertices, shapeParameters })` → `Promise<{ revision: number }>`. `disableGameBoundary({ roomId, expectedRevision })` → `Promise<{ revision: number }>`. Both throw on rejection, carrying `.message`, same as every other callable wrapper in this repo.
 
@@ -474,10 +480,12 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ### Task 4: Shared map renderer
 
 **Files:**
+
 - Create: `src/components/map_components/GameMap.js`
 - Test: `src/components/map_components/GameMap.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `react-map-gl`'s `Map`/`Source`/`Layer` (confirm exact export form against Task 1's recorded result before writing — adjust the import line if the installed version differs, and note the substitution in this task's report), `process.env.REACT_APP_MAPBOX_TOKEN`.
 - Produces: `GameMap` component. Props: `boundaryVertices: Array<{lat,lng}>|null`, `fitTo: {longitude:number, latitude:number}|null`, `dragPan?: boolean` (default `true` — `BoundaryEditorModal.js` sets this `false` while a drawing tool other than Move Map is active, per spec: "Drawing mode captures the drawing gesture instead of panning the map"), `onMapLoad?: (map) => void`, `onMapError?: () => void`. No drawing tools live here — this component only renders a map and an optional boundary outline, and reports load/error events up; `BoundaryEditorModal.js` (Tasks 5-6) is the only thing that attaches drawing interaction, via the `map` instance handed to `onMapLoad`.
 
@@ -739,7 +747,9 @@ const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapErro
                 p="24px"
                 textAlign="center"
             >
-                <Text>Map is not configured. Ask whoever runs this app to set REACT_APP_MAPBOX_TOKEN.</Text>
+                <Text>
+                    Map is not configured. Ask whoever runs this app to set REACT_APP_MAPBOX_TOKEN.
+                </Text>
             </Box>
         );
     }
@@ -795,7 +805,9 @@ const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapErro
                 top="12px"
                 right="12px"
                 size="sm"
-                onClick={() => setStyleMode((mode) => (mode === 'satellite' ? 'standard' : 'satellite'))}
+                onClick={() =>
+                    setStyleMode((mode) => (mode === 'satellite' ? 'standard' : 'satellite'))
+                }
             >
                 {styleMode === 'satellite' ? 'Standard map' : 'Satellite'}
             </Button>
@@ -827,10 +839,12 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ### Task 5: Boundary editor — drawing tools
 
 **Files:**
+
 - Create: `src/components/map_components/BoundaryEditorModal.js`
 - Test: `src/components/map_components/BoundaryEditorModal.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `GameMap` (Task 4); `emptyDraft`, `draftFromPublished`, `draftFromFreehand`, `draftFromParameters`, `isDraftPublishable` (Task 2); `projectToMeters` (Phase 1, Task 2).
 - Produces: `BoundaryEditorModal` component. Props so far: `isOpen: boolean`, `onClose: () => void`, `currentBoundary: {shapeType, vertices, shapeParameters, enabled, revision}|undefined`. This task delivers drawing, undo, and clear — Cancel/Close discards the draft and calls `onClose()`. **No Publish/Disable buttons yet** — Task 6 adds them to this same file. That split is deliberate: this task's deliverable ("open the editor, draw with all four tools, undo, clear, close discards") is independently testable and already useful on its own.
 
@@ -877,7 +891,12 @@ jest.mock('./GameMap', () => (props) => {
 const renderModal = (props = {}) =>
     render(
         <ChakraProvider>
-            <BoundaryEditorModal isOpen onClose={jest.fn()} currentBoundary={undefined} {...props} />
+            <BoundaryEditorModal
+                isOpen
+                onClose={jest.fn()}
+                currentBoundary={undefined}
+                {...props}
+            />
         </ChakraProvider>
     );
 
@@ -958,7 +977,7 @@ describe('BoundaryEditorModal — drawing tools', () => {
         expect(lastProps.boundaryVertices.length).toBeGreaterThanOrEqual(4);
     });
 
-    it('Clear Draft removes the shape and detaches the active tool\'s listeners', () => {
+    it("Clear Draft removes the shape and detaches the active tool's listeners", () => {
         renderModal();
         fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
         dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -74 });
@@ -969,7 +988,7 @@ describe('BoundaryEditorModal — drawing tools', () => {
         expect(mapEventHandlers.mousedown).toBeUndefined();
     });
 
-    it('switching tools tears down the previous tool\'s listeners before the new one attaches', () => {
+    it("switching tools tears down the previous tool's listeners before the new one attaches", () => {
         renderModal();
         fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
         const circleHandler = mapEventHandlers.mousedown;
@@ -1018,7 +1037,6 @@ describe('BoundaryEditorModal — drawing tools', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(onClose).toHaveBeenCalled();
     });
-
 });
 ```
 
@@ -1176,7 +1194,9 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary }) => {
                 setDraft(draftFromParameters('circle', { center, radiusMeters: 0 }));
             },
             onMove: (lngLat) => {
-                setDraft(draftFromParameters('circle', { center, radiusMeters: radiusMetersTo(lngLat) }));
+                setDraft(
+                    draftFromParameters('circle', { center, radiusMeters: radiusMetersTo(lngLat) })
+                );
             },
             onEnd: (lngLat) => {
                 commitDraft(
@@ -1322,10 +1342,12 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ### Task 6: Boundary editor — publish and disable
 
 **Files:**
+
 - Modify: `src/components/map_components/BoundaryEditorModal.js` (Task 5)
 - Modify: `src/components/map_components/BoundaryEditorModal.test.jsx` (Task 5)
 
 **Interfaces:**
+
 - Consumes: `publishGameBoundary`, `disableGameBoundary` (Task 3); `isDraftPublishable` (Task 2, already imported in Task 5).
 - Produces: `BoundaryEditorModal` additionally takes `roomID: string`. Adds a `Publish Boundary`/`Publish Changes` button (label depends on whether `currentBoundary` already exists) and, when `currentBoundary?.enabled`, a `Disable Boundary` button.
 
@@ -1350,9 +1372,7 @@ describe('BoundaryEditorModal — publish and disable', () => {
         const onClose = jest.fn();
         renderModal({ roomID: 'room-a', onClose });
 
-        expect(
-            screen.queryByRole('button', { name: 'Publish Boundary' })
-        ).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Publish Boundary' })).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
         dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -74 });
@@ -1534,11 +1554,13 @@ Also clear `conflictMessage` in the existing reopen `useEffect` (the one that re
 Add to the toolbar's `HStack` (after Clear Draft) and the footer:
 
 ```jsx
-{isDraftPublishable(draft) && !mapError && (
-    <Button colorScheme="teal" isLoading={isPublishing} onClick={handlePublish}>
-        {currentBoundary ? 'Publish Changes' : 'Publish Boundary'}
-    </Button>
-)}
+{
+    isDraftPublishable(draft) && !mapError && (
+        <Button colorScheme="teal" isLoading={isPublishing} onClick={handlePublish}>
+            {currentBoundary ? 'Publish Changes' : 'Publish Boundary'}
+        </Button>
+    );
+}
 ```
 
 The `!mapError` guard is the spec's "block new publication if the moderator cannot review it" (Error handling) — `mapError` is the state Task 5 already wired to `GameMap`'s `onMapError`.
@@ -1546,21 +1568,25 @@ The `!mapError` guard is the spec's "block new publication if the moderator cann
 and, in `ModalFooter`, before the existing Cancel button:
 
 ```jsx
-{currentBoundary?.enabled && (
-    <Button colorScheme="red" isLoading={isDisabling} onClick={handleDisable} mr="8px">
-        Disable Boundary
-    </Button>
-)}
+{
+    currentBoundary?.enabled && (
+        <Button colorScheme="red" isLoading={isDisabling} onClick={handleDisable} mr="8px">
+            Disable Boundary
+        </Button>
+    );
+}
 ```
 
 and render `conflictMessage` (when set) the same way the existing validation-reason `<Text>` is rendered, just above it:
 
 ```jsx
-{conflictMessage && (
-    <Text color="red.300" fontSize="sm">
-        {conflictMessage}
-    </Text>
-)}
+{
+    conflictMessage && (
+        <Text color="red.300" fontSize="sm">
+            {conflictMessage}
+        </Text>
+    );
+}
 ```
 
 - [ ] **Step 4: Run to verify it passes**
@@ -1584,6 +1610,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ### Task 7: Entry point in Lobby and GameMasterView
 
 **Files:**
+
 - Create: `src/components/map_components/GameBoundaryButton.js`
 - Test: `src/components/map_components/GameBoundaryButton.test.jsx`
 - Modify: `src/pages/Lobby.js`
@@ -1593,6 +1620,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Modify: `src/pages/GameMasterView.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `BoundaryEditorModal` (Tasks 5-6), `fetchRoomReferenceForRoom` (existing, `dbCalls.js`).
 - Produces: `GameBoundaryButton` component, props `{ roomID: string, gameBoundary: object|undefined }` — self-contained, owns its own open/closed state, same shape as `AbandonRoomButton.js`.
 
@@ -1611,12 +1639,15 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ChakraProvider } from '@chakra-ui/react';
 import GameBoundaryButton from './GameBoundaryButton';
 
-jest.mock('./BoundaryEditorModal', () => ({ isOpen, onClose }) =>
-    isOpen ? (
-        <div data-testid="mock-boundary-editor">
-            <button onClick={onClose}>mock-close</button>
-        </div>
-    ) : null
+jest.mock(
+    './BoundaryEditorModal',
+    () =>
+        ({ isOpen, onClose }) =>
+            isOpen ? (
+                <div data-testid="mock-boundary-editor">
+                    <button onClick={onClose}>mock-close</button>
+                </div>
+            ) : null
 );
 
 const renderButton = (props = {}) =>
@@ -1672,7 +1703,12 @@ const GameBoundaryButton = ({ roomID, gameBoundary }) => {
 
     return (
         <>
-            <Button colorScheme="teal" variant="outline" borderRadius="3xl" onClick={() => setIsOpen(true)}>
+            <Button
+                colorScheme="teal"
+                variant="outline"
+                borderRadius="3xl"
+                onClick={() => setIsOpen(true)}
+            >
                 {gameBoundary ? 'Edit Game Area' : 'Set Game Area'}
             </Button>
             <BoundaryEditorModal
@@ -1788,10 +1824,12 @@ import GameBoundaryButton from '../map_components/GameBoundaryButton';
 `GameMasterView.test.jsx` already branches its shared `onSnapshot.mockImplementation` on `query === 'room-ref'` to answer the room-doc subscription (see its `mockPlayersSnapshot` helper and the "isGameActive is read" describe block) — follow that exact existing pattern rather than introducing a new one. Add, near the other GameMasterView-level rendering tests:
 
 ```javascript
-it('shows the Game Boundary entry point with the room\'s current boundary', () => {
+it("shows the Game Boundary entry point with the room's current boundary", () => {
     onSnapshot.mockImplementation((query, onNext) => {
         if (query === 'room-ref') {
-            onNext({ data: () => ({ isGameActive: true, gameBoundary: { enabled: true, revision: 1 } }) });
+            onNext({
+                data: () => ({ isGameActive: true, gameBoundary: { enabled: true, revision: 1 } }),
+            });
         } else {
             onNext({ docs: [] });
         }

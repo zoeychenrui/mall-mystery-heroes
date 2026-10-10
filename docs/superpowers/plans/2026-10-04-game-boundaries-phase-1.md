@@ -34,15 +34,17 @@
 ### Task 1: Shape validation and polygon conversion (pure geometry)
 
 **Files:**
+
 - Create: `src/game/gameBoundary.js`
 - Test: `src/game/gameBoundary.test.js`
 
 **Interfaces:**
+
 - Produces:
-  - `MAX_VERTICES = 500`, `MAX_SPAN_METERS = 10000`, `EARTH_RADIUS_M = 6371008.8`
-  - `shapeToPolygon(shapeType, shapeParameters)` → `Array<{lat, lng}>` closed ring (first point repeated last), or throws `Error` for an unknown type or malformed parameters
-  - `validateBoundaryShape(shapeType, vertices)` → `{ ok: true } | { ok: false, reason: string }`
-  - `projectToMeters(point, origin)` → `{x, y}` local equirectangular meters around `origin`
+    - `MAX_VERTICES = 500`, `MAX_SPAN_METERS = 10000`, `EARTH_RADIUS_M = 6371008.8`
+    - `shapeToPolygon(shapeType, shapeParameters)` → `Array<{lat, lng}>` closed ring (first point repeated last), or throws `Error` for an unknown type or malformed parameters
+    - `validateBoundaryShape(shapeType, vertices)` → `{ ok: true } | { ok: false, reason: string }`
+    - `projectToMeters(point, origin)` → `{x, y}` local equirectangular meters around `origin`
 - Consumes: nothing.
 
 - [ ] **Step 1: Write the failing tests**
@@ -50,11 +52,7 @@
 Create `src/game/gameBoundary.test.js`:
 
 ```js
-const {
-    MAX_VERTICES,
-    shapeToPolygon,
-    validateBoundaryShape,
-} = require('./gameBoundary');
+const { MAX_VERTICES, shapeToPolygon, validateBoundaryShape } = require('./gameBoundary');
 
 const square = [
     { lat: 40.0, lng: -74.0 },
@@ -210,9 +208,7 @@ const projectToMeters = (point, origin) => ({
 
 const offsetPoint = (center, eastMeters, northMeters) => ({
     lat: center.lat + toDegrees(northMeters / EARTH_RADIUS_M),
-    lng:
-        center.lng +
-        toDegrees(eastMeters / (EARTH_RADIUS_M * Math.cos(toRadians(center.lat)))),
+    lng: center.lng + toDegrees(eastMeters / (EARTH_RADIUS_M * Math.cos(toRadians(center.lat)))),
 });
 
 const sampleEllipse = (center, radiusXMeters, radiusYMeters) => {
@@ -220,11 +216,7 @@ const sampleEllipse = (center, radiusXMeters, radiusYMeters) => {
     for (let i = 0; i < CIRCLE_SAMPLES; i += 1) {
         const theta = (2 * Math.PI * i) / CIRCLE_SAMPLES;
         ring.push(
-            offsetPoint(
-                center,
-                radiusXMeters * Math.cos(theta),
-                radiusYMeters * Math.sin(theta)
-            )
+            offsetPoint(center, radiusXMeters * Math.cos(theta), radiusYMeters * Math.sin(theta))
         );
     }
     ring.push({ ...ring[0] });
@@ -296,7 +288,10 @@ const validateBoundaryShape = (shapeType, vertices) => {
             return { ok: false, reason: 'Coordinates must be finite numbers.' };
         }
         if (point.lat < -90 || point.lat > 90 || point.lng < -180 || point.lng > 180) {
-            return { ok: false, reason: 'Coordinates are outside the valid latitude/longitude range.' };
+            return {
+                ok: false,
+                reason: 'Coordinates are outside the valid latitude/longitude range.',
+            };
         }
     }
     const first = vertices[0];
@@ -335,14 +330,7 @@ const validateBoundaryShape = (shapeType, vertices) => {
     for (let i = 0; i < edgeCount; i += 1) {
         for (let j = i + 2; j < edgeCount; j += 1) {
             if (i === 0 && j === edgeCount - 1) continue;
-            if (
-                segmentsIntersect(
-                    projected[i],
-                    projected[i + 1],
-                    projected[j],
-                    projected[j + 1]
-                )
-            ) {
+            if (segmentsIntersect(projected[i], projected[i + 1], projected[j], projected[j + 1])) {
                 return { ok: false, reason: 'The boundary must not cross itself.' };
             }
         }
@@ -385,18 +373,20 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ### Task 2: Location classification and outside-confirmation state (pure)
 
 **Files:**
+
 - Modify: `src/game/gameBoundary.js`
 - Test: `src/game/gameBoundary.test.js`
 
 **Interfaces:**
+
 - Produces:
-  - `GAME_BOUNDARY_CONFIG = { edgeToleranceM: 15, maxAccuracyM: 50, confirmMinSpanMs: 20000, confirmMaxGapMs: 30000, freshnessMs: 30000, sampleMaxAgeMs: 30000, sampleMaxFutureMs: 5000, reportRateLimit: { max: 20, windowMs: 60000 } }`
-  - `isPointInPolygon(point, ring)` → boolean (ray casting in projected meters)
-  - `distanceToRingMeters(point, ring)` → number, distance to the nearest edge in meters
-  - `classifyFix(ring, fix)` → `{ kind: 'inside' | 'near' | 'outside' | 'unusable', reason }`, where `fix = { lat, lng, accuracyM }`. `unusable` covers accuracy above `maxAccuracyM` (reason `poor_accuracy`) and missing or non-finite values (reason `invalid_fix`).
-  - `initialBoundaryState()` → `{ status: 'unavailable', reason: 'no_fix', outsideSinceMs: null, lastOutsideSampleMs: null, outsideSampleCount: 0, lastUsableMs: null, lastSampleMs: null, outsideConfirmedAt: null }`
-  - `nextBoundaryState(prevState, classification, { sampleMs, receivedMs })` → new state, pure, time from arguments only
-  - `deriveFreshStatus(state, nowMs)` → the state's status, or `unavailable` with reason `stale` when `nowMs - lastUsableMs > freshnessMs`
+    - `GAME_BOUNDARY_CONFIG = { edgeToleranceM: 15, maxAccuracyM: 50, confirmMinSpanMs: 20000, confirmMaxGapMs: 30000, freshnessMs: 30000, sampleMaxAgeMs: 30000, sampleMaxFutureMs: 5000, reportRateLimit: { max: 20, windowMs: 60000 } }`
+    - `isPointInPolygon(point, ring)` → boolean (ray casting in projected meters)
+    - `distanceToRingMeters(point, ring)` → number, distance to the nearest edge in meters
+    - `classifyFix(ring, fix)` → `{ kind: 'inside' | 'near' | 'outside' | 'unusable', reason }`, where `fix = { lat, lng, accuracyM }`. `unusable` covers accuracy above `maxAccuracyM` (reason `poor_accuracy`) and missing or non-finite values (reason `invalid_fix`).
+    - `initialBoundaryState()` → `{ status: 'unavailable', reason: 'no_fix', outsideSinceMs: null, lastOutsideSampleMs: null, outsideSampleCount: 0, lastUsableMs: null, lastSampleMs: null, outsideConfirmedAt: null }`
+    - `nextBoundaryState(prevState, classification, { sampleMs, receivedMs })` → new state, pure, time from arguments only
+    - `deriveFreshStatus(state, nowMs)` → the state's status, or `unavailable` with reason `stale` when `nowMs - lastUsableMs > freshnessMs`
 - Consumes: `projectToMeters` from Task 1.
 
 - [ ] **Step 1: Write the failing tests**
@@ -573,7 +563,10 @@ const pointSegmentDistance = (p, a, b) => {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const lengthSq = dx * dx + dy * dy;
-    const t = lengthSq === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
+    const t =
+        lengthSq === 0
+            ? 0
+            : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
     return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 };
 
@@ -589,7 +582,12 @@ const distanceToRingMeters = (point, ring) => {
 };
 
 const classifyFix = (ring, fix) => {
-    if (!fix || !isFiniteNumber(fix.lat) || !isFiniteNumber(fix.lng) || !isFiniteNumber(fix.accuracyM)) {
+    if (
+        !fix ||
+        !isFiniteNumber(fix.lat) ||
+        !isFiniteNumber(fix.lng) ||
+        !isFiniteNumber(fix.accuracyM)
+    ) {
         return { kind: 'unusable', reason: 'invalid_fix' };
     }
     if (fix.accuracyM > GAME_BOUNDARY_CONFIG.maxAccuracyM) {
@@ -621,13 +619,27 @@ const nextBoundaryState = (prev, classification, times) => {
     const t = times.sampleMs;
 
     if (classification.kind === 'unusable') {
-        return { ...prev, status: 'unavailable', reason: classification.reason, outsideSinceMs: null, outsideSampleCount: 0 };
+        return {
+            ...prev,
+            status: 'unavailable',
+            reason: classification.reason,
+            outsideSinceMs: null,
+            outsideSampleCount: 0,
+        };
     }
 
     const usable = { ...prev, lastUsableMs: t, lastSampleMs: t };
 
     if (classification.kind === 'inside') {
-        return { ...usable, status: 'inside', reason: null, outsideSinceMs: null, lastOutsideSampleMs: null, outsideSampleCount: 0, outsideConfirmedAt: null };
+        return {
+            ...usable,
+            status: 'inside',
+            reason: null,
+            outsideSinceMs: null,
+            lastOutsideSampleMs: null,
+            outsideSampleCount: 0,
+            outsideConfirmedAt: null,
+        };
     }
     if (classification.kind === 'near') {
         const status = prev.status === 'outside' ? 'outside' : 'near';
@@ -635,7 +647,8 @@ const nextBoundaryState = (prev, classification, times) => {
     }
 
     // outside candidate
-    const gapTooLarge = prev.lastOutsideSampleMs !== null && t - prev.lastOutsideSampleMs > confirmMaxGapMs;
+    const gapTooLarge =
+        prev.lastOutsideSampleMs !== null && t - prev.lastOutsideSampleMs > confirmMaxGapMs;
     const restart = prev.outsideSinceMs === null || gapTooLarge;
     const outsideSinceMs = restart ? t : prev.outsideSinceMs;
     const outsideSampleCount = restart ? 1 : prev.outsideSampleCount + 1;
@@ -643,13 +656,31 @@ const nextBoundaryState = (prev, classification, times) => {
 
     if (confirmed) {
         const outsideConfirmedAt = prev.status === 'outside' ? prev.outsideConfirmedAt : t;
-        return { ...usable, status: 'outside', reason: null, outsideSinceMs, lastOutsideSampleMs: t, outsideSampleCount, outsideConfirmedAt };
+        return {
+            ...usable,
+            status: 'outside',
+            reason: null,
+            outsideSinceMs,
+            lastOutsideSampleMs: t,
+            outsideSampleCount,
+            outsideConfirmedAt,
+        };
     }
-    return { ...usable, status: prev.status === 'outside' ? 'outside' : 'near', reason: null, outsideSinceMs, lastOutsideSampleMs: t, outsideSampleCount };
+    return {
+        ...usable,
+        status: prev.status === 'outside' ? 'outside' : 'near',
+        reason: null,
+        outsideSinceMs,
+        lastOutsideSampleMs: t,
+        outsideSampleCount,
+    };
 };
 
 const deriveFreshStatus = (state, nowMs) => {
-    if (state.lastUsableMs === null || nowMs - state.lastUsableMs > GAME_BOUNDARY_CONFIG.freshnessMs) {
+    if (
+        state.lastUsableMs === null ||
+        nowMs - state.lastUsableMs > GAME_BOUNDARY_CONFIG.freshnessMs
+    ) {
         return { status: 'unavailable', reason: 'stale' };
     }
     return { status: state.status, reason: state.reason ?? null };
@@ -679,6 +710,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ### Task 3: Vendor gameBoundary into Cloud Functions
 
 **Files:**
+
 - Modify: `functions/scripts/sync-shared-game-logic.js` (the `FILES` array)
 - Verify: `functions/vendor/game/gameBoundary.js` is generated (vendor directory is gitignored)
 
@@ -705,14 +737,16 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ### Task 4: publishGameBoundary and disableGameBoundary callables
 
 **Files:**
+
 - Create: `functions/callableFunctions/gameBoundary.js`
 - Create: `functions/callableFunctions/gameBoundary.integration.test.js`
 
 **Interfaces:**
+
 - Produces: `exports.publishGameBoundary` and `exports.disableGameBoundary` (`functions.https.onCall`).
-  - Publish data: `{ roomId, expectedRevision, shapeType, vertices, shapeParameters }` → `{ revision }`.
-  - Disable data: `{ roomId, expectedRevision }` → `{ revision }`.
-  - Errors: `unauthenticated`, `invalid-argument` (missing fields or failing `validateBoundaryShape`), `not-found` (room), `permission-denied` (caller is not the host), `failed-precondition` with message `revision_conflict`, `failed-precondition` `This game has ended.` when `isGameActive` is false.
+    - Publish data: `{ roomId, expectedRevision, shapeType, vertices, shapeParameters }` → `{ revision }`.
+    - Disable data: `{ roomId, expectedRevision }` → `{ revision }`.
+    - Errors: `unauthenticated`, `invalid-argument` (missing fields or failing `validateBoundaryShape`), `not-found` (room), `permission-denied` (caller is not the host), `failed-precondition` with message `revision_conflict`, `failed-precondition` `This game has ended.` when `isGameActive` is false.
 - Consumes: `shapeToPolygon`, `validateBoundaryShape` from the vendored `../vendor/game/gameBoundary`.
 
 - [ ] **Step 1: Write the failing integration tests**
@@ -758,7 +792,10 @@ const readRoomForHost = (snapshot, uid) => {
         throw new functions.https.HttpsError('not-found', 'Room not found.');
     }
     if (snapshot.data().hostId !== uid) {
-        throw new functions.https.HttpsError('permission-denied', 'Only the room host can change the game area.');
+        throw new functions.https.HttpsError(
+            'permission-denied',
+            'Only the room host can change the game area.'
+        );
     }
     if (!snapshot.data().isGameActive) {
         throw new functions.https.HttpsError('failed-precondition', 'This game has ended.');
@@ -770,11 +807,17 @@ const currentRevision = (room) => (room.gameBoundary && room.gameBoundary.revisi
 
 exports.publishGameBoundary = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
+        throw new functions.https.HttpsError(
+            'unauthenticated',
+            'The function must be called while authenticated.'
+        );
     }
     const { roomId, expectedRevision, shapeType, vertices, shapeParameters } = data || {};
     if (!roomId || typeof expectedRevision !== 'number') {
-        throw new functions.https.HttpsError('invalid-argument', 'roomId and expectedRevision are required.');
+        throw new functions.https.HttpsError(
+            'invalid-argument',
+            'roomId and expectedRevision are required.'
+        );
     }
     const shape = validateBoundaryShape(shapeType, vertices);
     if (!shape.ok) {
@@ -806,11 +849,17 @@ exports.publishGameBoundary = functions.https.onCall(async (data, context) => {
 
 exports.disableGameBoundary = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
+        throw new functions.https.HttpsError(
+            'unauthenticated',
+            'The function must be called while authenticated.'
+        );
     }
     const { roomId, expectedRevision } = data || {};
     if (!roomId || typeof expectedRevision !== 'number') {
-        throw new functions.https.HttpsError('invalid-argument', 'roomId and expectedRevision are required.');
+        throw new functions.https.HttpsError(
+            'invalid-argument',
+            'roomId and expectedRevision are required.'
+        );
     }
 
     const roomRef = db.collection('rooms').doc(roomId);
@@ -850,14 +899,16 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ### Task 5: reportPlayerLocation callable
 
 **Files:**
+
 - Create: `functions/callableFunctions/reportPlayerLocation.js`
 - Create: `functions/callableFunctions/reportPlayerLocation.integration.test.js`
 
 **Interfaces:**
+
 - Produces: `exports.reportPlayerLocation` (`functions.https.onCall`).
-  - Fix data: `{ roomId, boundaryRevision, sampleMs, lat, lng, accuracyM }` → `{ status, reason }` (the freshly stored status).
-  - Error data: `{ roomId, boundaryRevision, sampleMs, error: 'permission_denied' | 'unavailable' | 'timeout' }` → `{ status: 'unavailable', reason: <error> }`. No coordinates are accepted here.
-  - Writes: `rooms/{roomId}/boundaryStatuses/{playerKey}` on every accepted report, and `rooms/{roomId}/boundaryEvents/{autoId}` (type `outside` or `returnedInside`) only when the status transitions.
+    - Fix data: `{ roomId, boundaryRevision, sampleMs, lat, lng, accuracyM }` → `{ status, reason }` (the freshly stored status).
+    - Error data: `{ roomId, boundaryRevision, sampleMs, error: 'permission_denied' | 'unavailable' | 'timeout' }` → `{ status: 'unavailable', reason: <error> }`. No coordinates are accepted here.
+    - Writes: `rooms/{roomId}/boundaryStatuses/{playerKey}` on every accepted report, and `rooms/{roomId}/boundaryEvents/{autoId}` (type `outside` or `returnedInside`) only when the status transitions.
 - Consumes: `classifyFix`, `nextBoundaryState`, `initialBoundaryState`, `GAME_BOUNDARY_CONFIG` from the vendored module; `nextRateLimitWindow` from `../vendor/game/rateLimit`.
 
 - [ ] **Step 1: Write the failing integration tests**
@@ -889,16 +940,16 @@ Create `functions/callableFunctions/reportPlayerLocation.js` following these exa
 - Validate `context.auth`, then `roomId`, `boundaryRevision` (number), `sampleMs` (finite number).
 - Reject if `sampleMs` is older than `sampleMaxAgeMs` or more than `sampleMaxFutureMs` ahead of `Date.now()`, with `invalid-argument`.
 - Inside one transaction:
-  1. Read the room. Reject with `not-found` if absent, `failed-precondition` `This game has ended.` if `isGameActive` is false.
-  2. Read `playersRef.where('uid', '==', context.auth.uid)`. Reject `not-found` if empty and `failed-precondition` if more than one doc, matching `submitKillPhoto.js`.
-  3. Reject `failed-precondition` `Game area is not active.` unless `gameBoundary.enabled === true`.
-  4. Reject `failed-precondition` `revision_conflict` unless `boundaryRevision === gameBoundary.revision`.
-  5. Read the rate-limit window from the player doc (`rateLimits.boundaryReport`), using `nextRateLimitWindow(current, Date.now(), GAME_BOUNDARY_CONFIG.reportRateLimit)`. Reject `resource-exhausted` when it returns null.
-  6. Read `boundaryStatuses/{playerDoc.id}`, default to `initialBoundaryState()` when absent.
-  7. If the report is an error report, compute `next` as `{ ...prev, status: 'unavailable', reason: error, lastSampleMs: sampleMs }`.
-  8. Otherwise, reject `invalid-argument` if `sampleMs <= prev.lastSampleMs` (out-of-order), then `classification = classifyFix(ring, { lat, lng, accuracyM })`, where `ring` comes from the room's `gameBoundary.vertices`, and `next = nextBoundaryState(prev, classification, { sampleMs, receivedMs: Date.now() })`.
-  9. Write the rate-limit window back to the player doc, and write `boundaryStatuses/{playerDoc.id}` with `status`, `reason`, `boundaryRevision`, `uid`, `accuracyMeters` (or `null`), `lastSampleAt`, `receivedAt`, `lastUsableReceivedAt`, `outsideSince`, `lastOutsideSampleAt`, `outsideConfirmedAt`, `statusChangedAt`. Use `FieldValue.serverTimestamp()` for `receivedAt` and `statusChangedAt`. Do not store coordinates.
-  10. If `prev.status !== 'outside' && next.status === 'outside'`, write a `boundaryEvents` doc with `type: 'outside'`, `playerName`, `boundaryRevision`, `timestamp: serverTimestamp()`. If `prev.status === 'outside' && next.status === 'inside'`, write one with `type: 'returnedInside'`. Never write coordinates into the event.
+    1. Read the room. Reject with `not-found` if absent, `failed-precondition` `This game has ended.` if `isGameActive` is false.
+    2. Read `playersRef.where('uid', '==', context.auth.uid)`. Reject `not-found` if empty and `failed-precondition` if more than one doc, matching `submitKillPhoto.js`.
+    3. Reject `failed-precondition` `Game area is not active.` unless `gameBoundary.enabled === true`.
+    4. Reject `failed-precondition` `revision_conflict` unless `boundaryRevision === gameBoundary.revision`.
+    5. Read the rate-limit window from the player doc (`rateLimits.boundaryReport`), using `nextRateLimitWindow(current, Date.now(), GAME_BOUNDARY_CONFIG.reportRateLimit)`. Reject `resource-exhausted` when it returns null.
+    6. Read `boundaryStatuses/{playerDoc.id}`, default to `initialBoundaryState()` when absent.
+    7. If the report is an error report, compute `next` as `{ ...prev, status: 'unavailable', reason: error, lastSampleMs: sampleMs }`.
+    8. Otherwise, reject `invalid-argument` if `sampleMs <= prev.lastSampleMs` (out-of-order), then `classification = classifyFix(ring, { lat, lng, accuracyM })`, where `ring` comes from the room's `gameBoundary.vertices`, and `next = nextBoundaryState(prev, classification, { sampleMs, receivedMs: Date.now() })`.
+    9. Write the rate-limit window back to the player doc, and write `boundaryStatuses/{playerDoc.id}` with `status`, `reason`, `boundaryRevision`, `uid`, `accuracyMeters` (or `null`), `lastSampleAt`, `receivedAt`, `lastUsableReceivedAt`, `outsideSince`, `lastOutsideSampleAt`, `outsideConfirmedAt`, `statusChangedAt`. Use `FieldValue.serverTimestamp()` for `receivedAt` and `statusChangedAt`. Do not store coordinates.
+    10. If `prev.status !== 'outside' && next.status === 'outside'`, write a `boundaryEvents` doc with `type: 'outside'`, `playerName`, `boundaryRevision`, `timestamp: serverTimestamp()`. If `prev.status === 'outside' && next.status === 'inside'`, write one with `type: 'returnedInside'`. Never write coordinates into the event.
 - Return `{ status: next.status, reason: next.reason }`.
 - Never log lat/lng. Error messages must not include coordinates.
 
@@ -922,11 +973,13 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ### Task 6: Lifecycle cleanup on removal and reconnect
 
 **Files:**
+
 - Modify: `functions/callableFunctions/removePlayer.js` (inside `removeAndRemap`, near the existing `transaction.delete(playerDoc.ref)` at line 137)
 - Modify: `functions/callableFunctions/reconnectRequest.js` (inside `approveReconnectRequest`, next to the existing `transaction.update(playerRef, { uid: requestData.requestingUid })` at line 209)
 - Modify: the matching integration test files, `functions/callableFunctions/removePlayerCallable.integration.test.js` and `functions/callableFunctions/reconnectRequestCallable.integration.test.js` (the latter may sit under `src/components/` — find it with `grep -rl approveReconnectRequest src functions --include="*.test.js"` before editing)
 
 **Interfaces:**
+
 - Consumes: the `boundaryStatuses/{playerKey}` path from Task 5.
 
 - [ ] **Step 1: Write failing tests**
@@ -971,6 +1024,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ### Task 7: Security rules for statuses, events, and the boundary field
 
 **Files:**
+
 - Modify: `firestore.rules`
 - Modify: `test/firestore.rules.test.js`
 
@@ -1049,6 +1103,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ### Task 8: Register callables, update docs, run the full gate
 
 **Files:**
+
 - Modify: `functions/index.js`
 - Modify: `docs/data-model.md`
 - Modify: `docs/architecture.md`
@@ -1058,12 +1113,12 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 In `functions/index.js`, add, following the existing pattern:
 
 ```js
-const { publishGameBoundary, disableGameBoundary } = require("./callableFunctions/gameBoundary")
-exports.publishGameBoundary = publishGameBoundary
-exports.disableGameBoundary = disableGameBoundary
+const { publishGameBoundary, disableGameBoundary } = require('./callableFunctions/gameBoundary');
+exports.publishGameBoundary = publishGameBoundary;
+exports.disableGameBoundary = disableGameBoundary;
 
-const { reportPlayerLocation } = require("./callableFunctions/reportPlayerLocation")
-exports.reportPlayerLocation = reportPlayerLocation
+const { reportPlayerLocation } = require('./callableFunctions/reportPlayerLocation');
+exports.reportPlayerLocation = reportPlayerLocation;
 ```
 
 - [ ] **Step 2: Update the living docs**
