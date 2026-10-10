@@ -11,7 +11,15 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ChakraProvider } from '@chakra-ui/react';
 import GameMap from './GameMap';
 
-const mockMapInstance = { fitBounds: jest.fn(), jumpTo: jest.fn(), setProjection: jest.fn() };
+const styleLoadHandlers = [];
+const mockMapInstance = {
+    fitBounds: jest.fn(),
+    jumpTo: jest.fn(),
+    setProjection: jest.fn(),
+    on: jest.fn((event, handler) => {
+        if (event === 'style.load') styleLoadHandlers.push(handler);
+    }),
+};
 const mockShouldError = { current: false };
 
 jest.mock('react-map-gl', () => {
@@ -63,6 +71,7 @@ const renderMap = (props = {}) =>
 beforeEach(() => {
     jest.clearAllMocks();
     mockShouldError.current = false;
+    styleLoadHandlers.length = 0;
     process.env.REACT_APP_MAPBOX_TOKEN = 'test-token';
 });
 
@@ -115,6 +124,19 @@ describe('GameMap', () => {
 
     it('forces the flat 2D projection on load, never the 3D globe', () => {
         renderMap();
+        expect(mockMapInstance.setProjection).toHaveBeenCalledWith('mercator');
+    });
+
+    it('reasserts the flat projection on every later style load too, not just the first', () => {
+        renderMap();
+        mockMapInstance.setProjection.mockClear();
+
+        // Simulates Mapbox reloading its own style (e.g. the
+        // satellite/standard toggle, or a reused map instance getting a
+        // fresh style) — each one bakes its own projection default back
+        // in unless we reassert mercator every time.
+        styleLoadHandlers.forEach((handler) => handler());
+
         expect(mockMapInstance.setProjection).toHaveBeenCalledWith('mercator');
     });
 

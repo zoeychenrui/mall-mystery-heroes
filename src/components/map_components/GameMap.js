@@ -53,7 +53,15 @@ const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapErro
             // Mapbox GL JS v3 defaults to a 3D "globe" projection at low
             // zoom levels. This app's game areas are neighborhood-scale,
             // never global, so always force the flat 2D (Mercator) map.
+            // A single call on the first 'load' isn't enough: Mapbox's
+            // hosted styles bake their own projection into the style
+            // JSON, and every style (re)load — including toggling
+            // satellite/standard below, or a map instance `reuseMaps`
+            // hands back already loaded — reasserts the style's own
+            // default (globe) unless we reassert mercator every time a
+            // style finishes loading, not just the first.
             map.setProjection('mercator');
+            map.on('style.load', () => map.setProjection('mercator'));
             if (!hasFitRef.current && boundaryVertices && boundaryVertices.length > 0) {
                 const lats = boundaryVertices.map((p) => p.lat);
                 const lngs = boundaryVertices.map((p) => p.lng);
