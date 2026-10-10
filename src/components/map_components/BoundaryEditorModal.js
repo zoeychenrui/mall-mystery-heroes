@@ -70,6 +70,17 @@ const attachDragTool = (map, { onStart, onMove, onEnd }) => {
  */
 const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary }) => {
     const [draft, setDraft] = useState(() => draftFromPublished(currentBoundary));
+    // Tracks the last *committed* draft outside of React's render cycle.
+    // onMapLoad (and so each tool's attach) fires once per mount in the
+    // real GameMap, so every drag after the first reuses that one
+    // attach-time closure — commitDraft must read the live committed
+    // value through this ref rather than close over `draft` from the
+    // render where the listeners were attached, or every drag after the
+    // first pushes that stale, pre-attach draft onto history instead of
+    // the previous drag's result. Updated only inside commitDraft itself
+    // (and on reopen) — never from in-progress onStart/onMove previews,
+    // which must not count as "committed" for Undo purposes.
+    const draftRef = useRef(draft);
     const [history, setHistory] = useState([]);
     const [activeTool, setActiveTool] = useState('move');
     // GameMap already renders its own full-screen "Map failed to load" /
@@ -84,7 +95,9 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary }) => {
     // previously abandoned draft (Review Focus: reopen fidelity).
     useEffect(() => {
         if (isOpen) {
-            setDraft(draftFromPublished(currentBoundary));
+            const reopened = draftFromPublished(currentBoundary);
+            setDraft(reopened);
+            draftRef.current = reopened;
             setHistory([]);
             setActiveTool('move');
             setMapError(false);
@@ -92,16 +105,36 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary }) => {
     }, [isOpen, currentBoundary]);
 
     const commitDraft = (nextDraft) => {
-        setHistory((prev) => [...prev, draft]);
+        // Snapshot the previous committed draft into a local *before*
+        // mutating draftRef below — setHistory's updater function isn't
+        // invoked synchronously here, it's deferred until React processes
+        // the batched update, which happens after this function body has
+        // already run. Reading `draftRef.current` lazily from inside the
+        // updater would then see the mutation on the next line, pushing
+        // nextDraft onto history instead of the value before it.
+        const previousCommitted = draftRef.current;
+        setHistory((prev) => [...prev, previousCommitted]);
         setDraft(nextDraft);
+        draftRef.current = nextDraft;
     };
 
     const handleUndo = () => {
-        setHistory((prev) => {
-            if (prev.length === 0) return prev;
-            setDraft(prev[prev.length - 1]);
-            return prev.slice(0, -1);
-        });
+        // Reads `history` directly rather than nesting setDraft inside the
+        // setHistory updater — an updater function may be re-invoked by
+        // React when reconciling queued state, and calling another
+        // setState as a side effect from inside it is unreliable. `history`
+        // itself is safe to read fresh here: handleUndo is rebound to the
+        // button's onClick on every render, so the handler that actually
+        // runs always closes over the latest render's `history`.
+        if (history.length === 0) return;
+        const restored = history[history.length - 1];
+        setHistory((prev) => prev.slice(0, -1));
+        setDraft(restored);
+        // Keep draftRef in sync with what Undo just restored, so a drag
+        // started right after this Undo (before any further commit)
+        // treats the restored draft — not the stale pre-Undo value — as
+        // the "last committed" state.
+        draftRef.current = restored;
     };
 
     // Also detaches the active tool's listeners and resets to Move Map,

@@ -24,10 +24,16 @@ const fakeMap = {
 jest.mock('./GameMap', () => (props) => {
     lastProps = props;
     const React = require('react');
+    // Mirrors the real GameMap: mapbox-gl's 'load' event (and so
+    // onMapLoad) fires exactly once per mount, never again on re-render.
+    // An onMapLoad-keyed effect would re-fire on every render (its
+    // identity changes each render) and silently mask bugs that only
+    // show up when a tool's attached closures go stale across renders.
+    const onMapLoadRef = React.useRef(props.onMapLoad);
+    onMapLoadRef.current = props.onMapLoad;
     React.useEffect(() => {
-        if (props.onMapLoad) props.onMapLoad(fakeMap);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [props.onMapLoad]);
+        if (onMapLoadRef.current) onMapLoadRef.current(fakeMap);
+    }, []);
     return <div data-testid="mock-game-map" />;
 });
 
@@ -149,6 +155,26 @@ describe('BoundaryEditorModal — drawing tools', () => {
         expect(lastProps.boundaryVertices).not.toEqual(afterFirstDrag);
 
         fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+        expect(lastProps.boundaryVertices).toEqual(afterFirstDrag);
+    });
+
+    it('Undo after a second drag under the same tool selection restores the first drag, not the pre-attach draft', () => {
+        // Regression: commitDraft must read the live committed draft via a
+        // ref, not a value closed over at the render where the tool's
+        // listeners were attached — onMapLoad (and so the tool attach)
+        // fires once per mount in the real GameMap, so every drag after
+        // the first reuses that one attach-time closure.
+        renderModal();
+        fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
+
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -74 });
+        const afterFirstDrag = lastProps.boundaryVertices;
+
+        dragMap({ lat: 41, lng: -75 }, { lat: 41.03, lng: -75 });
+        expect(lastProps.boundaryVertices).not.toEqual(afterFirstDrag);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+        expect(lastProps.boundaryVertices).not.toBeNull();
         expect(lastProps.boundaryVertices).toEqual(afterFirstDrag);
     });
 
