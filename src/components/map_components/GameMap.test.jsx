@@ -101,7 +101,7 @@ describe('GameMap', () => {
     });
 
     it('jumps to fitTo on load when there is no boundary', () => {
-        renderMap({ boundaryVertices: null, fitTo: { longitude: 5, latitude: 6 } });
+        renderMap({ boundaryVertices: null, fitTo: { lat: 6, lng: 5 } });
         expect(mockMapInstance.jumpTo).toHaveBeenCalledWith(
             expect.objectContaining({ center: [5, 6] })
         );

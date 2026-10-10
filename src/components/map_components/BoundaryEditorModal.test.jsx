@@ -1,9 +1,21 @@
 /**
  * Layer 2 — React Testing Library. GameMap is replaced with a thin mock
  * that exposes the real `map` instance handed to onMapLoad (a fake
- * mapbox-gl Map whose `on`/`off` just record handlers by event name),
- * so these tests exercise BoundaryEditorModal's own drawing logic, not
- * GameMap's (GameMap.test.jsx already covers that).
+ * mapbox-gl Map), so these tests exercise BoundaryEditorModal's own
+ * drawing logic, not GameMap's (GameMap.test.jsx already covers that).
+ *
+ * `fakeMap.on`/`off` deliberately mirror real mapbox-gl's Evented
+ * semantics (node_modules/mapbox-gl/dist/mapbox-gl-dev.js): each event
+ * type holds an array of listeners in registration order, and `off`
+ * only removes a listener matched by reference — `off(type)` with no
+ * handler removes nothing. An earlier version of this mock instead kept
+ * a single handler per event name, so a later `on()` call for the same
+ * event silently overwrote the key; that hid a real production bug
+ * (F1: BoundaryEditorModal called `map.off(event)` with no handler,
+ * which is a no-op against a real map, so switching drawing tools never
+ * actually detached the previous tool's listeners) because the mock's
+ * "overwrite" happened to look the same as a real "remove" from the
+ * test's point of view.
  */
 import React from 'react';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
@@ -16,11 +28,22 @@ let lastProps;
 const mapEventHandlers = {};
 const fakeMap = {
     on: (event, handler) => {
-        mapEventHandlers[event] = handler;
+        if (!mapEventHandlers[event]) mapEventHandlers[event] = [];
+        mapEventHandlers[event].push(handler);
     },
-    off: (event) => {
-        delete mapEventHandlers[event];
+    off: (event, handler) => {
+        if (!mapEventHandlers[event] || handler === undefined) return;
+        mapEventHandlers[event] = mapEventHandlers[event].filter((registered) => {
+            return registered !== handler;
+        });
     },
+};
+// Fires every handler currently registered for `event`, in registration
+// order — exactly like the real map's `fire()`, including the fact that
+// a leaked (never-detached) old handler fires right alongside the
+// current one.
+const triggerMapEvent = (event, payload) => {
+    (mapEventHandlers[event] || []).forEach((handler) => handler(payload));
 };
 
 jest.mock('../publishGameBoundary', () => ({ publishGameBoundary: jest.fn() }));
@@ -65,9 +88,9 @@ const pointFor = (lat, lng) => ({ x: (lng + 74) * 100000, y: (lat - 40) * 100000
 
 const dragMap = (from, to) => {
     act(() => {
-        mapEventHandlers.mousedown({ lngLat: from, point: pointFor(from.lat, from.lng) });
-        mapEventHandlers.mousemove({ lngLat: to, point: pointFor(to.lat, to.lng) });
-        mapEventHandlers.mouseup({ lngLat: to, point: pointFor(to.lat, to.lng) });
+        triggerMapEvent('mousedown', { lngLat: from, point: pointFor(from.lat, from.lng) });
+        triggerMapEvent('mousemove', { lngLat: to, point: pointFor(to.lat, to.lng) });
+        triggerMapEvent('mouseup', { lngLat: to, point: pointFor(to.lat, to.lng) });
     });
 };
 
@@ -117,16 +140,19 @@ describe('BoundaryEditorModal — drawing tools', () => {
         renderModal();
         fireEvent.click(screen.getByRole('button', { name: 'Freehand' }));
         act(() => {
-            mapEventHandlers.mousedown({ lngLat: { lat: 40, lng: -74 }, point: pointFor(40, -74) });
-            mapEventHandlers.mousemove({
+            triggerMapEvent('mousedown', {
+                lngLat: { lat: 40, lng: -74 },
+                point: pointFor(40, -74),
+            });
+            triggerMapEvent('mousemove', {
                 lngLat: { lat: 40.001, lng: -74 },
                 point: pointFor(40.001, -74),
             });
-            mapEventHandlers.mousemove({
+            triggerMapEvent('mousemove', {
                 lngLat: { lat: 40.001, lng: -73.999 },
                 point: pointFor(40.001, -73.999),
             });
-            mapEventHandlers.mouseup({
+            triggerMapEvent('mouseup', {
                 lngLat: { lat: 40, lng: -73.999 },
                 point: pointFor(40, -73.999),
             });
@@ -142,15 +168,44 @@ describe('BoundaryEditorModal — drawing tools', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Clear Draft' }));
         expect(lastProps.boundaryVertices).toBeNull();
-        expect(mapEventHandlers.mousedown).toBeUndefined();
+        expect(mapEventHandlers.mousedown).toHaveLength(0);
     });
 
     it("switching tools tears down the previous tool's listeners before the new one attaches", () => {
         renderModal();
         fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
-        const circleHandler = mapEventHandlers.mousedown;
+        const [circleMouseDown] = mapEventHandlers.mousedown;
+
         fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
-        expect(mapEventHandlers.mousedown).not.toBe(circleHandler);
+
+        // The real regression (F1): a mock that only overwrote a
+        // same-named key would show a "new" handler here even if the
+        // real map.off(event) (no handler arg) had silently done
+        // nothing — so this checks the old handler's *reference* is
+        // actually gone, not just that something else is present now.
+        expect(mapEventHandlers.mousedown).not.toContain(circleMouseDown);
+        expect(mapEventHandlers.mousedown).toHaveLength(1);
+    });
+
+    it("a stale tool's listeners genuinely stop firing after switching tools (not just get shadowed)", () => {
+        // Regression for F1: BoundaryEditorModal used to call
+        // `map.off(event)` with no handler to detach a tool, which is a
+        // no-op against mapbox-gl's real Evented.off — every previous
+        // tool's listeners stayed attached and kept firing. Undo is the
+        // observable symptom: with the leak, the stale Circle handler's
+        // own onEnd also calls commitDraft on this same drag, pushing an
+        // extra, unwanted history entry — so a single Undo lands on that
+        // leftover Circle commit instead of the actual pre-drag (empty)
+        // draft, and a second Undo would be needed to get back to it.
+        renderModal();
+        fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
+
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -73.99 });
+        expect(lastProps.boundaryVertices).not.toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+        expect(lastProps.boundaryVertices).toBeNull();
     });
 
     it('Undo restores the draft from before the last completed drag', () => {
@@ -189,9 +244,9 @@ describe('BoundaryEditorModal — drawing tools', () => {
     it('Move Map tool attaches no drag listeners, leaving normal map navigation alone', () => {
         renderModal();
         fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
-        expect(mapEventHandlers.mousedown).toBeDefined();
+        expect(mapEventHandlers.mousedown).toHaveLength(1);
         fireEvent.click(screen.getByRole('button', { name: 'Move Map' }));
-        expect(mapEventHandlers.mousedown).toBeUndefined();
+        expect(mapEventHandlers.mousedown).toHaveLength(0);
     });
 
     it('disables map panning while any drawing tool is active, and restores it for Move Map', () => {
@@ -221,6 +276,22 @@ describe('BoundaryEditorModal — drawing tools', () => {
         );
     });
 
+    it('re-enables the toolbar once the map reloads after a successful Retry (F3)', () => {
+        renderModal();
+        act(() => {
+            lastProps.onMapError();
+        });
+        expect(screen.getByRole('button', { name: 'Circle' })).toBeDisabled();
+
+        // Simulates GameMap's own Retry succeeding: the map reloads and
+        // fires onMapLoad again (mapError must clear, or the toolbar
+        // stays stuck disabled forever after any one failed load).
+        act(() => {
+            lastProps.onMapLoad(fakeMap);
+        });
+        expect(screen.getByRole('button', { name: 'Circle' })).toBeEnabled();
+    });
+
     it('Cancel discards the draft and calls onClose without publishing', () => {
         const onClose = jest.fn();
         renderModal({ onClose });
@@ -247,6 +318,7 @@ describe('BoundaryEditorModal — publish and disable', () => {
         expect(publishButton).toBeEnabled();
 
         fireEvent.click(publishButton);
+        expect(await screen.findByText('Boundary published.')).toBeInTheDocument();
         await waitFor(() => expect(onClose).toHaveBeenCalled());
 
         expect(publishGameBoundary).toHaveBeenCalledWith(
@@ -266,6 +338,26 @@ describe('BoundaryEditorModal — publish and disable', () => {
             },
         });
         expect(screen.getByRole('button', { name: 'Publish Changes' })).toBeEnabled();
+    });
+
+    it('shows "Boundary updated." (not "Boundary published.") when republishing an existing boundary', async () => {
+        publishGameBoundary.mockResolvedValue({ revision: 5 });
+        const onClose = jest.fn();
+        renderModal({
+            roomID: 'room-a',
+            onClose,
+            currentBoundary: {
+                enabled: true,
+                revision: 4,
+                shapeType: 'circle',
+                shapeParameters: { center: { lat: 40, lng: -74 }, radiusMeters: 100 },
+                vertices: [{ lat: 40.001, lng: -74 }],
+            },
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Changes' }));
+        expect(await screen.findByText('Boundary updated.')).toBeInTheDocument();
+        expect(screen.queryByText('Boundary published.')).not.toBeInTheDocument();
     });
 
     it('a revision conflict keeps the draft open and shows the conflict instead of closing', async () => {
@@ -293,9 +385,53 @@ describe('BoundaryEditorModal — publish and disable', () => {
 
         const disableButton = screen.getByRole('button', { name: 'Disable Boundary' });
         fireEvent.click(disableButton);
+        expect(await screen.findByText('Boundary disabled.')).toBeInTheDocument();
         await waitFor(() => expect(onClose).toHaveBeenCalled());
 
         expect(disableGameBoundary).toHaveBeenCalledWith({ roomId: 'room-a', expectedRevision: 4 });
+    });
+
+    it('a revision conflict on Disable shows the friendly conflict message, not the raw error code (F6)', async () => {
+        disableGameBoundary.mockRejectedValue(new Error('revision_conflict'));
+        const onClose = jest.fn();
+        renderModal({
+            roomID: 'room-a',
+            onClose,
+            currentBoundary: { enabled: true, revision: 4, shapeType: 'circle', vertices: [] },
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Disable Boundary' }));
+        expect(await screen.findByText(/someone else published a change/i)).toBeInTheDocument();
+
+        expect(onClose).not.toHaveBeenCalled();
+        expect(screen.queryByText('revision_conflict')).not.toBeInTheDocument();
+    });
+
+    it('a currentBoundary prop update while already open does not reset an in-progress draft (F2)', () => {
+        // Lobby/GameMasterView hand currentBoundary down from a live
+        // room-doc subscription that re-fires (with a brand-new object
+        // identity) on ANY write to the room — a player joining, a chat
+        // message — not just an actual boundary change. isOpen never
+        // changes here; only currentBoundary's identity does, same as
+        // that live subscription would produce while the editor is open.
+        const { rerender } = renderModal({ roomID: 'room-a', currentBoundary: undefined });
+        fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -74 });
+        const drawn = lastProps.boundaryVertices;
+        expect(drawn).not.toBeNull();
+
+        rerender(
+            <ChakraProvider>
+                <BoundaryEditorModal
+                    isOpen
+                    onClose={jest.fn()}
+                    roomID="room-a"
+                    currentBoundary={{ enabled: false, revision: 0 }}
+                />
+            </ChakraProvider>
+        );
+
+        expect(lastProps.boundaryVertices).toEqual(drawn);
     });
 
     it('does not show Disable Boundary when there is no current boundary', () => {

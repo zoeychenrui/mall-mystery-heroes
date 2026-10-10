@@ -8,12 +8,12 @@ import LogoutButton from './LogoutButton';
 import GameBoundaryButton from '../map_components/GameBoundaryButton';
 import { gameContext } from '../Contexts';
 
-const HeaderExecution = ({ addLog, arrayOfAlivePlayers, roomID, gameBoundary }) => {
-    const { roomID: roomIDFromContext } = useContext(gameContext);
+const HeaderExecution = ({ addLog, arrayOfAlivePlayers, gameBoundary }) => {
+    const { roomID } = useContext(gameContext);
     return (
         <HStack justifyContent="left" p="8px" h="100%" alignItems="center">
             <Image objectFit="cover" src={whiteLogo} alt="Logo" boxSize="36px" />
-            <Heading>Lobby #: {roomIDFromContext}</Heading>
+            <Heading>Lobby #: {roomID}</Heading>
             <Spacer />
             <PlaybookLink />
             <GameBoundaryButton roomID={roomID} gameBoundary={gameBoundary} />

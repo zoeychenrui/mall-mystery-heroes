@@ -20,6 +20,7 @@ import {
 } from '../../game/boundaryDraft';
 import { publishGameBoundary } from '../publishGameBoundary';
 import { disableGameBoundary } from '../disableGameBoundary';
+import CreateAlert from '../CreateAlert';
 
 // require(), not a named `import` — gameBoundary.js is CommonJS
 // (module.exports) by design, since it's vendored into functions/ for a
@@ -41,6 +42,15 @@ const MIN_DRAG_PIXEL_DISTANCE = 6;
  * Attaches one drag gesture (mousedown -> decimated mousemove* ->
  * mouseup) to the map, shared by all four drawing tools — each tool
  * only supplies what a start/move/end lngLat means for its own shape.
+ *
+ * Returns a detach function that removes exactly these three listeners
+ * by reference. mapbox-gl's real `Map.off(type)` called with no handler
+ * argument searches for an `undefined` handler and removes nothing — so
+ * the caller MUST keep and later call this returned function (by
+ * reference) rather than trying to blind-`off()` the event type, or the
+ * listeners leak onto the map and keep firing after the tool switches
+ * (worse, GameMap mounts with `reuseMaps`, so the same underlying map
+ * instance — and so the leaked listeners — can outlive this component).
  */
 const attachDragTool = (map, { onStart, onMove, onEnd }) => {
     let isDragging = false;
@@ -70,6 +80,11 @@ const attachDragTool = (map, { onStart, onMove, onEnd }) => {
     map.on('mousedown', handleDown);
     map.on('mousemove', handleMove);
     map.on('mouseup', handleUp);
+    return () => {
+        map.off('mousedown', handleDown);
+        map.off('mousemove', handleMove);
+        map.off('mouseup', handleUp);
+    };
 };
 
 /**
@@ -79,6 +94,7 @@ const attachDragTool = (map, { onStart, onMove, onEnd }) => {
  * draft (host-only, revision-checked), or Disable the current boundary.
  */
 const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
+    const createAlert = CreateAlert();
     const [draft, setDraft] = useState(() => draftFromPublished(currentBoundary));
     // Tracks the last *committed* draft outside of React's render cycle.
     // onMapLoad (and so each tool's attach) fires once per mount in the
@@ -103,13 +119,28 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
     const [isPublishing, setIsPublishing] = useState(false);
     const [isDisabling, setIsDisabling] = useState(false);
     const [conflictMessage, setConflictMessage] = useState(null);
-
-    const expectedRevision = currentBoundary?.revision ?? 0;
+    // Captured once per open, not read live from `currentBoundary` on
+    // every render — see the reopen effect below for why.
+    const [expectedRevision, setExpectedRevision] = useState(() => currentBoundary?.revision ?? 0);
+    // Tracks the isOpen value as of the last time this effect ran, so the
+    // effect can tell "just opened" (false -> true) apart from "already
+    // open and some unrelated prop changed." Lobby/GameMasterView hand
+    // `currentBoundary` down from a live room-doc subscription that fires
+    // on ANY write to the room (a player joining, a chat message, not
+    // just a boundary change), so `currentBoundary` gets a new object
+    // identity constantly while the editor sits open — resetting on every
+    // such identity change would wipe an in-progress draft and any shown
+    // conflict message out from under the moderator mid-edit.
+    const wasOpenRef = useRef(isOpen);
 
     // Reopening always starts from the latest published state, never a
-    // previously abandoned draft (Review Focus: reopen fidelity).
+    // previously abandoned draft (Review Focus: reopen fidelity) — but
+    // only on the actual false -> true open transition, never while
+    // already open (see wasOpenRef comment above).
     useEffect(() => {
-        if (isOpen) {
+        const justOpened = isOpen && !wasOpenRef.current;
+        wasOpenRef.current = isOpen;
+        if (justOpened) {
             const reopened = draftFromPublished(currentBoundary);
             setDraft(reopened);
             draftRef.current = reopened;
@@ -117,6 +148,7 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
             setActiveTool('move');
             setMapError(false);
             setConflictMessage(null);
+            setExpectedRevision(currentBoundary?.revision ?? 0);
         }
     }, [isOpen, currentBoundary]);
 
@@ -166,17 +198,21 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
 
     // --- tool-specific drag interaction -------------------------------
 
+    // Holds the detach function for whichever tool is currently attached
+    // (null for Move Map, which attaches nothing). Reference-based, not
+    // keyed by event type — see attachDragTool's comment.
+    const detachCurrentToolRef = useRef(null);
+
     const detachToolListeners = () => {
-        const map = mapRef.current;
-        if (!map) return;
-        map.off('mousedown');
-        map.off('mousemove');
-        map.off('mouseup');
+        if (detachCurrentToolRef.current) {
+            detachCurrentToolRef.current();
+            detachCurrentToolRef.current = null;
+        }
     };
 
     const attachRectangleTool = (map) => {
         let cornerA = null;
-        attachDragTool(map, {
+        return attachDragTool(map, {
             onStart: (lngLat) => {
                 cornerA = lngLat;
                 setDraft(draftFromParameters('rectangle', { corners: [cornerA, lngLat] }));
@@ -196,7 +232,7 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
             const { x, y } = projectToMeters(lngLat, center);
             return Math.hypot(x, y);
         };
-        attachDragTool(map, {
+        return attachDragTool(map, {
             onStart: (lngLat) => {
                 center = lngLat;
                 setDraft(draftFromParameters('circle', { center, radiusMeters: 0 }));
@@ -220,7 +256,7 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
             const { x, y } = projectToMeters(lngLat, center);
             return { radiusXMeters: Math.abs(x), radiusYMeters: Math.abs(y) };
         };
-        attachDragTool(map, {
+        return attachDragTool(map, {
             onStart: (lngLat) => {
                 center = lngLat;
                 setDraft(
@@ -238,7 +274,7 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
 
     const attachFreehandTool = (map) => {
         let points = [];
-        attachDragTool(map, {
+        return attachDragTool(map, {
             onStart: (lngLat) => {
                 points = [lngLat];
                 setDraft(draftFromFreehand(points));
@@ -257,10 +293,10 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
     const applyTool = (tool, map) => {
         detachToolListeners();
         if (!map) return;
-        if (tool === 'rectangle') attachRectangleTool(map);
-        else if (tool === 'circle') attachCircleTool(map);
-        else if (tool === 'oval') attachOvalTool(map);
-        else if (tool === 'freehand') attachFreehandTool(map);
+        if (tool === 'rectangle') detachCurrentToolRef.current = attachRectangleTool(map);
+        else if (tool === 'circle') detachCurrentToolRef.current = attachCircleTool(map);
+        else if (tool === 'oval') detachCurrentToolRef.current = attachOvalTool(map);
+        else if (tool === 'freehand') detachCurrentToolRef.current = attachFreehandTool(map);
         // 'move': no listeners — normal map navigation.
     };
 
@@ -271,6 +307,10 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
 
     const handleMapLoad = (map) => {
         mapRef.current = map;
+        // A successful (re)load — including GameMap's own Retry, which
+        // re-fires this same callback — means there is a map to draw on
+        // again, even if a previous load had failed.
+        setMapError(false);
         applyTool(activeTool, map);
     };
 
@@ -278,6 +318,14 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
         detachToolListeners();
         onClose();
     };
+
+    // Shared by handlePublish/handleDisable: a revision conflict gets a
+    // moderator-facing explanation instead of the raw callable error
+    // code ('revision_conflict').
+    const describeBoundaryError = (error) =>
+        error.message === 'revision_conflict'
+            ? 'Someone else published a change to this game area. Close and reopen to see the current one before trying again.'
+            : error.message;
 
     const handlePublish = async () => {
         setConflictMessage(null);
@@ -290,15 +338,16 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
                 vertices: draft.vertices,
                 shapeParameters: draft.shapeParameters,
             });
+            createAlert(
+                'success',
+                currentBoundary ? 'Boundary updated.' : 'Boundary published.',
+                '',
+                1500
+            );
+            detachToolListeners();
             onClose();
         } catch (error) {
-            if (error.message === 'revision_conflict') {
-                setConflictMessage(
-                    'Someone else published a change to this game area. Close and reopen to see the current one before trying again.'
-                );
-            } else {
-                setConflictMessage(error.message);
-            }
+            setConflictMessage(describeBoundaryError(error));
         } finally {
             setIsPublishing(false);
         }
@@ -308,9 +357,11 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
         setIsDisabling(true);
         try {
             await disableGameBoundary({ roomId: roomID, expectedRevision });
+            createAlert('success', 'Boundary disabled.', '', 1500);
+            detachToolListeners();
             onClose();
         } catch (error) {
-            setConflictMessage(error.message);
+            setConflictMessage(describeBoundaryError(error));
         } finally {
             setIsDisabling(false);
         }

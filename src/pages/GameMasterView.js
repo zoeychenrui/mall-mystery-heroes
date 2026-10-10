@@ -267,7 +267,6 @@ const GameMasterView = () => {
                     <HeaderExecution
                         addLog={addLog}
                         arrayOfAlivePlayers={aliveNames}
-                        roomID={roomID}
                         gameBoundary={gameBoundary}
                     />
                 </Box>

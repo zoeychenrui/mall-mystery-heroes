@@ -62,7 +62,11 @@ const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapErro
                 );
                 hasFitRef.current = true;
             } else if (!hasFitRef.current && fitTo) {
-                map.jumpTo({ center: [fitTo.longitude, fitTo.latitude], zoom: 15 });
+                // {lat, lng} — this app's coordinate convention
+                // everywhere else, unlike the Map's own `initialViewState`
+                // below, which is react-map-gl's own {longitude, latitude}
+                // shape and stays that way.
+                map.jumpTo({ center: [fitTo.lng, fitTo.lat], zoom: 15 });
                 hasFitRef.current = true;
             }
             if (onMapLoad) onMapLoad(map);
