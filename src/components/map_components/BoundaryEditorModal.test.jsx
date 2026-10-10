@@ -6,9 +6,11 @@
  * GameMap's (GameMap.test.jsx already covers that).
  */
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { ChakraProvider } from '@chakra-ui/react';
 import BoundaryEditorModal from './BoundaryEditorModal';
+import { publishGameBoundary } from '../publishGameBoundary';
+import { disableGameBoundary } from '../disableGameBoundary';
 
 let lastProps;
 const mapEventHandlers = {};
@@ -20,6 +22,9 @@ const fakeMap = {
         delete mapEventHandlers[event];
     },
 };
+
+jest.mock('../publishGameBoundary', () => ({ publishGameBoundary: jest.fn() }));
+jest.mock('../disableGameBoundary', () => ({ disableGameBoundary: jest.fn() }));
 
 jest.mock('./GameMap', () => (props) => {
     lastProps = props;
@@ -97,7 +102,10 @@ describe('BoundaryEditorModal — drawing tools', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
 
         // A very short drag leaves a near-zero radius — not a publishable shape yet.
-        dragMap({ lat: 40, lng: -74 }, { lat: 40.00001, lng: -74 });
+        // (0.000001 deg of latitude ~= 0.11m radius, well under the 1 sqm
+        // minimum area gameBoundary.js enforces; 0.00001 deg ~= 1.11m radius,
+        // which actually clears that minimum and would publish.)
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.000001, lng: -74 });
         expect(screen.queryByRole('button', { name: /publish/i })).not.toBeInTheDocument();
 
         // A real drag produces a real, publishable circle.
@@ -221,5 +229,118 @@ describe('BoundaryEditorModal — drawing tools', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(onClose).toHaveBeenCalled();
+    });
+});
+
+describe('BoundaryEditorModal — publish and disable', () => {
+    it('Publish Boundary is disabled until the draft is valid, and calls the callable with the draft once it is', async () => {
+        publishGameBoundary.mockResolvedValue({ revision: 1 });
+        const onClose = jest.fn();
+        renderModal({ roomID: 'room-a', onClose });
+
+        expect(screen.queryByRole('button', { name: 'Publish Boundary' })).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -74 });
+
+        const publishButton = screen.getByRole('button', { name: 'Publish Boundary' });
+        expect(publishButton).toBeEnabled();
+
+        fireEvent.click(publishButton);
+        await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+        expect(publishGameBoundary).toHaveBeenCalledWith(
+            expect.objectContaining({ roomId: 'room-a', expectedRevision: 0, shapeType: 'circle' })
+        );
+    });
+
+    it('labels the button Publish Changes, and uses the current revision, when a boundary already exists', () => {
+        renderModal({
+            roomID: 'room-a',
+            currentBoundary: {
+                enabled: true,
+                revision: 4,
+                shapeType: 'circle',
+                shapeParameters: { center: { lat: 40, lng: -74 }, radiusMeters: 100 },
+                vertices: [{ lat: 40.001, lng: -74 }],
+            },
+        });
+        expect(screen.getByRole('button', { name: 'Publish Changes' })).toBeEnabled();
+    });
+
+    it('a revision conflict keeps the draft open and shows the conflict instead of closing', async () => {
+        publishGameBoundary.mockRejectedValue(new Error('revision_conflict'));
+        const onClose = jest.fn();
+        renderModal({ roomID: 'room-a', onClose });
+        fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -74 });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Publish Boundary' }));
+        expect(await screen.findByText(/someone else published a change/i)).toBeInTheDocument();
+
+        expect(onClose).not.toHaveBeenCalled();
+        expect(lastProps.boundaryVertices).not.toBeNull();
+    });
+
+    it('Disable Boundary is shown only when the current boundary is enabled, and calls the callable', async () => {
+        disableGameBoundary.mockResolvedValue({ revision: 5 });
+        const onClose = jest.fn();
+        renderModal({
+            roomID: 'room-a',
+            onClose,
+            currentBoundary: { enabled: true, revision: 4, shapeType: 'circle', vertices: [] },
+        });
+
+        const disableButton = screen.getByRole('button', { name: 'Disable Boundary' });
+        fireEvent.click(disableButton);
+        await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+        expect(disableGameBoundary).toHaveBeenCalledWith({ roomId: 'room-a', expectedRevision: 4 });
+    });
+
+    it('does not show Disable Boundary when there is no current boundary', () => {
+        renderModal({ roomID: 'room-a', currentBoundary: undefined });
+        expect(screen.queryByRole('button', { name: 'Disable Boundary' })).not.toBeInTheDocument();
+    });
+
+    it('hides Publish once the map fails to load, even with an otherwise-valid draft', () => {
+        renderModal({ roomID: 'room-a' });
+        fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -74 });
+        expect(screen.getByRole('button', { name: 'Publish Boundary' })).toBeInTheDocument();
+
+        act(() => {
+            lastProps.onMapError();
+        });
+        expect(screen.queryByRole('button', { name: 'Publish Boundary' })).not.toBeInTheDocument();
+    });
+
+    it('Cancel after drawing discards the draft; reopening starts from the last published boundary, not the abandoned draft', () => {
+        const { rerender } = renderModal({ roomID: 'room-a', isOpen: true, onClose: jest.fn() });
+        fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -74 });
+        expect(lastProps.boundaryVertices).not.toBeNull();
+
+        rerender(
+            <ChakraProvider>
+                <BoundaryEditorModal
+                    isOpen={false}
+                    onClose={jest.fn()}
+                    roomID="room-a"
+                    currentBoundary={undefined}
+                />
+            </ChakraProvider>
+        );
+        rerender(
+            <ChakraProvider>
+                <BoundaryEditorModal
+                    isOpen
+                    onClose={jest.fn()}
+                    roomID="room-a"
+                    currentBoundary={undefined}
+                />
+            </ChakraProvider>
+        );
+        expect(lastProps.boundaryVertices).toBeNull();
     });
 });

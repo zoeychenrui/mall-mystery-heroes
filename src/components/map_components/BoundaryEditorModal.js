@@ -16,8 +16,11 @@ import {
     draftFromPublished,
     draftFromFreehand,
     draftFromParameters,
+    isDraftPublishable,
 } from '../../game/boundaryDraft';
 import { projectToMeters } from '../../game/gameBoundary';
+import { publishGameBoundary } from '../publishGameBoundary';
+import { disableGameBoundary } from '../disableGameBoundary';
 
 const TOOLS = ['move', 'freehand', 'rectangle', 'circle', 'oval'];
 
@@ -64,11 +67,10 @@ const attachDragTool = (map, { onStart, onMove, onEnd }) => {
 /**
  * Local drawing surface for the room's game-area boundary. Draws with
  * four tools against GameMap's boundary overlay, keeps an undo history
- * of drafts, and lets the moderator Clear Draft or Cancel. Does not
- * publish anything yet (see Task 6, which adds Publish/Disable to this
- * same component).
+ * of drafts, and lets the moderator Clear Draft, Cancel, Publish the
+ * draft (host-only, revision-checked), or Disable the current boundary.
  */
-const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary }) => {
+const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
     const [draft, setDraft] = useState(() => draftFromPublished(currentBoundary));
     // Tracks the last *committed* draft outside of React's render cycle.
     // onMapLoad (and so each tool's attach) fires once per mount in the
@@ -90,6 +92,11 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary }) => {
     // an error is active. Task 6 also reads this to gate Publish.
     const [mapError, setMapError] = useState(false);
     const mapRef = useRef(null);
+    const [isPublishing, setIsPublishing] = useState(false);
+    const [isDisabling, setIsDisabling] = useState(false);
+    const [conflictMessage, setConflictMessage] = useState(null);
+
+    const expectedRevision = currentBoundary?.revision ?? 0;
 
     // Reopening always starts from the latest published state, never a
     // previously abandoned draft (Review Focus: reopen fidelity).
@@ -101,6 +108,7 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary }) => {
             setHistory([]);
             setActiveTool('move');
             setMapError(false);
+            setConflictMessage(null);
         }
     }, [isOpen, currentBoundary]);
 
@@ -263,6 +271,43 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary }) => {
         onClose();
     };
 
+    const handlePublish = async () => {
+        setConflictMessage(null);
+        setIsPublishing(true);
+        try {
+            await publishGameBoundary({
+                roomId: roomID,
+                expectedRevision,
+                shapeType: draft.shapeType,
+                vertices: draft.vertices,
+                shapeParameters: draft.shapeParameters,
+            });
+            onClose();
+        } catch (error) {
+            if (error.message === 'revision_conflict') {
+                setConflictMessage(
+                    'Someone else published a change to this game area. Close and reopen to see the current one before trying again.'
+                );
+            } else {
+                setConflictMessage(error.message);
+            }
+        } finally {
+            setIsPublishing(false);
+        }
+    };
+
+    const handleDisable = async () => {
+        setIsDisabling(true);
+        try {
+            await disableGameBoundary({ roomId: roomID, expectedRevision });
+            onClose();
+        } catch (error) {
+            setConflictMessage(error.message);
+        } finally {
+            setIsDisabling(false);
+        }
+    };
+
     return (
         <Modal isOpen={isOpen} onClose={handleCancel} size={{ base: 'full', md: '6xl' }}>
             <ModalOverlay />
@@ -293,7 +338,21 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary }) => {
                         <Button size="sm" onClick={handleClearDraft} isDisabled={mapError}>
                             Clear Draft
                         </Button>
+                        {isDraftPublishable(draft) && !mapError && (
+                            <Button
+                                colorScheme="teal"
+                                isLoading={isPublishing}
+                                onClick={handlePublish}
+                            >
+                                {currentBoundary ? 'Publish Changes' : 'Publish Boundary'}
+                            </Button>
+                        )}
                     </HStack>
+                    {conflictMessage && (
+                        <Text color="red.300" fontSize="sm">
+                            {conflictMessage}
+                        </Text>
+                    )}
                     {!draft.validation.ok && draft.vertices && (
                         <Text color="orange.300" fontSize="sm">
                             {draft.validation.reason}
@@ -308,6 +367,16 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary }) => {
                     />
                 </ModalBody>
                 <ModalFooter>
+                    {currentBoundary?.enabled && (
+                        <Button
+                            colorScheme="red"
+                            isLoading={isDisabling}
+                            onClick={handleDisable}
+                            mr="8px"
+                        >
+                            Disable Boundary
+                        </Button>
+                    )}
                     <Button onClick={handleCancel}>Cancel</Button>
                 </ModalFooter>
             </ModalContent>
