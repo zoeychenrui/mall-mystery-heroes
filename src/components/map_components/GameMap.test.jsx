@@ -144,12 +144,12 @@ describe('GameMap', () => {
         renderMap();
         expect(screen.getByTestId('mock-map')).toHaveAttribute(
             'data-style',
-            'mapbox://styles/mapbox/satellite-streets-v12'
+            'mapbox://styles/mapbox/satellite-v9'
         );
         fireEvent.click(screen.getByRole('button', { name: 'Standard map' }));
         expect(screen.getByTestId('mock-map')).toHaveAttribute(
             'data-style',
-            'mapbox://styles/mapbox/streets-v12'
+            'mapbox://styles/mapbox/streets-v11'
         );
     });
 

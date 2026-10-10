@@ -15,8 +15,16 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 // set/unset process.env.REACT_APP_MAPBOX_TOKEN for that test.
 const getMapboxToken = () => process.env.REACT_APP_MAPBOX_TOKEN;
 
-const SATELLITE_STYLE = 'mapbox://styles/mapbox/satellite-streets-v12';
-const STANDARD_STYLE = 'mapbox://styles/mapbox/streets-v12';
+// Deliberately the older, pre-"Standard" style family (v9/v11), not the
+// newer v12 ones. The v12 styles are Mapbox's 3D-globe-era "Standard"
+// style, which keeps reasserting the globe projection no matter how
+// often setProjection('mercator') is called at runtime — confirmed by
+// hand, twice, against a real map. v9/v11 predate the globe feature
+// entirely, so there is no 3D mode for them to fall back into; this
+// sidesteps the problem at its source instead of fighting it at
+// runtime. Mapbox still hosts and supports these for compatibility.
+const SATELLITE_STYLE = 'mapbox://styles/mapbox/satellite-v9';
+const STANDARD_STYLE = 'mapbox://styles/mapbox/streets-v11';
 
 // A workable default when there is no existing boundary and no fitTo —
 // mid-latitude, zoomed out enough to orient from. The moderator can
@@ -50,16 +58,11 @@ const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapErro
     const handleLoad = useCallback(
         (event) => {
             const map = event.target;
-            // Mapbox GL JS v3 defaults to a 3D "globe" projection at low
-            // zoom levels. This app's game areas are neighborhood-scale,
-            // never global, so always force the flat 2D (Mercator) map.
-            // A single call on the first 'load' isn't enough: Mapbox's
-            // hosted styles bake their own projection into the style
-            // JSON, and every style (re)load — including toggling
-            // satellite/standard below, or a map instance `reuseMaps`
-            // hands back already loaded — reasserts the style's own
-            // default (globe) unless we reassert mercator every time a
-            // style finishes loading, not just the first.
+            // Belt-and-suspenders: SATELLITE_STYLE/STANDARD_STYLE above
+            // are already pre-globe style IDs, so this should already
+            // be a no-op. Left in in case a future style change
+            // reintroduces a globe-capable style — cheap insurance, not
+            // the actual fix.
             map.setProjection('mercator');
             map.on('style.load', () => map.setProjection('mercator'));
             if (!hasFitRef.current && boundaryVertices && boundaryVertices.length > 0) {
