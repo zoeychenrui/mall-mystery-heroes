@@ -11,7 +11,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ChakraProvider } from '@chakra-ui/react';
 import GameMap from './GameMap';
 
-const mockMapInstance = { fitBounds: jest.fn(), jumpTo: jest.fn() };
+const mockMapInstance = { fitBounds: jest.fn(), jumpTo: jest.fn(), setProjection: jest.fn() };
 const mockShouldError = { current: false };
 
 jest.mock('react-map-gl', () => {
@@ -111,6 +111,11 @@ describe('GameMap', () => {
         const onMapLoad = jest.fn();
         renderMap({ onMapLoad });
         expect(onMapLoad).toHaveBeenCalledWith(mockMapInstance);
+    });
+
+    it('forces the flat 2D projection on load, never the 3D globe', () => {
+        renderMap();
+        expect(mockMapInstance.setProjection).toHaveBeenCalledWith('mercator');
     });
 
     it('toggles between satellite and standard styles', () => {

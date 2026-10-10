@@ -50,6 +50,10 @@ const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapErro
     const handleLoad = useCallback(
         (event) => {
             const map = event.target;
+            // Mapbox GL JS v3 defaults to a 3D "globe" projection at low
+            // zoom levels. This app's game areas are neighborhood-scale,
+            // never global, so always force the flat 2D (Mercator) map.
+            map.setProjection('mercator');
             if (!hasFitRef.current && boundaryVertices && boundaryVertices.length > 0) {
                 const lats = boundaryVertices.map((p) => p.lat);
                 const lngs = boundaryVertices.map((p) => p.lng);
