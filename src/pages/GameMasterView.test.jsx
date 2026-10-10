@@ -38,6 +38,15 @@ jest.mock('firebase/auth', () => ({
 }));
 jest.mock('../utils/firebase', () => ({ auth: {} }));
 
+// HeaderExecution now renders GameBoundaryButton, which pulls in
+// BoundaryEditorModal, which imports publishGameBoundary/disableGameBoundary,
+// which import 'firebase/functions' directly — that touches `fetch`
+// (undefined in jsdom) at module-load time, same reason firebase/auth and
+// utils/firebase are stubbed above. The modal has its own thorough tests;
+// stubbing it here keeps this file's concern to GameMasterView's own logic,
+// same reasoning as every other stub in this file.
+jest.mock('../components/map_components/BoundaryEditorModal', () => () => null);
+
 // Explicit factory, not auto-mock — see ChatInput.test.jsx for why.
 jest.mock('../components/firebase_calls/dbCalls', () => ({
     fetchPlayersQueryByDescendPointsThenIsAliveForRoom: jest.fn(() => 'players-query'),
@@ -209,6 +218,43 @@ describe("isGameActive is read, not just written (docs/improvements.md item 15's
         mountGameMasterView();
 
         expect(await screen.findByText(/isGameActive=false/)).toBeInTheDocument();
+    });
+});
+
+describe('the Game Boundary entry point', () => {
+    it("shows the Game Boundary entry point with the room's current boundary", () => {
+        onSnapshot.mockImplementation((query, onNext) => {
+            if (query === 'room-ref') {
+                onNext({
+                    data: () => ({
+                        isGameActive: true,
+                        gameBoundary: { enabled: true, revision: 1 },
+                    }),
+                });
+            } else {
+                onNext({ docs: [] });
+            }
+            return () => {};
+        });
+
+        mountGameMasterView();
+
+        expect(screen.getByRole('button', { name: 'Edit Game Area' })).toBeInTheDocument();
+    });
+
+    it('shows Set Game Area when the room has no boundary yet', () => {
+        onSnapshot.mockImplementation((query, onNext) => {
+            if (query === 'room-ref') {
+                onNext({ data: () => ({ isGameActive: true }) });
+            } else {
+                onNext({ docs: [] });
+            }
+            return () => {};
+        });
+
+        mountGameMasterView();
+
+        expect(screen.getByRole('button', { name: 'Set Game Area' })).toBeInTheDocument();
     });
 });
 

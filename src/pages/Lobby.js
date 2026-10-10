@@ -9,13 +9,18 @@ import PlayerList from '../components/lobby_components/PlayerList';
 import PlayerRemove from '../components/lobby_components/PlayerRemove';
 import AbandonRoomButton from '../components/lobby_components/AbandonRoomButton';
 import TargetGenerator from '../components/TargetGenerator';
-import { fetchAllPlayersQueryForRoom } from '../components/firebase_calls/dbCalls';
+import GameBoundaryButton from '../components/map_components/GameBoundaryButton';
+import {
+    fetchAllPlayersQueryForRoom,
+    fetchRoomReferenceForRoom,
+} from '../components/firebase_calls/dbCalls';
 import { auth } from '../utils/firebase';
 
 const Lobby = () => {
     const navigate = useNavigate();
     const { roomID } = useParams();
     const [arrayOfPlayers, setArrayOfPlayers] = useState([]);
+    const [gameBoundary, setGameBoundary] = useState(undefined);
     const createAlert = CreateAlert();
 
     const logout = async () => {
@@ -46,6 +51,19 @@ const Lobby = () => {
         );
         return () => unsubscribe();
         // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [roomID]);
+
+    // Live subscription to the room doc's gameBoundary field, mirroring the
+    // players-query subscription above in structure — GameBoundaryButton
+    // needs to know whether a boundary already exists to pick its own
+    // label ("Set Game Area" vs "Edit Game Area").
+    useEffect(() => {
+        if (!roomID) return undefined;
+        const roomRef = fetchRoomReferenceForRoom(roomID);
+        const unsubscribe = onSnapshot(roomRef, (snapshot) => {
+            setGameBoundary(snapshot.data()?.gameBoundary);
+        });
+        return () => unsubscribe();
     }, [roomID]);
 
     //navigates to lobby
@@ -126,6 +144,7 @@ const Lobby = () => {
                         handleLobbyRoom={handleLobbyRoom}
                     />
                     <AbandonRoomButton roomID={roomID} />
+                    <GameBoundaryButton roomID={roomID} gameBoundary={gameBoundary} />
                 </Flex>
             </Flex>
         </Flex>

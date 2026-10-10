@@ -35,6 +35,7 @@ const GameMasterView = () => {
     const [showTaskListModal, setShowTaskListModal] = useState(false);
     const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
     const [isGameActive, setIsGameActive] = useState(true);
+    const [gameBoundary, setGameBoundary] = useState(undefined);
     const aliveNames = players.filter((player) => player.isAlive).map((player) => player.name);
     const logsBoxRef = useRef(null);
 
@@ -87,6 +88,7 @@ const GameMasterView = () => {
         const roomRef = fetchRoomReferenceForRoom(roomID);
         const unsubscribe = onSnapshot(roomRef, (snapshot) => {
             setIsGameActive(snapshot.data()?.isGameActive ?? true);
+            setGameBoundary(snapshot.data()?.gameBoundary);
         });
         return () => unsubscribe();
     }, [roomID]);
@@ -262,7 +264,12 @@ const GameMasterView = () => {
                 </executionContext.Provider>
 
                 <Box h="6%" m="2px" marginX="4px">
-                    <HeaderExecution addLog={addLog} arrayOfAlivePlayers={aliveNames} />
+                    <HeaderExecution
+                        addLog={addLog}
+                        arrayOfAlivePlayers={aliveNames}
+                        roomID={roomID}
+                        gameBoundary={gameBoundary}
+                    />
                 </Box>
 
                 {/* ReconnectRequests needs addLog from executionContext, but

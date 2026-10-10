@@ -35,8 +35,18 @@ jest.mock('firebase/auth', () => ({
 }));
 jest.mock('../utils/firebase', () => ({ auth: {} }));
 
+// GameBoundaryButton pulls in BoundaryEditorModal, which imports
+// publishGameBoundary/disableGameBoundary, which import 'firebase/functions'
+// directly — that touches `fetch` (undefined in jsdom) at module-load time,
+// same reason utils/firebase is stubbed above. The modal has its own
+// thorough tests; stubbing it here keeps this file's concern to whether
+// Lobby renders GameBoundaryButton with the right props, same reasoning as
+// GameBoundaryButton.test.jsx's own stub of this module.
+jest.mock('../components/map_components/BoundaryEditorModal', () => () => null);
+
 jest.mock('../components/firebase_calls/dbCalls', () => ({
     fetchAllPlayersQueryForRoom: jest.fn(() => 'players-query'),
+    fetchRoomReferenceForRoom: jest.fn(() => 'room-ref'),
     removePlayerForRoom: jest.fn(),
     addLogForRoom: jest.fn(),
     markGameAsStarted: jest.fn(),
@@ -70,8 +80,12 @@ beforeEach(() => {
 
 describe('the player roster is a live subscription, not a one-time fetch', () => {
     it('shows players from the subscribed snapshot on mount', () => {
-        onSnapshot.mockImplementation((query, onNext) => {
-            onNext({ docs: asPlayerDocs(['Alice', 'Bob']) });
+        onSnapshot.mockImplementation((queryOrRef, onNext) => {
+            if (queryOrRef === 'room-ref') {
+                onNext({ data: () => ({ gameBoundary: undefined }) });
+            } else {
+                onNext({ docs: asPlayerDocs(['Alice', 'Bob']) });
+            }
             return () => {};
         });
 
@@ -83,9 +97,13 @@ describe('the player roster is a live subscription, not a one-time fetch', () =>
 
     it('shows a player who joins from another device without a reload', () => {
         let deliverPlayers;
-        onSnapshot.mockImplementation((query, onNext) => {
-            deliverPlayers = onNext;
-            onNext({ docs: asPlayerDocs(['Alice']) });
+        onSnapshot.mockImplementation((queryOrRef, onNext) => {
+            if (queryOrRef === 'room-ref') {
+                onNext({ data: () => ({ gameBoundary: undefined }) });
+            } else {
+                deliverPlayers = onNext;
+                onNext({ docs: asPlayerDocs(['Alice']) });
+            }
             return () => {};
         });
 
@@ -103,7 +121,14 @@ describe('the player roster is a live subscription, not a one-time fetch', () =>
     });
 
     it('surfaces a subscription error instead of leaving the roster silently empty', () => {
-        onSnapshot.mockImplementation((query, onNext, onError) => {
+        onSnapshot.mockImplementation((queryOrRef, onNext, onError) => {
+            // The room-doc subscription (added for gameBoundary) passes no
+            // onError handler, unlike the players-query subscription this
+            // test targets — only call onError for the latter, or this mock
+            // crashes on the room-ref call with "onError is not a function".
+            if (queryOrRef === 'room-ref') {
+                return () => {};
+            }
             onError(new Error('boom'));
             return () => {};
         });
@@ -117,8 +142,12 @@ describe('the player roster is a live subscription, not a one-time fetch', () =>
 
 describe('the simplified layout', () => {
     it('shows the game ID instead of the old "Lobby ID" label', () => {
-        onSnapshot.mockImplementation((query, onNext) => {
-            onNext({ docs: [] });
+        onSnapshot.mockImplementation((queryOrRef, onNext) => {
+            if (queryOrRef === 'room-ref') {
+                onNext({ data: () => ({ gameBoundary: undefined }) });
+            } else {
+                onNext({ docs: [] });
+            }
             return () => {};
         });
 
@@ -129,8 +158,12 @@ describe('the simplified layout', () => {
     });
 
     it('has no manual "Add Player" form', () => {
-        onSnapshot.mockImplementation((query, onNext) => {
-            onNext({ docs: [] });
+        onSnapshot.mockImplementation((queryOrRef, onNext) => {
+            if (queryOrRef === 'room-ref') {
+                onNext({ data: () => ({ gameBoundary: undefined }) });
+            } else {
+                onNext({ docs: [] });
+            }
             return () => {};
         });
 
@@ -141,8 +174,12 @@ describe('the simplified layout', () => {
     });
 
     it('still shows Start Game and, once players exist, Remove Player', () => {
-        onSnapshot.mockImplementation((query, onNext) => {
-            onNext({ docs: asPlayerDocs(['Alice', 'Bob']) });
+        onSnapshot.mockImplementation((queryOrRef, onNext) => {
+            if (queryOrRef === 'room-ref') {
+                onNext({ data: () => ({ gameBoundary: undefined }) });
+            } else {
+                onNext({ docs: asPlayerDocs(['Alice', 'Bob']) });
+            }
             return () => {};
         });
 
@@ -153,8 +190,12 @@ describe('the simplified layout', () => {
     });
 
     it('always shows Abandon Room, even with no players joined yet', () => {
-        onSnapshot.mockImplementation((query, onNext) => {
-            onNext({ docs: [] });
+        onSnapshot.mockImplementation((queryOrRef, onNext) => {
+            if (queryOrRef === 'room-ref') {
+                onNext({ data: () => ({ gameBoundary: undefined }) });
+            } else {
+                onNext({ docs: [] });
+            }
             return () => {};
         });
 
@@ -164,8 +205,12 @@ describe('the simplified layout', () => {
     });
 
     it('logs out when Log Out is clicked', async () => {
-        onSnapshot.mockImplementation((query, onNext) => {
-            onNext({ docs: [] });
+        onSnapshot.mockImplementation((queryOrRef, onNext) => {
+            if (queryOrRef === 'room-ref') {
+                onNext({ data: () => ({ gameBoundary: undefined }) });
+            } else {
+                onNext({ docs: [] });
+            }
             return () => {};
         });
         signOut.mockResolvedValue();
@@ -177,5 +222,20 @@ describe('the simplified layout', () => {
         });
 
         expect(signOut).toHaveBeenCalled();
+    });
+
+    it('shows Set Game Area, and Edit Game Area once a boundary exists', () => {
+        onSnapshot.mockImplementation((queryOrRef, onNext) => {
+            if (queryOrRef === 'room-ref') {
+                onNext({ data: () => ({ gameBoundary: { enabled: true, revision: 1 } }) });
+            } else {
+                onNext({ docs: [] });
+            }
+            return () => {};
+        });
+
+        mountLobby();
+
+        expect(screen.getByRole('button', { name: 'Edit Game Area' })).toBeInTheDocument();
     });
 });

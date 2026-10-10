@@ -18,9 +18,17 @@ import {
     draftFromParameters,
     isDraftPublishable,
 } from '../../game/boundaryDraft';
-import { projectToMeters } from '../../game/gameBoundary';
 import { publishGameBoundary } from '../publishGameBoundary';
 import { disableGameBoundary } from '../disableGameBoundary';
+
+// require(), not a named `import` — gameBoundary.js is CommonJS
+// (module.exports) by design, since it's vendored into functions/ for a
+// plain Node require() with no build step (see its own header comment).
+// A named ES `import` of it isn't statically analyzable the way CRA's
+// production webpack build requires, even though Jest's CommonJS-based
+// test runner never notices — see boundaryDraft.js's header comment for
+// the full story (this hit the exact same wall one import earlier).
+const { projectToMeters } = require('../../game/gameBoundary');
 
 const TOOLS = ['move', 'freehand', 'rectangle', 'circle', 'oval'];
 

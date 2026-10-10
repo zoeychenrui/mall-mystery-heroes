@@ -9,6 +9,22 @@
  * `vertices` is populated whenever geometry could be computed at all,
  * even when `validation.ok` is false, so the editor can still show the
  * moderator the invalid shape they drew instead of nothing.
+ *
+ * ES `export` below, not `module.exports` — unlike gameBoundary.js (kept
+ * as CommonJS on purpose, since it's vendored into functions/ via
+ * functions/scripts/sync-shared-game-logic.js for a plain Node require()
+ * with no build step), this module is never vendored and has no such
+ * constraint. It was briefly written as `module.exports` anyway, which
+ * went unnoticed because nothing in the client bundle pulled
+ * BoundaryEditorModal.js (and so this file) into a production build
+ * until GameBoundaryButton wired it into Lobby/GameMasterView — at which
+ * point CRA's webpack build failed with "'draftFromPublished' is not
+ * exported from '../../game/boundaryDraft'": a named ES `import` of a
+ * `module.exports = {...}` object isn't statically analyzable the way a
+ * production build requires, even though Jest's CommonJS-based test
+ * runner never noticed. The `require()` call just below stays — not a
+ * named `import` — for the same reason, now that gameBoundary.js is the
+ * CommonJS side of that boundary.
  */
 const { shapeToPolygon, validateBoundaryShape } = require('./gameBoundary');
 
@@ -86,7 +102,7 @@ const draftFromParameters = (shapeType, shapeParameters) => {
 
 const isDraftPublishable = (draft) => Boolean(draft && draft.validation && draft.validation.ok);
 
-module.exports = {
+export {
     emptyDraft,
     draftFromPublished,
     draftFromFreehand,
