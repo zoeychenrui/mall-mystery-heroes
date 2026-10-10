@@ -148,6 +148,22 @@ outright when item 4 moved unmapping server-side into `killPlayer`'s
 transaction, which re-implements it from scratch rather than calling the
 old function.
 
+### The game-boundary editor
+
+`src/components/map_components/` holds the moderator-facing UI for Phase
+2's game-area boundary (`docs/superpowers/plans/2026-10-09-game-boundaries-phase-2.md`):
+`GameMap.js` is the shared Mapbox renderer (wraps `react-map-gl`, draws
+the boundary overlay, handles its own load/error states); `BoundaryEditorModal.js`
+is the drawing surface built on top of it (four tools sharing one drag
+gesture, undo history, Publish/Disable calling the `publishGameBoundary`/
+`disableGameBoundary` wrappers above); `GameBoundaryButton.js` is the
+entry point, self-contained in the same shape as `AbandonRoomButton.js`
+— it owns its own open/closed state and takes just `roomID` and the
+room's current `gameBoundary`. `Lobby.js` and `GameMasterView.js` each
+render the button off their own live `onSnapshot` subscription to the
+room doc's `gameBoundary` field, the same subscription shape
+`GameMasterView` already used for `isGameActive`.
+
 ## State management ✅ Resolved (improvements item 13)
 
 There is no state library. Until item 13, state lived in three separate
@@ -390,8 +406,10 @@ Gaps that remain, per [improvements.md](./improvements.md):
   increments `revision`. Both take an `expectedRevision` and fail with
   `revision_conflict` if the room has moved on, so a stale editor cannot
   overwrite a newer boundary. The client has no direct write path to
-  `gameBoundary`: `firestore.rules` denies it. No client wrapper exists yet;
-  the boundary editor is a later phase.
+  `gameBoundary`: `firestore.rules` denies it. `src/components/publishGameBoundary.js`
+  and `src/components/disableGameBoundary.js` are thin `httpsCallable` wrappers,
+  same shape as `executeKill.js`; see "The game-boundary editor" below for the
+  UI that calls them.
 - `reportPlayerLocation` (`functions/callableFunctions/reportPlayerLocation.js`)
   — lets a signed-in player of an active game report one location fix, or an
   error in place of a fix. The function looks up the caller's player document

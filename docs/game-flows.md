@@ -539,6 +539,25 @@ access outright.
 
 ---
 
+## 7. Setting the game area
+
+The moderator opens `BoundaryEditorModal` from either `Lobby.js` or
+`GameMasterView.js` (via `GameBoundaryButton.js`), draws with one of its
+four tools, then taps Publish, which calls the host-authorized
+`publishGameBoundary` callable — the same `revision`-checked write
+documented under [Cloud Functions](./architecture.md#cloud-functions)
+(Phase 1). Nothing about that callable or its validation is new here;
+this flow only adds the UI entry point. Once the write lands, every
+room-level `onSnapshot` listener reading the room doc's `gameBoundary`
+field picks it up live — both moderator consoles (so a second GM tab's
+button relabels from "Set Game Area" to "Edit Game Area" without a
+reload) and, eventually, every player's device via
+`reportPlayerLocation` (Phase 3 territory; no client reads a player's
+boundary status yet). Disable follows the identical path through
+`disableGameBoundary`.
+
+---
+
 ## Where each flow updates the screen
 
 Because [state lives in three places](./architecture.md#state-management), each
@@ -554,3 +573,4 @@ flow updates the UI differently:
 | `Players (n)` header count                     | derived from the same live `onSnapshot` roster (item 13)                        | No — always live       |
 | Alive/dead arrays driving `/revive` validation | refetched via `fetchPlayersByStatusForRoom` on every command                    | No — always current    |
 | Photo undo history                             | persisted on the photo doc itself (`preKillSnapshot`), not React state (item 6) | No — survives a reload |
+| Game Area button label (Lobby/GameMasterView)  | `onSnapshot` on the room doc's `gameBoundary` field                             | No — always live       |
