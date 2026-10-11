@@ -69,6 +69,10 @@ jest.mock('react-map-gl', () => ({
         }
         return props.children;
     },
+    Source: ({ id, data }) => (
+        <div data-testid={`source-${id}`} data-geojson={JSON.stringify(data)} />
+    ),
+    Layer: () => null,
 }));
 
 const simulateMarkerDrag = (testId, point) => {
@@ -247,6 +251,24 @@ describe('BoundaryEditorModal — creating a shape', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
         expect(lastProps.boundaryVertices).toHaveLength(4); // 3 distinct + closing duplicate
+    });
+
+    it('connects the in-progress freehand points with a line as each one is placed', () => {
+        renderModal();
+        fireEvent.click(screen.getByRole('button', { name: 'Freehand' }));
+        click({ lat: 40, lng: -74 });
+        expect(screen.queryByTestId('source-freehand-in-progress')).not.toBeInTheDocument();
+
+        click({ lat: 40.001, lng: -74 });
+        click({ lat: 40.001, lng: -73.999 });
+        const source = screen.getByTestId('source-freehand-in-progress');
+        const geojson = JSON.parse(source.getAttribute('data-geojson'));
+        expect(geojson.geometry.type).toBe('LineString');
+        expect(geojson.geometry.coordinates).toEqual([
+            [-74, 40],
+            [-74, 40.001],
+            [-73.999, 40.001],
+        ]);
     });
 
     it('the Finish button only appears once at least 3 freehand points are placed', () => {

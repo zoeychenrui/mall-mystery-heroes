@@ -10,7 +10,7 @@ import {
     ModalOverlay,
     Text,
 } from '@chakra-ui/react';
-import { Marker } from 'react-map-gl';
+import { Marker, Source, Layer } from 'react-map-gl';
 import GameMap from './GameMap';
 import {
     emptyDraft,
@@ -201,6 +201,18 @@ const verticesFromVertexDrag = (vertices, index, point) => {
 // while a creation gesture is in progress (handlesForDraft is only read
 // when no tool is armed; see the render below) or when there is nothing
 // to edit yet.
+// A plain open line connecting the in-progress freehand points, so the
+// moderator sees the stroke take shape point by point instead of just a
+// scatter of dots until Finish closes it.
+const freehandLineGeoJson = (points) => ({
+    type: 'Feature',
+    geometry: {
+        type: 'LineString',
+        coordinates: points.map((point) => [point.lng, point.lat]),
+    },
+    properties: {},
+});
+
 const handlesForDraft = (draft, { onLiveUpdate, onCommit }) => {
     if (!draft.vertices) return [];
     // Rectangle/circle/oval all need shapeParameters to compute handle
@@ -676,6 +688,19 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
                                 />
                             </Marker>
                         ))}
+                        {activeTool === 'freehand' && freehandPoints.length >= 2 && (
+                            <Source
+                                id="freehand-in-progress"
+                                type="geojson"
+                                data={freehandLineGeoJson(freehandPoints)}
+                            >
+                                <Layer
+                                    id="freehand-in-progress-line"
+                                    type="line"
+                                    paint={{ 'line-color': 'orange', 'line-width': 2 }}
+                                />
+                            </Source>
+                        )}
                         {activeTool === 'freehand' &&
                             freehandPoints.map((point, index) => (
                                 <Marker
