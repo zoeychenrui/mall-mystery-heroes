@@ -403,6 +403,7 @@ module.exports = {
     shapeToPolygon,
     validateBoundaryShape,
     projectToMeters,
+    offsetPoint,
     GAME_BOUNDARY_CONFIG,
     isPointInPolygon,
     distanceToRingMeters,

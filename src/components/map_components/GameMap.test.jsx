@@ -176,4 +176,9 @@ describe('GameMap', () => {
         );
         expect(screen.getByTestId('mock-map')).toHaveAttribute('data-drag-pan', 'false');
     });
+
+    it('renders children inside the map, alongside the boundary overlay', () => {
+        renderMap({ children: <div data-testid="child-marker" /> });
+        expect(screen.getByTestId('child-marker')).toBeInTheDocument();
+    });
 });

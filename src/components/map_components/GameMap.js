@@ -47,9 +47,12 @@ const toGeoJson = (vertices) => ({
  * boundary overlay, and (via react-map-gl's default AttributionControl,
  * left enabled) provider attribution. No drawing tools here — but it
  * does expose `dragPan` so a caller mid-gesture (BoundaryEditorModal)
- * can stop the map from panning out from under a drawing tool.
+ * can stop the map from panning out from under a drawing tool, and
+ * `children` so a caller can render its own react-map-gl primitives
+ * (editing handles, a position marker) on top of the boundary overlay
+ * without this component needing to know what they are.
  */
-const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapError }) => {
+const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapError, children }) => {
     const mapboxToken = getMapboxToken();
     const [styleMode, setStyleMode] = useState('satellite');
     const [hasError, setHasError] = useState(false);
@@ -165,6 +168,7 @@ const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapErro
                         />
                     </Source>
                 )}
+                {children}
             </Map>
             <Button
                 position="absolute"

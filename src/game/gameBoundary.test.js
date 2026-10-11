@@ -1,4 +1,9 @@
-const { MAX_VERTICES, shapeToPolygon, validateBoundaryShape } = require('./gameBoundary');
+const {
+    MAX_VERTICES,
+    shapeToPolygon,
+    validateBoundaryShape,
+    projectToMeters,
+} = require('./gameBoundary');
 
 const square = [
     { lat: 40.0, lng: -74.0 },
@@ -242,7 +247,23 @@ const {
     initialBoundaryState,
     nextBoundaryState,
     deriveFreshStatus,
+    offsetPoint,
 } = require('./gameBoundary');
+
+describe('offsetPoint', () => {
+    it('round-trips with projectToMeters', () => {
+        const center = { lat: 40, lng: -74 };
+        const offset = offsetPoint(center, 500, -300);
+        const projected = projectToMeters(offset, center);
+        expect(projected.x).toBeCloseTo(500, 0);
+        expect(projected.y).toBeCloseTo(-300, 0);
+    });
+
+    it('east/north of zero is the center itself', () => {
+        const center = { lat: 40, lng: -74 };
+        expect(offsetPoint(center, 0, 0)).toEqual(center);
+    });
+});
 
 // A roughly 100 m north-south by 77 m east-west rectangle, around 40N.
 const plot = shapeToPolygon('rectangle', {
