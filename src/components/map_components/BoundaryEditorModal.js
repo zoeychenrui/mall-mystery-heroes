@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
     Button,
     HStack,
@@ -10,6 +10,7 @@ import {
     ModalOverlay,
     Text,
 } from '@chakra-ui/react';
+import { Marker } from 'react-map-gl';
 import GameMap from './GameMap';
 import {
     emptyDraft,
@@ -29,93 +30,311 @@ import CreateAlert from '../CreateAlert';
 // production webpack build requires, even though Jest's CommonJS-based
 // test runner never notices — see boundaryDraft.js's header comment for
 // the full story (this hit the exact same wall one import earlier).
-const { projectToMeters } = require('../../game/gameBoundary');
+const { projectToMeters, offsetPoint, isPointInPolygon } = require('../../game/gameBoundary');
 
-const TOOLS = ['move', 'freehand', 'rectangle', 'circle', 'oval'];
+const TOOLS = ['freehand', 'rectangle', 'circle', 'oval'];
 
-// Minimum pixel movement between accepted mousemove samples, so a fast
-// drag doesn't flood the draft with near-duplicate points (freehand) or
-// near-identical radius recomputations (circle/oval/rectangle).
-const MIN_DRAG_PIXEL_DISTANCE = 6;
+// --- box geometry (shared by Rectangle and Oval's handle editing) --------
+//
+// Rectangle and Oval are both edited as a bounding box with 8 handles (4
+// corners + 4 edge-midpoints) — the standard model most drawing tools use
+// (PowerPoint, Keynote, Google Drawings' own ellipse tool). They differ
+// only in what final shape is rendered inside that box: the box itself
+// for Rectangle, an inscribed ellipse for Oval.
 
-/**
- * Attaches one drag gesture (mousedown -> decimated mousemove* ->
- * mouseup) to the map, shared by all four drawing tools — each tool
- * only supplies what a start/move/end lngLat means for its own shape.
- *
- * Returns a detach function that removes exactly these three listeners
- * by reference. mapbox-gl's real `Map.off(type)` called with no handler
- * argument searches for an `undefined` handler and removes nothing — so
- * the caller MUST keep and later call this returned function (by
- * reference) rather than trying to blind-`off()` the event type, or the
- * listeners leak onto the map and keep firing after the tool switches
- * (worse, GameMap mounts with `reuseMaps`, so the same underlying map
- * instance — and so the leaked listeners — can outlive this component).
- */
-const attachDragTool = (map, { onStart, onMove, onEnd }) => {
-    let isDragging = false;
-    let lastPoint = null;
-    const handleDown = (event) => {
-        isDragging = true;
-        lastPoint = event.point;
-        onStart(event.lngLat);
-    };
-    const handleMove = (event) => {
-        if (!isDragging) return;
-        if (
-            lastPoint &&
-            Math.hypot(event.point.x - lastPoint.x, event.point.y - lastPoint.y) <
-                MIN_DRAG_PIXEL_DISTANCE
-        ) {
-            return;
-        }
-        lastPoint = event.point;
-        onMove(event.lngLat);
-    };
-    const handleUp = (event) => {
-        if (!isDragging) return;
-        isDragging = false;
-        onEnd(event.lngLat);
-    };
-    map.on('mousedown', handleDown);
-    map.on('mousemove', handleMove);
-    map.on('mouseup', handleUp);
-    return () => {
-        map.off('mousedown', handleDown);
-        map.off('mousemove', handleMove);
-        map.off('mouseup', handleUp);
+const BOX_HANDLE_KEYS = ['sw', 's', 'se', 'e', 'ne', 'n', 'nw', 'w'];
+const BOX_CORNER_KEYS = ['sw', 'se', 'nw', 'ne'];
+
+const boxFromCorners = (corners) => {
+    const [a, b] = corners;
+    return {
+        minLat: Math.min(a.lat, b.lat),
+        maxLat: Math.max(a.lat, b.lat),
+        minLng: Math.min(a.lng, b.lng),
+        maxLng: Math.max(a.lng, b.lng),
     };
 };
 
+const boxToCorners = (box) => [
+    { lat: box.minLat, lng: box.minLng },
+    { lat: box.maxLat, lng: box.maxLng },
+];
+
+const boxHandlePositions = (box) => {
+    const midLat = (box.minLat + box.maxLat) / 2;
+    const midLng = (box.minLng + box.maxLng) / 2;
+    return {
+        sw: { lat: box.minLat, lng: box.minLng },
+        se: { lat: box.minLat, lng: box.maxLng },
+        nw: { lat: box.maxLat, lng: box.minLng },
+        ne: { lat: box.maxLat, lng: box.maxLng },
+        s: { lat: box.minLat, lng: midLng },
+        n: { lat: box.maxLat, lng: midLng },
+        w: { lat: midLat, lng: box.minLng },
+        e: { lat: midLat, lng: box.maxLng },
+    };
+};
+
+// Dragging a corner moves that corner only, keeping the OPPOSITE corner
+// fixed — recomputed via boxFromCorners so dragging past the opposite
+// corner flips the box the right way instead of going inside-out.
+// Dragging a midpoint moves only the one edge it sits on.
+const boxFromHandleDrag = (box, key, point) => {
+    if (BOX_CORNER_KEYS.includes(key)) {
+        const opposite = {
+            sw: { lat: box.maxLat, lng: box.maxLng },
+            se: { lat: box.maxLat, lng: box.minLng },
+            nw: { lat: box.minLat, lng: box.maxLng },
+            ne: { lat: box.minLat, lng: box.minLng },
+        }[key];
+        return boxFromCorners([point, opposite]);
+    }
+    if (key === 'n')
+        return boxFromCorners([
+            { lat: point.lat, lng: box.minLng },
+            { lat: box.minLat, lng: box.maxLng },
+        ]);
+    if (key === 's')
+        return boxFromCorners([
+            { lat: point.lat, lng: box.minLng },
+            { lat: box.maxLat, lng: box.maxLng },
+        ]);
+    if (key === 'e')
+        return boxFromCorners([
+            { lat: box.minLat, lng: point.lng },
+            { lat: box.maxLat, lng: box.minLng },
+        ]);
+    if (key === 'w')
+        return boxFromCorners([
+            { lat: box.minLat, lng: point.lng },
+            { lat: box.maxLat, lng: box.maxLng },
+        ]);
+    return box;
+};
+
+// Oval's shapeParameters are {center, radiusXMeters, radiusYMeters}, not a
+// box — these two convert between that and the same box the handle UI
+// shares with Rectangle.
+const boxFromOvalParams = (center, radiusXMeters, radiusYMeters) => {
+    const east = offsetPoint(center, radiusXMeters, 0);
+    const west = offsetPoint(center, -radiusXMeters, 0);
+    const north = offsetPoint(center, 0, radiusYMeters);
+    const south = offsetPoint(center, 0, -radiusYMeters);
+    return { minLat: south.lat, maxLat: north.lat, minLng: west.lng, maxLng: east.lng };
+};
+
+const ovalParamsFromBox = (box) => {
+    const center = { lat: (box.minLat + box.maxLat) / 2, lng: (box.minLng + box.maxLng) / 2 };
+    const east = projectToMeters({ lat: center.lat, lng: box.maxLng }, center);
+    const north = projectToMeters({ lat: box.maxLat, lng: center.lng }, center);
+    return { center, radiusXMeters: Math.abs(east.x), radiusYMeters: Math.abs(north.y) };
+};
+
+// --- per-shape-type creation, move, and handle logic ----------------------
+
+const draftForCreateStart = (tool, point) => {
+    if (tool === 'rectangle') return draftFromParameters('rectangle', { corners: [point, point] });
+    if (tool === 'circle') return draftFromParameters('circle', { center: point, radiusMeters: 0 });
+    if (tool === 'oval') {
+        return draftFromParameters('oval', { center: point, radiusXMeters: 0, radiusYMeters: 0 });
+    }
+    return emptyDraft();
+};
+
+const draftForCreateUpdate = (tool, start, current) => {
+    if (tool === 'rectangle')
+        return draftFromParameters('rectangle', { corners: [start, current] });
+    if (tool === 'circle') {
+        const { x, y } = projectToMeters(current, start);
+        return draftFromParameters('circle', { center: start, radiusMeters: Math.hypot(x, y) });
+    }
+    if (tool === 'oval') {
+        const { x, y } = projectToMeters(current, start);
+        return draftFromParameters('oval', {
+            center: start,
+            radiusXMeters: Math.abs(x),
+            radiusYMeters: Math.abs(y),
+        });
+    }
+    return emptyDraft();
+};
+
+// Moving a shape translates its defining parameters by the same lat/lng
+// delta, keeping its size exactly the same.
+const translateDraft = (draft, deltaLat, deltaLng) => {
+    const { shapeType, shapeParameters, vertices } = draft;
+    const shiftPoint = (p) => ({ lat: p.lat + deltaLat, lng: p.lng + deltaLng });
+    if (shapeType === 'rectangle') {
+        return draftFromParameters('rectangle', {
+            corners: shapeParameters.corners.map(shiftPoint),
+        });
+    }
+    if (shapeType === 'circle') {
+        return draftFromParameters('circle', {
+            center: shiftPoint(shapeParameters.center),
+            radiusMeters: shapeParameters.radiusMeters,
+        });
+    }
+    if (shapeType === 'oval') {
+        return draftFromParameters('oval', {
+            center: shiftPoint(shapeParameters.center),
+            radiusXMeters: shapeParameters.radiusXMeters,
+            radiusYMeters: shapeParameters.radiusYMeters,
+        });
+    }
+    if (shapeType === 'freehand') {
+        return draftFromFreehand(vertices.map(shiftPoint));
+    }
+    return draft;
+};
+
+// A freehand vertex and its closing duplicate (vertices[0] === the last
+// entry) move together — dragging the first point's handle must also
+// move the ring's closing point, or the ring would no longer close.
+const verticesFromVertexDrag = (vertices, index, point) => {
+    const next = vertices.map((p, i) => (i === index ? point : p));
+    if (index === 0) next[next.length - 1] = point;
+    return next;
+};
+
+// The set of draggable handles for the CURRENT committed draft — empty
+// while a creation gesture is in progress (handlesForDraft is only read
+// when no tool is armed; see the render below) or when there is nothing
+// to edit yet.
+const handlesForDraft = (draft, { onLiveUpdate, onCommit }) => {
+    if (!draft.vertices) return [];
+    // Rectangle/circle/oval all need shapeParameters to compute handle
+    // positions from; a shape without them (an incomplete fixture, or a
+    // legitimately bare {vertices} the modal was handed) has nothing to
+    // derive handles from — render none rather than crash. Freehand never
+    // has shapeParameters at all (by design, see boundaryDraft.js), so
+    // it's excluded from this guard.
+    if (draft.shapeType !== 'freehand' && !draft.shapeParameters) return [];
+
+    if (draft.shapeType === 'rectangle') {
+        const box = boxFromCorners(draft.shapeParameters.corners);
+        const positions = boxHandlePositions(box);
+        return BOX_HANDLE_KEYS.map((key) => ({
+            key,
+            ...positions[key],
+            onDrag: (point) =>
+                onLiveUpdate(
+                    draftFromParameters('rectangle', {
+                        corners: boxToCorners(boxFromHandleDrag(box, key, point)),
+                    })
+                ),
+            onDragEnd: (point) =>
+                onCommit(
+                    draftFromParameters('rectangle', {
+                        corners: boxToCorners(boxFromHandleDrag(box, key, point)),
+                    })
+                ),
+        }));
+    }
+
+    if (draft.shapeType === 'oval') {
+        const { center, radiusXMeters, radiusYMeters } = draft.shapeParameters;
+        const box = boxFromOvalParams(center, radiusXMeters, radiusYMeters);
+        const positions = boxHandlePositions(box);
+        return BOX_HANDLE_KEYS.map((key) => ({
+            key,
+            ...positions[key],
+            onDrag: (point) =>
+                onLiveUpdate(
+                    draftFromParameters(
+                        'oval',
+                        ovalParamsFromBox(boxFromHandleDrag(box, key, point))
+                    )
+                ),
+            onDragEnd: (point) =>
+                onCommit(
+                    draftFromParameters(
+                        'oval',
+                        ovalParamsFromBox(boxFromHandleDrag(box, key, point))
+                    )
+                ),
+        }));
+    }
+
+    if (draft.shapeType === 'circle') {
+        const { center, radiusMeters } = draft.shapeParameters;
+        const positions = {
+            e: offsetPoint(center, radiusMeters, 0),
+            w: offsetPoint(center, -radiusMeters, 0),
+            n: offsetPoint(center, 0, radiusMeters),
+            s: offsetPoint(center, 0, -radiusMeters),
+        };
+        const radiusTo = (point) => {
+            const { x, y } = projectToMeters(point, center);
+            return Math.hypot(x, y);
+        };
+        return ['e', 'w', 'n', 's'].map((key) => ({
+            key,
+            ...positions[key],
+            onDrag: (point) =>
+                onLiveUpdate(
+                    draftFromParameters('circle', { center, radiusMeters: radiusTo(point) })
+                ),
+            onDragEnd: (point) =>
+                onCommit(draftFromParameters('circle', { center, radiusMeters: radiusTo(point) })),
+        }));
+    }
+
+    if (draft.shapeType === 'freehand') {
+        // The last vertex is the closing duplicate of the first — it gets
+        // no handle of its own, since dragging vertex 0's handle already
+        // moves it too (see verticesFromVertexDrag).
+        return draft.vertices.slice(0, -1).map((point, index) => ({
+            key: `vertex-${index}`,
+            ...point,
+            onDrag: (next) =>
+                onLiveUpdate(
+                    draftFromFreehand(verticesFromVertexDrag(draft.vertices, index, next))
+                ),
+            onDragEnd: (next) =>
+                onCommit(draftFromFreehand(verticesFromVertexDrag(draft.vertices, index, next))),
+        }));
+    }
+
+    return [];
+};
+
 /**
- * Local drawing surface for the room's game-area boundary. Draws with
- * four tools against GameMap's boundary overlay, keeps an undo history
- * of drafts, and lets the moderator Clear Draft, Cancel, Publish the
- * draft (host-only, revision-checked), or Disable the current boundary.
+ * Local drawing surface for the room's game-area boundary, Google
+ * Drawings-style: the map is always pannable. Selecting a tool (Freehand,
+ * Rectangle, Circle, Oval) arms it for one new shape, drawn by dragging a
+ * bounding box (Rectangle/Oval) or a center-to-edge radius (Circle), or by
+ * clicking a series of points finished with the Finish button (Freehand).
+ * Finishing a one-shot tool disarms it automatically. With no tool armed,
+ * clicking and dragging anywhere inside the current shape moves it, and
+ * its corner/edge/vertex handles resize or reshape it — no separate "Move
+ * Map" mode needed, since the base map stays pannable the whole time
+ * (dragging claims the gesture away from panning only when it starts on
+ * the shape itself or its handles; see attachPersistentGestures below).
  */
 const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
     const createAlert = CreateAlert();
     const [draft, setDraft] = useState(() => draftFromPublished(currentBoundary));
-    // Tracks the last *committed* draft outside of React's render cycle.
-    // onMapLoad (and so each tool's attach) fires once per mount in the
-    // real GameMap, so every drag after the first reuses that one
-    // attach-time closure — commitDraft must read the live committed
-    // value through this ref rather than close over `draft` from the
-    // render where the listeners were attached, or every drag after the
-    // first pushes that stale, pre-attach draft onto history instead of
-    // the previous drag's result. Updated only inside commitDraft itself
-    // (and on reopen) — never from in-progress onStart/onMove previews,
-    // which must not count as "committed" for Undo purposes.
+    // Tracks the last *committed* draft outside of React's render cycle —
+    // read by the persistent gesture handlers below, which are attached
+    // once per map load and so can never rely on a value closed over at
+    // attach time (see commitDraft's own comment for the full story,
+    // first worked out for the old per-tool-drag design and still true
+    // here now that there is only one, longer-lived attachment).
     const draftRef = useRef(draft);
     const [history, setHistory] = useState([]);
-    const [activeTool, setActiveTool] = useState('move');
+    const [activeTool, setActiveTool] = useState(null);
+    const activeToolRef = useRef(null);
+    const [freehandPoints, setFreehandPoints] = useState([]);
+    const freehandPointsRef = useRef([]);
     // GameMap already renders its own full-screen "Map failed to load" /
     // Retry UI internally on error (see GameMap.js), but this modal still
     // needs to know about it: there is nothing to draw on, so every
     // toolbar button (including Undo and Clear Draft) is disabled while
-    // an error is active. Task 6 also reads this to gate Publish.
+    // an error is active, and Publish is gated on it too.
     const [mapError, setMapError] = useState(false);
     const mapRef = useRef(null);
+    const detachPersistentRef = useRef(null);
     const [isPublishing, setIsPublishing] = useState(false);
     const [isDisabling, setIsDisabling] = useState(false);
     const [conflictMessage, setConflictMessage] = useState(null);
@@ -133,11 +352,17 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
     // conflict message out from under the moderator mid-edit.
     const wasOpenRef = useRef(isOpen);
 
+    const resetToolState = () => {
+        setActiveTool(null);
+        activeToolRef.current = null;
+        setFreehandPoints([]);
+        freehandPointsRef.current = [];
+    };
+
     // Reopening always starts from the latest published state, never a
-    // previously abandoned draft (Review Focus: reopen fidelity) — but
-    // only on the actual false -> true open transition, never while
-    // already open (see wasOpenRef comment above).
-    useEffect(() => {
+    // previously abandoned draft — but only on the actual false -> true
+    // open transition, never while already open (see wasOpenRef comment).
+    React.useEffect(() => {
         const justOpened = isOpen && !wasOpenRef.current;
         wasOpenRef.current = isOpen;
         if (justOpened) {
@@ -145,11 +370,12 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
             setDraft(reopened);
             draftRef.current = reopened;
             setHistory([]);
-            setActiveTool('move');
+            resetToolState();
             setMapError(false);
             setConflictMessage(null);
             setExpectedRevision(currentBoundary?.revision ?? 0);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, currentBoundary]);
 
     const commitDraft = (nextDraft) => {
@@ -167,142 +393,138 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
     };
 
     const handleUndo = () => {
-        // Reads `history` directly rather than nesting setDraft inside the
-        // setHistory updater — an updater function may be re-invoked by
-        // React when reconciling queued state, and calling another
-        // setState as a side effect from inside it is unreliable. `history`
-        // itself is safe to read fresh here: handleUndo is rebound to the
-        // button's onClick on every render, so the handler that actually
-        // runs always closes over the latest render's `history`.
         if (history.length === 0) return;
         const restored = history[history.length - 1];
         setHistory((prev) => prev.slice(0, -1));
         setDraft(restored);
-        // Keep draftRef in sync with what Undo just restored, so a drag
-        // started right after this Undo (before any further commit)
-        // treats the restored draft — not the stale pre-Undo value — as
-        // the "last committed" state.
         draftRef.current = restored;
     };
 
-    // Also detaches the active tool's listeners and resets to Move Map,
-    // so the toolbar never shows a tool "active" with no listeners
-    // attached behind it (a real gap in the original brief: the test
-    // "Clear Draft ... detaches the active tool's listeners" fails
-    // without this — commitDraft alone never touches the map listeners).
     const handleClearDraft = () => {
-        detachToolListeners();
-        setActiveTool('move');
+        resetToolState();
         commitDraft(emptyDraft());
     };
 
-    // --- tool-specific drag interaction -------------------------------
+    // --- persistent map interaction (attached once per map load) --------
 
-    // Holds the detach function for whichever tool is currently attached
-    // (null for Move Map, which attaches nothing). Reference-based, not
-    // keyed by event type — see attachDragTool's comment.
-    const detachCurrentToolRef = useRef(null);
-
-    const detachToolListeners = () => {
-        if (detachCurrentToolRef.current) {
-            detachCurrentToolRef.current();
-            detachCurrentToolRef.current = null;
+    const attachPersistentGestures = (map) => {
+        if (detachPersistentRef.current) {
+            detachPersistentRef.current();
         }
-    };
+        // Plain variables, not refs — this whole function is itself only
+        // ever invoked once per real map load, so these live exactly as
+        // long as the listeners below do, mutated across many gestures
+        // over that one lifetime. (Reusing this pattern from the old
+        // per-tool attachDragTool, which worked the same way.)
+        let gestureMode = null; // 'create' | 'move' | null
+        let createTool = null;
+        let createStart = null;
+        let moveStart = null; // { lat, lng, draft } snapshot at gesture start
 
-    const attachRectangleTool = (map) => {
-        let cornerA = null;
-        return attachDragTool(map, {
-            onStart: (lngLat) => {
-                cornerA = lngLat;
-                setDraft(draftFromParameters('rectangle', { corners: [cornerA, lngLat] }));
-            },
-            onMove: (lngLat) => {
-                setDraft(draftFromParameters('rectangle', { corners: [cornerA, lngLat] }));
-            },
-            onEnd: (lngLat) => {
-                commitDraft(draftFromParameters('rectangle', { corners: [cornerA, lngLat] }));
-            },
-        });
-    };
+        const toPoint = (lngLat) => ({ lat: lngLat.lat, lng: lngLat.lng });
 
-    const attachCircleTool = (map) => {
-        let center = null;
-        const radiusMetersTo = (lngLat) => {
-            const { x, y } = projectToMeters(lngLat, center);
-            return Math.hypot(x, y);
+        const handleDown = (event) => {
+            const tool = activeToolRef.current;
+            if (tool === 'freehand') {
+                // Freehand places points on click, not drag — handled in
+                // handleClick below. Still claim the gesture so an
+                // imprecise tap can never nudge the map underneath.
+                event.preventDefault();
+                return;
+            }
+            if (tool) {
+                event.preventDefault();
+                gestureMode = 'create';
+                createTool = tool;
+                createStart = toPoint(event.lngLat);
+                setDraft(draftForCreateStart(tool, createStart));
+                return;
+            }
+            const current = draftRef.current;
+            if (current.vertices && isPointInPolygon(toPoint(event.lngLat), current.vertices)) {
+                event.preventDefault();
+                gestureMode = 'move';
+                moveStart = { ...toPoint(event.lngLat), draft: current };
+            }
         };
-        return attachDragTool(map, {
-            onStart: (lngLat) => {
-                center = lngLat;
-                setDraft(draftFromParameters('circle', { center, radiusMeters: 0 }));
-            },
-            onMove: (lngLat) => {
+
+        const handleMove = (event) => {
+            if (gestureMode === 'create') {
+                setDraft(draftForCreateUpdate(createTool, createStart, toPoint(event.lngLat)));
+            } else if (gestureMode === 'move') {
+                const point = toPoint(event.lngLat);
                 setDraft(
-                    draftFromParameters('circle', { center, radiusMeters: radiusMetersTo(lngLat) })
+                    translateDraft(
+                        moveStart.draft,
+                        point.lat - moveStart.lat,
+                        point.lng - moveStart.lng
+                    )
                 );
-            },
-            onEnd: (lngLat) => {
+            }
+        };
+
+        const handleUp = (event) => {
+            if (gestureMode === 'create') {
+                commitDraft(draftForCreateUpdate(createTool, createStart, toPoint(event.lngLat)));
+                setActiveTool(null);
+                activeToolRef.current = null;
+            } else if (gestureMode === 'move') {
+                const point = toPoint(event.lngLat);
                 commitDraft(
-                    draftFromParameters('circle', { center, radiusMeters: radiusMetersTo(lngLat) })
+                    translateDraft(
+                        moveStart.draft,
+                        point.lat - moveStart.lat,
+                        point.lng - moveStart.lng
+                    )
                 );
-            },
-        });
-    };
-
-    const attachOvalTool = (map) => {
-        let center = null;
-        const radiiMetersTo = (lngLat) => {
-            const { x, y } = projectToMeters(lngLat, center);
-            return { radiusXMeters: Math.abs(x), radiusYMeters: Math.abs(y) };
+            }
+            gestureMode = null;
+            createTool = null;
+            createStart = null;
+            moveStart = null;
         };
-        return attachDragTool(map, {
-            onStart: (lngLat) => {
-                center = lngLat;
-                setDraft(
-                    draftFromParameters('oval', { center, radiusXMeters: 0, radiusYMeters: 0 })
-                );
-            },
-            onMove: (lngLat) => {
-                setDraft(draftFromParameters('oval', { center, ...radiiMetersTo(lngLat) }));
-            },
-            onEnd: (lngLat) => {
-                commitDraft(draftFromParameters('oval', { center, ...radiiMetersTo(lngLat) }));
-            },
-        });
+
+        const handleClick = (event) => {
+            if (activeToolRef.current !== 'freehand') return;
+            const nextPoints = [...freehandPointsRef.current, toPoint(event.lngLat)];
+            freehandPointsRef.current = nextPoints;
+            setFreehandPoints(nextPoints);
+        };
+
+        map.on('mousedown', handleDown);
+        map.on('mousemove', handleMove);
+        map.on('mouseup', handleUp);
+        map.on('click', handleClick);
+        detachPersistentRef.current = () => {
+            map.off('mousedown', handleDown);
+            map.off('mousemove', handleMove);
+            map.off('mouseup', handleUp);
+            map.off('click', handleClick);
+        };
     };
 
-    const attachFreehandTool = (map) => {
-        let points = [];
-        return attachDragTool(map, {
-            onStart: (lngLat) => {
-                points = [lngLat];
-                setDraft(draftFromFreehand(points));
-            },
-            onMove: (lngLat) => {
-                points = [...points, lngLat];
-                setDraft(draftFromFreehand(points));
-            },
-            onEnd: (lngLat) => {
-                points = [...points, lngLat];
-                commitDraft(draftFromFreehand(points));
-            },
-        });
-    };
-
-    const applyTool = (tool, map) => {
-        detachToolListeners();
-        if (!map) return;
-        if (tool === 'rectangle') detachCurrentToolRef.current = attachRectangleTool(map);
-        else if (tool === 'circle') detachCurrentToolRef.current = attachCircleTool(map);
-        else if (tool === 'oval') detachCurrentToolRef.current = attachOvalTool(map);
-        else if (tool === 'freehand') detachCurrentToolRef.current = attachFreehandTool(map);
-        // 'move': no listeners — normal map navigation.
-    };
+    React.useEffect(() => {
+        return () => {
+            if (detachPersistentRef.current) detachPersistentRef.current();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleToolChange = (tool) => {
-        setActiveTool(tool);
-        applyTool(tool, mapRef.current);
+        // Clicking the already-armed tool disarms it, letting the
+        // moderator back out of a tool without drawing anything.
+        const next = activeTool === tool ? null : tool;
+        setActiveTool(next);
+        activeToolRef.current = next;
+        setFreehandPoints([]);
+        freehandPointsRef.current = [];
+    };
+
+    const handleFinishFreehand = () => {
+        const points = freehandPointsRef.current;
+        if (points.length < 3) return;
+        commitDraft(draftFromFreehand(points));
+        resetToolState();
     };
 
     const handleMapLoad = (map) => {
@@ -311,11 +533,10 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
         // re-fires this same callback — means there is a map to draw on
         // again, even if a previous load had failed.
         setMapError(false);
-        applyTool(activeTool, map);
+        attachPersistentGestures(map);
     };
 
     const handleCancel = () => {
-        detachToolListeners();
         onClose();
     };
 
@@ -344,7 +565,6 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
                 '',
                 1500
             );
-            detachToolListeners();
             onClose();
         } catch (error) {
             setConflictMessage(describeBoundaryError(error));
@@ -358,7 +578,6 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
         try {
             await disableGameBoundary({ roomId: roomID, expectedRevision });
             createAlert('success', 'Boundary disabled.', '', 1500);
-            detachToolListeners();
             onClose();
         } catch (error) {
             setConflictMessage(describeBoundaryError(error));
@@ -366,6 +585,11 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
             setIsDisabling(false);
         }
     };
+
+    const handles =
+        activeTool === null
+            ? handlesForDraft(draft, { onLiveUpdate: setDraft, onCommit: commitDraft })
+            : [];
 
     return (
         <Modal isOpen={isOpen} onClose={handleCancel} size={{ base: 'full', md: '6xl' }}>
@@ -382,11 +606,14 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
                                 onClick={() => handleToolChange(tool)}
                                 isDisabled={mapError}
                             >
-                                {tool === 'move'
-                                    ? 'Move Map'
-                                    : tool.charAt(0).toUpperCase() + tool.slice(1)}
+                                {tool.charAt(0).toUpperCase() + tool.slice(1)}
                             </Button>
                         ))}
+                        {activeTool === 'freehand' && freehandPoints.length >= 3 && (
+                            <Button size="sm" colorScheme="teal" onClick={handleFinishFreehand}>
+                                Finish
+                            </Button>
+                        )}
                         <Button
                             size="sm"
                             onClick={handleUndo}
@@ -420,10 +647,54 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
                     <GameMap
                         boundaryVertices={draft.vertices}
                         fitTo={null}
-                        dragPan={activeTool === 'move'}
                         onMapLoad={handleMapLoad}
                         onMapError={() => setMapError(true)}
-                    />
+                    >
+                        {handles.map((handle) => (
+                            <Marker
+                                key={handle.key}
+                                longitude={handle.lng}
+                                latitude={handle.lat}
+                                draggable
+                                onDrag={(e) =>
+                                    handle.onDrag({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+                                }
+                                onDragEnd={(e) =>
+                                    handle.onDragEnd({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+                                }
+                            >
+                                <div
+                                    data-testid={`handle-${handle.key}`}
+                                    style={{
+                                        width: '14px',
+                                        height: '14px',
+                                        borderRadius: '50%',
+                                        background: 'white',
+                                        border: '2px solid teal',
+                                        cursor: 'pointer',
+                                    }}
+                                />
+                            </Marker>
+                        ))}
+                        {activeTool === 'freehand' &&
+                            freehandPoints.map((point, index) => (
+                                <Marker
+                                    key={`in-progress-${index}`}
+                                    longitude={point.lng}
+                                    latitude={point.lat}
+                                >
+                                    <div
+                                        data-testid="freehand-point"
+                                        style={{
+                                            width: '8px',
+                                            height: '8px',
+                                            borderRadius: '50%',
+                                            background: 'orange',
+                                        }}
+                                    />
+                                </Marker>
+                            ))}
+                    </GameMap>
                 </ModalBody>
                 <ModalFooter>
                     {currentBoundary?.enabled && (
