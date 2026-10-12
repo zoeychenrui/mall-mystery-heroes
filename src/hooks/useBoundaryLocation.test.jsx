@@ -206,6 +206,56 @@ describe('useBoundaryLocation', () => {
         expect(fakeGeolocation.getCurrentPosition).toHaveBeenCalled();
     });
 
+    it('stops the backstop timer from re-checking after a PERMISSION_DENIED error, until requestPermission is called again', () => {
+        const { result } = renderHook(() => useBoundaryLocation(baseProps));
+        act(() => result.current.requestPermission());
+        const watchId = fakeGeolocation.watchPosition.mock.results[0].value;
+
+        act(() => {
+            activeWatches.get(watchId)?.onError(makePositionError(1));
+        });
+        expect(result.current.permissionState).toBe('denied');
+
+        fakeGeolocation.getCurrentPosition.mockClear();
+        // 20s, not 15s: the backstop timer only ticks every 2s
+        // (POLL_CHECK_INTERVAL_MS), so a bare 15000ms advance never
+        // lands a tick past the exact 15000ms isPollDue threshold (its
+        // last tick before that boundary is at 14000ms) and would pass
+        // this assertion even with the bug this test exists to catch.
+        act(() => jest.advanceTimersByTime(20000));
+        expect(fakeGeolocation.getCurrentPosition).not.toHaveBeenCalled();
+
+        // Only an explicit requestPermission (Enable Location/Retry) may
+        // ask again — and it still does, proving the gate above isn't
+        // latching the hook out of retrying altogether.
+        act(() => result.current.requestPermission());
+        expect(fakeGeolocation.getCurrentPosition).toHaveBeenCalled();
+    });
+
+    it('stops the visibility-change reacquire from firing after a PERMISSION_DENIED error, until requestPermission is called again', () => {
+        const { result } = renderHook(() => useBoundaryLocation(baseProps));
+        act(() => result.current.requestPermission());
+        const watchId = fakeGeolocation.watchPosition.mock.results[0].value;
+
+        act(() => {
+            activeWatches.get(watchId)?.onError(makePositionError(1));
+        });
+        expect(result.current.permissionState).toBe('denied');
+
+        fakeGeolocation.getCurrentPosition.mockClear();
+        Object.defineProperty(document, 'visibilityState', {
+            value: 'visible',
+            configurable: true,
+        });
+        act(() => {
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+        expect(fakeGeolocation.getCurrentPosition).not.toHaveBeenCalled();
+
+        act(() => result.current.requestPermission());
+        expect(fakeGeolocation.getCurrentPosition).toHaveBeenCalled();
+    });
+
     it('clears the watch on unmount', () => {
         const { result, unmount } = renderHook(() => useBoundaryLocation(baseProps));
         act(() => result.current.requestPermission());

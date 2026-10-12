@@ -155,9 +155,17 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
     }, [isTrackingActive, roomID, boundaryRevision, handlePosition, handlePositionError]);
 
     // Backstop: force a fresh getCurrentPosition call if nothing has
-    // been sent recently enough on its own.
+    // been sent recently enough on its own. Gated on permissionState,
+    // not just isTrackingActive: once a PERMISSION_DENIED error has
+    // landed, isTrackingActive stays true (nothing resets `enabled`),
+    // so without this check this timer would re-call
+    // getCurrentPosition forever, re-triggering the OS/browser
+    // permission prompt on a cadence the player never asked for and
+    // re-sending the same permission_denied report every ~15s. Per
+    // this plan's Review Focus: only an explicit requestPermission
+    // (Enable Location/Retry) click may ask again.
     useEffect(() => {
-        if (!isTrackingActive) return undefined;
+        if (!isTrackingActive || permissionState === 'denied') return undefined;
         const intervalId = setInterval(() => {
             if (isPollDue(lastSentMsRef.current, Date.now())) {
                 navigator.geolocation.getCurrentPosition(
@@ -168,12 +176,15 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
             }
         }, POLL_CHECK_INTERVAL_MS);
         return () => clearInterval(intervalId);
-    }, [isTrackingActive, handlePosition, handlePositionError]);
+    }, [isTrackingActive, permissionState, handlePosition, handlePositionError]);
 
     // Reacquire a fresh fix as soon as the tab becomes visible again —
-    // the browser may have throttled or suspended updates while hidden.
+    // the browser may have throttled or suspended updates while
+    // hidden. Same permissionState gate as the backstop timer above,
+    // and for the same reason: without it, every tab-focus after a
+    // denial would re-prompt and re-report on its own.
     useEffect(() => {
-        if (!isTrackingActive) return undefined;
+        if (!isTrackingActive || permissionState === 'denied') return undefined;
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
                 navigator.geolocation.getCurrentPosition(
@@ -185,7 +196,7 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
         };
         document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-    }, [isTrackingActive, handlePosition, handlePositionError]);
+    }, [isTrackingActive, permissionState, handlePosition, handlePositionError]);
 
     // Enable Location / Retry. The very first call (enabled false ->
     // true) flips `isTrackingActive` on, which is enough on its own to
