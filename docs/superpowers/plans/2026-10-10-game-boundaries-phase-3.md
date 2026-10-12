@@ -17,11 +17,11 @@
 - **No coordinates ever reach Firestore, a log, or anything beyond this browser's own render.** The device's own position lives only in this hook's in-memory state, for display and for the one outgoing report at a time — `reportPlayerLocation`'s own contract (Phase 1) never persists them, and nothing in this plan may `console.log` a `lat`/`lng`/`accuracyM` value.
 - **Deliberate scope cut, noted for the user's review:** the spec's Error handling section mentions an "offline indicator" for a dropped connection. This plan does not add a `navigator.onLine`/`online`-event listener or any explicit offline UI. GPS positioning itself is not network-dependent, so a dropped Firestore/callable connection only affects whether a report's `reportPlayerLocation()` call succeeds — `sendReport`'s existing catch already swallows that failure safely, and the existing 15-second backstop poll already retries on its own schedule without needing a dedicated reconnect signal. The player-visible effect of a real outage is simply "no status update for a while," which the existing 30-second freshness timeout already surfaces as Location unavailable — the spec's own intended outcome, just reached passively rather than via a dedicated indicator. Flag if a more explicit indicator is wanted.
 - Exact player-facing copy and cadence, from the spec (do not paraphrase):
-  - Pre-permission explanation (verbatim): "Turn on location so we can check that you are inside the game area. The moderator sees your boundary status. Other players cannot see your location. Keep the game open for location updates."
-  - Status table: Inside → "In game area." · Near boundary → "You are near the edge of the game area; check the map." · Outside → persistent warning "You are outside the game area. Please return inside." · Location unavailable → explain the reason, offer Enable Location/Retry where applicable, show the last successful check time if any. · Boundary disabled → hide enforcement status and stop collection.
-  - Cadence: send a newly acquired fix at most once every 5 seconds; aim for a fresh check at least every 15 seconds while the page is active; reacquire a fresh fix when the page becomes visible again; never resend an old fix as a fresh heartbeat.
-  - Freshness: after 30 seconds without a usable fix, show Location unavailable even if the stored status was Inside or Outside — derived locally on a timer, even when Firestore emits no new snapshot.
-  - Do not continually reopen the permission prompt. A missing geolocation API, timeout, or disabled device service is an actionable unavailable message, never an outside warning.
+    - Pre-permission explanation (verbatim): "Turn on location so we can check that you are inside the game area. The moderator sees your boundary status. Other players cannot see your location. Keep the game open for location updates."
+    - Status table: Inside → "In game area." · Near boundary → "You are near the edge of the game area; check the map." · Outside → persistent warning "You are outside the game area. Please return inside." · Location unavailable → explain the reason, offer Enable Location/Retry where applicable, show the last successful check time if any. · Boundary disabled → hide enforcement status and stop collection.
+    - Cadence: send a newly acquired fix at most once every 5 seconds; aim for a fresh check at least every 15 seconds while the page is active; reacquire a fresh fix when the page becomes visible again; never resend an old fix as a fresh heartbeat.
+    - Freshness: after 30 seconds without a usable fix, show Location unavailable even if the stored status was Inside or Outside — derived locally on a timer, even when Firestore emits no new snapshot.
+    - Do not continually reopen the permission prompt. A missing geolocation API, timeout, or disabled device service is an actionable unavailable message, never an outside warning.
 - `reportPlayerLocation` callable (Phase 1, `functions/callableFunctions/reportPlayerLocation.js`, registered): a fix report is `{ roomId, boundaryRevision, sampleMs, lat, lng, accuracyM }`; an error report is `{ roomId, boundaryRevision, sampleMs, error }` with `error` one of `'permission_denied' | 'unavailable' | 'timeout'` and no coordinates. Both return `{ status: 'inside'|'outside'|'near'|'unavailable', reason: string|null }`. Rejects with `.message` on an ended game, a disabled or revision-mismatched boundary, an invalid/stale/out-of-order sample, or the 20-per-minute rate limit.
 - `deriveFreshStatus(state, nowMs, current = {})` (Phase 1, `src/game/gameBoundary.js`, already exported): `state` is `{ status, reason, lastUsableMs, boundaryRevision, uid }`; `current` is optionally `{ currentRevision, currentUid }`, and when both are given a revision or uid mismatch returns `{ status: 'unavailable', reason: 'wrong_revision' | 'wrong_uid' }` ahead of the ordinary freshness check. `GAME_BOUNDARY_CONFIG.freshnessMs` is `30000`.
 - `rooms/{roomID}/boundaryStatuses/{playerId}` (Phase 1, `docs/data-model.md`): document ID is the same normalized player-document ID as `players/{playerId}`; fields include `boundaryRevision`, `uid`, `status`, `reason`, `lastUsableReceivedAt` (`Timestamp|null`), among others. A player may read only their own status doc, authorized by their current player document's `uid` matching their auth `uid` — already enforced by `firestore.rules`.
@@ -42,10 +42,12 @@
 ### Task 1: Pure location-report cadence helper
 
 **Files:**
+
 - Create: `src/game/locationReportCadence.js`
 - Test: `src/game/locationReportCadence.test.js`
 
 **Interfaces:**
+
 - Produces: `shouldSendFix(lastSentMs, nowMs)`, `isPollDue(lastSentMs, nowMs)`, `MIN_SEND_INTERVAL_MS` (`5000`), `MAX_FRESH_INTERVAL_MS` (`15000`).
 
 - [ ] **Step 1: Write the failing tests**
@@ -167,10 +169,12 @@ git commit -m "Add a pure cadence helper for location reporting"
 ### Task 2: Client plumbing — a status-doc getter and the report callable wrapper
 
 **Files:**
+
 - Modify: `src/components/firebase_calls/dbCalls.js` (one new function, placed directly after the existing `fetchPlayerReferenceForRoom`)
 - Create: `src/components/reportPlayerLocation.js`
 
 **Interfaces:**
+
 - Produces: `fetchBoundaryStatusReferenceForPlayer(playerName, roomID)` → a Firestore `DocumentReference`. `reportPlayerLocation(payload)` → `Promise<{status, reason}>`, where `payload` is either the fix shape or the error shape from the Global Constraints.
 
 This task is mechanical — both additions mirror exact, already-shipped patterns in this same repo. No dedicated test file for `reportPlayerLocation.js`, for the same reason `publishGameBoundary.js`/`disableGameBoundary.js` have none (see Global Constraints).
@@ -244,10 +248,12 @@ git commit -m "Add a boundary-status getter and the location-report callable wra
 ### Task 3: GameMap gains an own-position marker
 
 **Files:**
+
 - Modify: `src/components/map_components/GameMap.js`
 - Modify: `src/components/map_components/GameMap.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `shapeToPolygon` from `../../game/gameBoundary`, via `require()` (it is CommonJS and vendored — see Global Constraints), to render the accuracy circle as the exact same kind of canonical sampled polygon the moderator editor already produces and tests, instead of inventing new pixel-based circle math.
 - Produces: `GameMap` gains a new prop, `ownPosition: {lat: number, lng: number, accuracyM: number}|null`.
 
@@ -344,30 +350,24 @@ if (ownPosition && Number.isFinite(ownPosition.accuracyM) && ownPosition.accurac
 Inside the `<Map>` tree, after the existing boundary `<Source>` block, add:
 
 ```jsx
-{ownAccuracyGeoJson && (
-    <Source
-        id="own-position-accuracy"
-        type="geojson"
-        data={ownAccuracyGeoJson}
-    >
-        <Layer
-            id="own-position-accuracy-fill"
-            type="fill"
-            paint={{ 'fill-color': '#4299E1', 'fill-opacity': 0.15 }}
-        />
-    </Source>
-)}
-{ownPosition && (
-    <Marker longitude={ownPosition.lng} latitude={ownPosition.lat}>
-        <Box
-            w="14px"
-            h="14px"
-            borderRadius="full"
-            bg="#4299E1"
-            border="2px solid white"
-        />
-    </Marker>
-)}
+{
+    ownAccuracyGeoJson && (
+        <Source id="own-position-accuracy" type="geojson" data={ownAccuracyGeoJson}>
+            <Layer
+                id="own-position-accuracy-fill"
+                type="fill"
+                paint={{ 'fill-color': '#4299E1', 'fill-opacity': 0.15 }}
+            />
+        </Source>
+    );
+}
+{
+    ownPosition && (
+        <Marker longitude={ownPosition.lng} latitude={ownPosition.lat}>
+            <Box w="14px" h="14px" borderRadius="full" bg="#4299E1" border="2px solid white" />
+        </Marker>
+    );
+}
 ```
 
 The mocked `Source` in the test renders a `data-testid="mock-source"` div today — add `data-testid="own-position-accuracy-source"` to the SAME mock when `id === 'own-position-accuracy'` so the two sources (boundary and own-position) are distinguishable in a test; the simplest way is to key the test id off the `id` prop the real `Source` already receives:
@@ -399,10 +399,12 @@ git commit -m "Add an own-position marker and accuracy circle to GameMap"
 ### Task 4: The useBoundaryLocation hook
 
 **Files:**
+
 - Create: `src/hooks/useBoundaryLocation.js`
 - Test: `src/hooks/useBoundaryLocation.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `reportPlayerLocation` (Task 2), `shouldSendFix`/`isPollDue` (Task 1).
 - Produces: `useBoundaryLocation({ roomID, boundaryRevision, boundaryEnabled, isGameActive })` → `{ permissionState: 'unknown'|'granted'|'denied'|'unavailable', lastResult: {status, reason}|null, ownPosition: {lat, lng, accuracyM, acquiredAtMs}|null, requestPermission: () => void }`.
 
@@ -721,7 +723,10 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
 
     const sendReport = useCallback((payload) => {
         const current = contextRef.current;
-        if (payload.roomId !== current.roomID || payload.boundaryRevision !== current.boundaryRevision) {
+        if (
+            payload.roomId !== current.roomID ||
+            payload.boundaryRevision !== current.boundaryRevision
+        ) {
             return;
         }
         reportPlayerLocation(payload)
@@ -809,7 +814,11 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
         // first enable, a boundary revision changing while tracking is
         // already on (spec: boundary changes get "a new location
         // check"), and a room change.
-        navigator.geolocation.getCurrentPosition(handlePosition, handlePositionError, GEOLOCATION_OPTIONS);
+        navigator.geolocation.getCurrentPosition(
+            handlePosition,
+            handlePositionError,
+            GEOLOCATION_OPTIONS
+        );
         return () => navigator.geolocation.clearWatch(watchId);
     }, [isTrackingActive, roomID, boundaryRevision, handlePosition, handlePositionError]);
 
@@ -854,7 +863,11 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
     const requestPermission = useCallback(() => {
         setEnabled(true);
         if ('geolocation' in navigator) {
-            navigator.geolocation.getCurrentPosition(handlePosition, handlePositionError, GEOLOCATION_OPTIONS);
+            navigator.geolocation.getCurrentPosition(
+                handlePosition,
+                handlePositionError,
+                GEOLOCATION_OPTIONS
+            );
         } else {
             setPermissionState('unavailable');
         }
@@ -885,10 +898,12 @@ git commit -m "Add useBoundaryLocation: one geolocation watch per player session
 ### Task 5: PlayerMapModal
 
 **Files:**
+
 - Create: `src/components/map_components/PlayerMapModal.js`
 - Test: `src/components/map_components/PlayerMapModal.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `GameMap` (Task 3's `ownPosition` prop included).
 - Produces: `PlayerMapModal` component. Props: `isOpen`, `onClose`, `boundaryVertices`, `ownPosition` (same shape `useBoundaryLocation` returns, minus `acquiredAtMs` which this component ignores — staleness gating is Task 6's job, done before `ownPosition` ever reaches this component).
 
@@ -932,7 +947,13 @@ const RING = [
 const renderModal = (props = {}) =>
     render(
         <ChakraProvider>
-            <PlayerMapModal isOpen onClose={jest.fn()} boundaryVertices={RING} ownPosition={null} {...props} />
+            <PlayerMapModal
+                isOpen
+                onClose={jest.fn()}
+                boundaryVertices={RING}
+                ownPosition={null}
+                {...props}
+            />
         </ChakraProvider>
     );
 
@@ -954,9 +975,7 @@ describe('PlayerMapModal', () => {
     it('Recenter on Me flies the real map to the own position once available', () => {
         renderModal({ ownPosition: { lat: 10, lng: 20, accuracyM: 12 } });
         fireEvent.click(screen.getByRole('button', { name: 'Recenter on Me' }));
-        expect(fakeMap.flyTo).toHaveBeenCalledWith(
-            expect.objectContaining({ center: [20, 10] })
-        );
+        expect(fakeMap.flyTo).toHaveBeenCalledWith(expect.objectContaining({ center: [20, 10] }));
     });
 });
 ```
@@ -1054,10 +1073,12 @@ git commit -m "Add PlayerMapModal, the read-only player map"
 ### Task 6: Wire tracking and status UI into PlayerGame
 
 **Files:**
+
 - Modify: `src/pages/PlayerGame.js`
 - Modify: `src/pages/PlayerGame.test.jsx`
 
 **Interfaces:**
+
 - Consumes: `useBoundaryLocation` (Task 4), `PlayerMapModal` (Task 5), `fetchBoundaryStatusReferenceForPlayer` (Task 2), `deriveFreshStatus` (Phase 1, `src/game/gameBoundary.js`).
 
 Read `src/pages/PlayerGame.js` in full before editing — mirror its existing `useEffect`/`onSnapshot`/`handleSubscriptionError`/`useDisclosure`/`CreateAlert` patterns exactly rather than introducing new ones.
@@ -1076,8 +1097,9 @@ jest.mock('../hooks/useBoundaryLocation', () =>
         requestPermission: jest.fn(),
     }))
 );
-jest.mock('../components/map_components/PlayerMapModal', () => (props) =>
-    props.isOpen ? <div data-testid="mock-player-map-modal" /> : null
+jest.mock(
+    '../components/map_components/PlayerMapModal',
+    () => (props) => (props.isOpen ? <div data-testid="mock-player-map-modal" /> : null)
 );
 ```
 
@@ -1194,11 +1216,7 @@ const [gameBoundary, setGameBoundary] = useState(undefined);
 const [boundaryStatusDoc, setBoundaryStatusDoc] = useState(null);
 const [nowMs, setNowMs] = useState(Date.now());
 const previousRevisionRef = useRef(undefined);
-const {
-    isOpen: isMapOpen,
-    onOpen: onMapOpen,
-    onClose: onMapClose,
-} = useDisclosure();
+const { isOpen: isMapOpen, onOpen: onMapOpen, onClose: onMapClose } = useDisclosure();
 ```
 
 Extend the existing room-subscription effect's snapshot handler to also capture `gameBoundary`, and fire a "Game area is ready"/"Game area updated" toast on the right transitions. Compute the next value and run the toast/ref side effects as plain statements in the handler's own body — NOT inside `setGameBoundary`'s updater function, which must stay a pure value computation; React can invoke a functional `setState` updater more than once for the same update under some scheduling paths, which would risk a duplicate toast or a double-mutated ref if side effects lived there instead:
@@ -1293,57 +1311,59 @@ const statusText = {
 Render, inside the existing `{isGameActive && (...)}` block (add this alongside the existing target/eliminated text, not replacing it — a player can be alive/dead AND have a boundary status at the same time):
 
 ```jsx
-{gameBoundary?.enabled && (
-    <>
-        {permissionState === 'unknown' && (
-            <Box bg="blue.900" color="white" borderRadius="md" p={3} mb={2}>
-                <Text mb={2}>
-                    Turn on location so we can check that you are inside the game area. The
-                    moderator sees your boundary status. Other players cannot see your
-                    location. Keep the game open for location updates.
-                </Text>
-                <Button size="sm" onClick={requestPermission}>
-                    Enable Location
-                </Button>
-            </Box>
-        )}
-        {permissionState === 'denied' && (
-            <Box bg="orange.800" color="white" borderRadius="md" p={3} mb={2}>
-                <Text mb={2}>
-                    Location permission was denied. Enable it in your browser or device
-                    settings, then retry.
-                </Text>
-                <Button size="sm" onClick={requestPermission}>
-                    Retry
-                </Button>
-            </Box>
-        )}
-        {liveBoundaryStatus.status === 'outside' && (
-            <Box bg="red.700" color="white" borderRadius="md" p={2} mb={2} textAlign="center">
-                <Text fontWeight="bold">{statusText}</Text>
-            </Box>
-        )}
-        {liveBoundaryStatus.status !== 'outside' && liveBoundaryStatus.status !== 'unavailable' && (
-            <Text mb={2}>{statusText}</Text>
-        )}
-        {liveBoundaryStatus.status === 'unavailable' && (
-            <Text mb={2}>Location unavailable ({liveBoundaryStatus.reason ?? 'no_fix'}).</Text>
-        )}
-        <Button size="sm" mb={2} onClick={onMapOpen}>
-            View Game Map
-        </Button>
-        <PlayerMapModal
-            isOpen={isMapOpen}
-            onClose={onMapClose}
-            boundaryVertices={gameBoundary.vertices}
-            ownPosition={
-                ownPosition && nowMs - ownPosition.acquiredAtMs <= GAME_BOUNDARY_CONFIG.freshnessMs
-                    ? ownPosition
-                    : null
-            }
-        />
-    </>
-)}
+{
+    gameBoundary?.enabled && (
+        <>
+            {permissionState === 'unknown' && (
+                <Box bg="blue.900" color="white" borderRadius="md" p={3} mb={2}>
+                    <Text mb={2}>
+                        Turn on location so we can check that you are inside the game area. The
+                        moderator sees your boundary status. Other players cannot see your location.
+                        Keep the game open for location updates.
+                    </Text>
+                    <Button size="sm" onClick={requestPermission}>
+                        Enable Location
+                    </Button>
+                </Box>
+            )}
+            {permissionState === 'denied' && (
+                <Box bg="orange.800" color="white" borderRadius="md" p={3} mb={2}>
+                    <Text mb={2}>
+                        Location permission was denied. Enable it in your browser or device
+                        settings, then retry.
+                    </Text>
+                    <Button size="sm" onClick={requestPermission}>
+                        Retry
+                    </Button>
+                </Box>
+            )}
+            {liveBoundaryStatus.status === 'outside' && (
+                <Box bg="red.700" color="white" borderRadius="md" p={2} mb={2} textAlign="center">
+                    <Text fontWeight="bold">{statusText}</Text>
+                </Box>
+            )}
+            {liveBoundaryStatus.status !== 'outside' &&
+                liveBoundaryStatus.status !== 'unavailable' && <Text mb={2}>{statusText}</Text>}
+            {liveBoundaryStatus.status === 'unavailable' && (
+                <Text mb={2}>Location unavailable ({liveBoundaryStatus.reason ?? 'no_fix'}).</Text>
+            )}
+            <Button size="sm" mb={2} onClick={onMapOpen}>
+                View Game Map
+            </Button>
+            <PlayerMapModal
+                isOpen={isMapOpen}
+                onClose={onMapClose}
+                boundaryVertices={gameBoundary.vertices}
+                ownPosition={
+                    ownPosition &&
+                    nowMs - ownPosition.acquiredAtMs <= GAME_BOUNDARY_CONFIG.freshnessMs
+                        ? ownPosition
+                        : null
+                }
+            />
+        </>
+    );
+}
 ```
 
 That `ownPosition` staleness check is what keeps a stale fix from ever rendering as a live marker (Review Focus): it reads `nowMs` (this file's own local ticker, already defined above, re-rendering every second) rather than a fresh `Date.now()` call, and `GAME_BOUNDARY_CONFIG.freshnessMs` rather than a bare `30000`, so this check and `deriveFreshStatus`'s own freshness check can never silently drift apart from each other or from the spec's number.
