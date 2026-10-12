@@ -197,13 +197,10 @@ const verticesFromVertexDrag = (vertices, index, point) => {
     return next;
 };
 
-// The set of draggable handles for the CURRENT committed draft — empty
-// while a creation gesture is in progress (handlesForDraft is only read
-// when no tool is armed; see the render below) or when there is nothing
-// to edit yet.
 // A plain open line connecting the in-progress freehand points, so the
 // moderator sees the stroke take shape point by point instead of just a
-// scatter of dots until Finish closes it.
+// scatter of dots until Finish closes it. Also doubles as the rotation
+// handle's stem line below.
 const freehandLineGeoJson = (points) => ({
     type: 'Feature',
     geometry: {
@@ -212,6 +209,82 @@ const freehandLineGeoJson = (points) => ({
     },
     properties: {},
 });
+
+// --- rotation ---------------------------------------------------------
+//
+// Rectangle and Oval have no rotation concept anywhere in this app's
+// shape math (their shapeParameters are axis-aligned corners, or a
+// center + radii — the server independently recomputes a shape from its
+// stored parameters and rejects anything that doesn't match, so there
+// is nowhere to persist "and also rotated N degrees" without extending
+// that shared, already-shipped geometry). Rotating converts the shape
+// to Freehand instead: the rotated vertices themselves need no new
+// parameter at all, since Freehand's shapeParameters is always null —
+// it becomes editable with per-vertex handles afterward, the same as
+// any other Freehand shape. Circle gets no rotation handle; rotating a
+// circle is visually a no-op.
+
+// `vertices` is always a closed ring (first point repeated as the
+// last) — averaging it as-is would double-weight that one point,
+// biasing the centroid toward it instead of landing on the shape's
+// true geometric center, so the closing duplicate is dropped first.
+const centroidOf = (vertices) => {
+    const distinct = vertices.slice(0, -1);
+    return {
+        lat: distinct.reduce((sum, v) => sum + v.lat, 0) / distinct.length,
+        lng: distinct.reduce((sum, v) => sum + v.lng, 0) / distinct.length,
+    };
+};
+
+// Compass bearing in radians from `center` to `point`: 0 = north,
+// increasing clockwise (so east is +PI/2) — matches how a moderator
+// naturally reads "drag the handle around."
+const bearingFromCenter = (point, center) => {
+    const { x, y } = projectToMeters(point, center);
+    return Math.atan2(x, y);
+};
+
+const rotatePointAround = (point, center, deltaRadians) => {
+    const { x, y } = projectToMeters(point, center);
+    const cos = Math.cos(deltaRadians);
+    const sin = Math.sin(deltaRadians);
+    return offsetPoint(center, x * cos + y * sin, -x * sin + y * cos);
+};
+
+// Floats a fixed distance beyond the shape's own edge, in the same
+// direction from center as `reference` (one of the shape's real
+// vertices) — so the handle rotates together with the shape as
+// `reference` moves, with no separate angle tracked anywhere.
+const ROTATION_HANDLE_OFFSET_METERS = 30;
+
+const rotationHandlePosition = (reference, center) => {
+    const { x, y } = projectToMeters(reference, center);
+    const distance = Math.hypot(x, y) || 1;
+    const scale = (distance + ROTATION_HANDLE_OFFSET_METERS) / distance;
+    return offsetPoint(center, x * scale, y * scale);
+};
+
+// Null for Circle (no rotation handle) or when there is nothing to
+// rotate yet.
+const rotationHandleFor = (draft, { onLiveUpdate, onCommit }) => {
+    if (!draft.vertices || draft.shapeType === 'circle') return null;
+    const center = centroidOf(draft.vertices);
+    const reference = draft.vertices[0];
+    const startBearing = bearingFromCenter(reference, center);
+    const handlePosition = rotationHandlePosition(reference, center);
+
+    const rotatedTo = (point) => {
+        const delta = bearingFromCenter(point, center) - startBearing;
+        return draft.vertices.map((v) => rotatePointAround(v, center, delta));
+    };
+
+    return {
+        ...handlePosition,
+        stemFrom: reference,
+        onDrag: (point) => onLiveUpdate(draftFromFreehand(rotatedTo(point))),
+        onDragEnd: (point) => onCommit(draftFromFreehand(rotatedTo(point))),
+    };
+};
 
 const handlesForDraft = (draft, { onLiveUpdate, onCommit }) => {
     if (!draft.vertices) return [];
@@ -602,6 +675,10 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
         activeTool === null
             ? handlesForDraft(draft, { onLiveUpdate: setDraft, onCommit: commitDraft })
             : [];
+    const rotationHandle =
+        activeTool === null
+            ? rotationHandleFor(draft, { onLiveUpdate: setDraft, onCommit: commitDraft })
+            : null;
 
     return (
         <Modal isOpen={isOpen} onClose={handleCancel} size={{ base: 'full', md: '6xl' }}>
@@ -688,6 +765,50 @@ const BoundaryEditorModal = ({ isOpen, onClose, currentBoundary, roomID }) => {
                                 />
                             </Marker>
                         ))}
+                        {rotationHandle && (
+                            <Source
+                                id="rotation-stem"
+                                type="geojson"
+                                data={freehandLineGeoJson([
+                                    rotationHandle.stemFrom,
+                                    rotationHandle,
+                                ])}
+                            >
+                                <Layer
+                                    id="rotation-stem-line"
+                                    type="line"
+                                    paint={{ 'line-color': 'green', 'line-width': 1 }}
+                                />
+                            </Source>
+                        )}
+                        {rotationHandle && (
+                            <Marker
+                                longitude={rotationHandle.lng}
+                                latitude={rotationHandle.lat}
+                                draggable
+                                onDrag={(e) =>
+                                    rotationHandle.onDrag({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+                                }
+                                onDragEnd={(e) =>
+                                    rotationHandle.onDragEnd({
+                                        lat: e.lngLat.lat,
+                                        lng: e.lngLat.lng,
+                                    })
+                                }
+                            >
+                                <div
+                                    data-testid="handle-rotate"
+                                    style={{
+                                        width: '14px',
+                                        height: '14px',
+                                        borderRadius: '50%',
+                                        background: 'white',
+                                        border: '2px solid green',
+                                        cursor: 'grab',
+                                    }}
+                                />
+                            </Marker>
+                        )}
                         {activeTool === 'freehand' && freehandPoints.length >= 2 && (
                             <Source
                                 id="freehand-in-progress"

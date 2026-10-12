@@ -136,10 +136,17 @@ const click = (lngLat) => {
     });
 };
 
-const centroid = (vertices) => ({
-    lat: vertices.reduce((sum, v) => sum + v.lat, 0) / vertices.length,
-    lng: vertices.reduce((sum, v) => sum + v.lng, 0) / vertices.length,
-});
+// Drops the closing duplicate (vertices is always a closed ring) before
+// averaging, or that one point gets double-weighted — negligible for a
+// 64-sample circle, but a real, test-breaking bias for a 4-corner
+// rectangle (1/5 of the weight landing on one corner).
+const centroid = (vertices) => {
+    const distinct = vertices.slice(0, -1);
+    return {
+        lat: distinct.reduce((sum, v) => sum + v.lat, 0) / distinct.length,
+        lng: distinct.reduce((sum, v) => sum + v.lng, 0) / distinct.length,
+    };
+};
 
 const BOX_HANDLE_KEYS = ['sw', 's', 'se', 'e', 'ne', 'n', 'nw', 'w'];
 
@@ -428,6 +435,93 @@ describe('BoundaryEditorModal — editing handles', () => {
         const vertices = lastProps.boundaryVertices;
         expect(vertices[0]).toEqual({ lat: 40.0005, lng: -74.0005 });
         expect(vertices[vertices.length - 1]).toEqual({ lat: 40.0005, lng: -74.0005 });
+    });
+});
+
+describe('BoundaryEditorModal — rotating a shape', () => {
+    it('shows a rotation handle with a stem line for a rectangle, but not for a circle', () => {
+        renderModal();
+        fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -73.99 });
+        expect(screen.getByTestId('handle-rotate')).toBeInTheDocument();
+        expect(screen.getByTestId('source-rotation-stem')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Circle' }));
+        dragMap({ lat: 41, lng: -75 }, { lat: 41.01, lng: -75 });
+        expect(screen.queryByTestId('handle-rotate')).not.toBeInTheDocument();
+    });
+
+    it('hides the rotation handle while a new-shape tool is armed, same as the resize handles', () => {
+        renderModal();
+        fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -73.99 });
+        expect(screen.getByTestId('handle-rotate')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Oval' }));
+        expect(screen.queryByTestId('handle-rotate')).not.toBeInTheDocument();
+    });
+
+    it('rotating a rectangle converts it to a Freehand shape, keeping its vertices (and so its on-map position) in place', () => {
+        renderModal();
+        fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -73.99 });
+        const before = lastProps.boundaryVertices;
+        const beforeCenter = centroid(before);
+
+        // Drag the rotation handle to a point roughly 90 degrees around
+        // from where it started.
+        simulateMarkerDrag('handle-rotate', {
+            lat: beforeCenter.lat,
+            lng: beforeCenter.lng + 0.02,
+        });
+
+        // It's no longer box-edited — the box handles are gone, replaced
+        // by one handle per vertex, the same as any other Freehand shape.
+        expect(screen.queryByTestId('handle-sw')).not.toBeInTheDocument();
+        expect(screen.getByTestId('handle-vertex-0')).toBeInTheDocument();
+
+        const after = lastProps.boundaryVertices;
+        expect(after).not.toEqual(before);
+        // Rotating around the centroid never moves the centroid itself.
+        const afterCenter = centroid(after);
+        expect(afterCenter.lat).toBeCloseTo(beforeCenter.lat, 3);
+        expect(afterCenter.lng).toBeCloseTo(beforeCenter.lng, 3);
+    });
+
+    it('rotating a Freehand shape stays Freehand and rotates around its own centroid', () => {
+        renderModal();
+        fireEvent.click(screen.getByRole('button', { name: 'Freehand' }));
+        click({ lat: 40, lng: -74 });
+        click({ lat: 40.001, lng: -74 });
+        click({ lat: 40.001, lng: -73.999 });
+        fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+        const before = lastProps.boundaryVertices;
+        const beforeCenter = centroid(before);
+
+        simulateMarkerDrag('handle-rotate', {
+            lat: beforeCenter.lat + 0.001,
+            lng: beforeCenter.lng,
+        });
+
+        const after = lastProps.boundaryVertices;
+        expect(after).not.toEqual(before);
+        const afterCenter = centroid(after);
+        expect(afterCenter.lat).toBeCloseTo(beforeCenter.lat, 3);
+        expect(afterCenter.lng).toBeCloseTo(beforeCenter.lng, 3);
+    });
+
+    it('Undo after a rotation restores the pre-rotation shape, box handles included', () => {
+        renderModal();
+        fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -73.99 });
+        const beforeRotate = lastProps.boundaryVertices;
+
+        simulateMarkerDrag('handle-rotate', { lat: 40.005, lng: -73.97 });
+        expect(screen.queryByTestId('handle-sw')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+        expect(lastProps.boundaryVertices).toEqual(beforeRotate);
+        expect(screen.getByTestId('handle-sw')).toBeInTheDocument();
     });
 });
 
