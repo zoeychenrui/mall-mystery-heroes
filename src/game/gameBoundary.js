@@ -36,6 +36,22 @@ const offsetPoint = (center, eastMeters, northMeters) => ({
     lng: center.lng + toDegrees(eastMeters / (EARTH_RADIUS_M * Math.cos(toRadians(center.lat)))),
 });
 
+// Rotates `point` clockwise by `degrees` around `center`. `degrees` may be
+// 0, null, or undefined, all treated as "no rotation" — the single
+// rotation primitive shapeToPolygon's Rectangle/Oval branches use, and
+// the only one the client-side editor uses too (BoundaryEditorModal.js),
+// so the shape the moderator sees while dragging and the shape the
+// server re-derives to validate a publish can never disagree about what
+// "rotated 30 degrees" means.
+const rotatePoint = (point, center, degrees) => {
+    if (!degrees) return point;
+    const radians = toRadians(degrees);
+    const { x, y } = projectToMeters(point, center);
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    return offsetPoint(center, x * cos + y * sin, -x * sin + y * cos);
+};
+
 const requirePoint = (point, label) => {
     if (!point || !isFiniteNumber(point.lat) || !isFiniteNumber(point.lng)) {
         throw new Error(`${label} must be {lat, lng} with finite numbers`);
@@ -72,24 +88,33 @@ const closeRing = (points) => {
 /**
  * @throws {Error} when the shape type is unknown or its parameters are malformed
  */
+const requireOptionalRotation = (rotationDegrees, label) => {
+    if (rotationDegrees != null && !isFiniteNumber(rotationDegrees)) {
+        throw new Error(`${label} must be a finite number`);
+    }
+};
+
 const shapeToPolygon = (shapeType, shapeParameters) => {
     if (shapeType === 'rectangle') {
-        const { corners } = shapeParameters || {};
+        const { corners, rotationDegrees } = shapeParameters || {};
         if (!Array.isArray(corners) || corners.length !== 2) {
             throw new Error('rectangle corners must be exactly two points');
         }
         corners.forEach((corner) => requirePoint(corner, 'rectangle corner'));
+        requireOptionalRotation(rotationDegrees, 'rectangle rotationDegrees');
         const [a, b] = corners;
         const minLat = Math.min(a.lat, b.lat);
         const maxLat = Math.max(a.lat, b.lat);
         const minLng = Math.min(a.lng, b.lng);
         const maxLng = Math.max(a.lng, b.lng);
-        return closeRing([
+        const center = { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 };
+        const unrotated = [
             { lat: minLat, lng: minLng },
             { lat: minLat, lng: maxLng },
             { lat: maxLat, lng: maxLng },
             { lat: maxLat, lng: minLng },
-        ]);
+        ];
+        return closeRing(unrotated.map((corner) => rotatePoint(corner, center, rotationDegrees)));
     }
     if (shapeType === 'circle') {
         const { center, radiusMeters } = shapeParameters || {};
@@ -98,11 +123,16 @@ const shapeToPolygon = (shapeType, shapeParameters) => {
         return sampleEllipse(center, radiusMeters, radiusMeters);
     }
     if (shapeType === 'oval') {
-        const { center, radiusXMeters, radiusYMeters } = shapeParameters || {};
+        const { center, radiusXMeters, radiusYMeters, rotationDegrees } = shapeParameters || {};
         requirePoint(center, 'oval center');
         requirePositive(radiusXMeters, 'oval radiusXMeters');
         requirePositive(radiusYMeters, 'oval radiusYMeters');
-        return sampleEllipse(center, radiusXMeters, radiusYMeters);
+        requireOptionalRotation(rotationDegrees, 'oval rotationDegrees');
+        const ring = sampleEllipse(center, radiusXMeters, radiusYMeters);
+        if (!rotationDegrees) return ring;
+        return closeRing(
+            ring.slice(0, -1).map((point) => rotatePoint(point, center, rotationDegrees))
+        );
     }
     if (shapeType === 'freehand') {
         throw new Error('freehand shapes are supplied as vertices, not converted');
@@ -404,6 +434,7 @@ module.exports = {
     validateBoundaryShape,
     projectToMeters,
     offsetPoint,
+    rotatePoint,
     GAME_BOUNDARY_CONFIG,
     isPointInPolygon,
     distanceToRingMeters,

@@ -30,7 +30,12 @@ import CreateAlert from '../CreateAlert';
 // production webpack build requires, even though Jest's CommonJS-based
 // test runner never notices — see boundaryDraft.js's header comment for
 // the full story (this hit the exact same wall one import earlier).
-const { projectToMeters, offsetPoint, isPointInPolygon } = require('../../game/gameBoundary');
+const {
+    projectToMeters,
+    offsetPoint,
+    isPointInPolygon,
+    rotatePoint,
+} = require('../../game/gameBoundary');
 
 const TOOLS = ['freehand', 'rectangle', 'circle', 'oval'];
 
@@ -167,6 +172,7 @@ const translateDraft = (draft, deltaLat, deltaLng) => {
     if (shapeType === 'rectangle') {
         return draftFromParameters('rectangle', {
             corners: shapeParameters.corners.map(shiftPoint),
+            rotationDegrees: shapeParameters.rotationDegrees,
         });
     }
     if (shapeType === 'circle') {
@@ -180,6 +186,7 @@ const translateDraft = (draft, deltaLat, deltaLng) => {
             center: shiftPoint(shapeParameters.center),
             radiusXMeters: shapeParameters.radiusXMeters,
             radiusYMeters: shapeParameters.radiusYMeters,
+            rotationDegrees: shapeParameters.rotationDegrees,
         });
     }
     if (shapeType === 'freehand') {
@@ -212,17 +219,18 @@ const freehandLineGeoJson = (points) => ({
 
 // --- rotation ---------------------------------------------------------
 //
-// Rectangle and Oval have no rotation concept anywhere in this app's
-// shape math (their shapeParameters are axis-aligned corners, or a
-// center + radii — the server independently recomputes a shape from its
-// stored parameters and rejects anything that doesn't match, so there
-// is nowhere to persist "and also rotated N degrees" without extending
-// that shared, already-shipped geometry). Rotating converts the shape
-// to Freehand instead: the rotated vertices themselves need no new
-// parameter at all, since Freehand's shapeParameters is always null —
-// it becomes editable with per-vertex handles afterward, the same as
-// any other Freehand shape. Circle gets no rotation handle; rotating a
-// circle is visually a no-op.
+// Rectangle and Oval carry an optional `rotationDegrees` in their
+// shapeParameters (src/game/gameBoundary.js's shapeToPolygon applies it;
+// see that file for why the rotation formula itself lives there, shared
+// by both this editor and the server's own re-validation of a publish).
+// Dragging the rotation handle just sets that one number — the shape
+// stays a real, still-box-resizable Rectangle or Oval throughout, the
+// same as any other vector-drawing tool's rotate handle. Circle gets no
+// rotation handle; rotating a circle is visually a no-op. Freehand has
+// no rotation parameter to set (it has no shapeParameters at all), so
+// it rotates by transforming its vertices directly instead.
+
+const toDegrees = (radians) => (radians * 180) / Math.PI;
 
 // `vertices` is always a closed ring (first point repeated as the
 // last) — averaging it as-is would double-weight that one point,
@@ -238,23 +246,17 @@ const centroidOf = (vertices) => {
 
 // Compass bearing in radians from `center` to `point`: 0 = north,
 // increasing clockwise (so east is +PI/2) — matches how a moderator
-// naturally reads "drag the handle around."
+// naturally reads "drag the handle around," and matches rotatePoint's
+// own clockwise convention (see gameBoundary.js).
 const bearingFromCenter = (point, center) => {
     const { x, y } = projectToMeters(point, center);
     return Math.atan2(x, y);
 };
 
-const rotatePointAround = (point, center, deltaRadians) => {
-    const { x, y } = projectToMeters(point, center);
-    const cos = Math.cos(deltaRadians);
-    const sin = Math.sin(deltaRadians);
-    return offsetPoint(center, x * cos + y * sin, -x * sin + y * cos);
-};
-
 // Floats a fixed distance beyond the shape's own edge, in the same
-// direction from center as `reference` (one of the shape's real
-// vertices) — so the handle rotates together with the shape as
-// `reference` moves, with no separate angle tracked anywhere.
+// direction from center as `reference` — so the handle sits just
+// outside the shape's boundary, scaled from whatever `reference`'s own
+// distance from center happens to be.
 const ROTATION_HANDLE_OFFSET_METERS = 30;
 
 const rotationHandlePosition = (reference, center) => {
@@ -268,14 +270,59 @@ const rotationHandlePosition = (reference, center) => {
 // rotate yet.
 const rotationHandleFor = (draft, { onLiveUpdate, onCommit }) => {
     if (!draft.vertices || draft.shapeType === 'circle') return null;
+
+    if (draft.shapeType === 'rectangle' || draft.shapeType === 'oval') {
+        if (!draft.shapeParameters) return null;
+        const isRectangle = draft.shapeType === 'rectangle';
+        const box = isRectangle
+            ? boxFromCorners(draft.shapeParameters.corners)
+            : boxFromOvalParams(
+                  draft.shapeParameters.center,
+                  draft.shapeParameters.radiusXMeters,
+                  draft.shapeParameters.radiusYMeters
+              );
+        const center = { lat: (box.minLat + box.maxLat) / 2, lng: (box.minLng + box.maxLng) / 2 };
+        const currentRotation = draft.shapeParameters.rotationDegrees || 0;
+        // The box's own local "north" handle, rotated to the shape's
+        // CURRENT orientation — by construction, this point's bearing
+        // from center always equals currentRotation, so a later drag's
+        // bearing directly IS the new rotationDegrees, no delta needed.
+        const reference = rotatePoint(boxHandlePositions(box).n, center, currentRotation);
+        const handlePosition = rotationHandlePosition(reference, center);
+
+        const applyRotation = (point) => {
+            const rotationDegrees = toDegrees(bearingFromCenter(point, center));
+            return isRectangle
+                ? draftFromParameters('rectangle', {
+                      corners: draft.shapeParameters.corners,
+                      rotationDegrees,
+                  })
+                : draftFromParameters('oval', {
+                      center: draft.shapeParameters.center,
+                      radiusXMeters: draft.shapeParameters.radiusXMeters,
+                      radiusYMeters: draft.shapeParameters.radiusYMeters,
+                      rotationDegrees,
+                  });
+        };
+
+        return {
+            ...handlePosition,
+            stemFrom: reference,
+            onDrag: (point) => onLiveUpdate(applyRotation(point)),
+            onDragEnd: (point) => onCommit(applyRotation(point)),
+        };
+    }
+
+    // Freehand: no stored rotation parameter — rotate the vertices
+    // directly around their own centroid instead.
     const center = centroidOf(draft.vertices);
     const reference = draft.vertices[0];
     const startBearing = bearingFromCenter(reference, center);
     const handlePosition = rotationHandlePosition(reference, center);
 
     const rotatedTo = (point) => {
-        const delta = bearingFromCenter(point, center) - startBearing;
-        return draft.vertices.map((v) => rotatePointAround(v, center, delta));
+        const deltaDegrees = toDegrees(bearingFromCenter(point, center) - startBearing);
+        return draft.vertices.map((v) => rotatePoint(v, center, deltaDegrees));
     };
 
     return {
@@ -297,47 +344,49 @@ const handlesForDraft = (draft, { onLiveUpdate, onCommit }) => {
     if (draft.shapeType !== 'freehand' && !draft.shapeParameters) return [];
 
     if (draft.shapeType === 'rectangle') {
-        const box = boxFromCorners(draft.shapeParameters.corners);
+        const { corners, rotationDegrees } = draft.shapeParameters;
+        const box = boxFromCorners(corners);
+        const center = { lat: (box.minLat + box.maxLat) / 2, lng: (box.minLng + box.maxLng) / 2 };
         const positions = boxHandlePositions(box);
+        // A handle's RENDERED position is its local (unrotated) spot,
+        // rotated to match the shape — but a DRAG must go the other way
+        // first: the absolute point the moderator dragged to is rotated
+        // BACK into the box's own local frame before boxFromHandleDrag
+        // (which only knows how to resize an axis-aligned box) ever sees
+        // it, then the resulting box is kept in that same local frame —
+        // rotationDegrees is carried through unchanged, applied once at
+        // render/shapeToPolygon time, not baked into the stored corners.
+        const applyDrag = (key, point) => {
+            const localPoint = rotatePoint(point, center, -(rotationDegrees || 0));
+            return draftFromParameters('rectangle', {
+                corners: boxToCorners(boxFromHandleDrag(box, key, localPoint)),
+                rotationDegrees,
+            });
+        };
         return BOX_HANDLE_KEYS.map((key) => ({
             key,
-            ...positions[key],
-            onDrag: (point) =>
-                onLiveUpdate(
-                    draftFromParameters('rectangle', {
-                        corners: boxToCorners(boxFromHandleDrag(box, key, point)),
-                    })
-                ),
-            onDragEnd: (point) =>
-                onCommit(
-                    draftFromParameters('rectangle', {
-                        corners: boxToCorners(boxFromHandleDrag(box, key, point)),
-                    })
-                ),
+            ...rotatePoint(positions[key], center, rotationDegrees),
+            onDrag: (point) => onLiveUpdate(applyDrag(key, point)),
+            onDragEnd: (point) => onCommit(applyDrag(key, point)),
         }));
     }
 
     if (draft.shapeType === 'oval') {
-        const { center, radiusXMeters, radiusYMeters } = draft.shapeParameters;
+        const { center, radiusXMeters, radiusYMeters, rotationDegrees } = draft.shapeParameters;
         const box = boxFromOvalParams(center, radiusXMeters, radiusYMeters);
         const positions = boxHandlePositions(box);
+        const applyDrag = (key, point) => {
+            const localPoint = rotatePoint(point, center, -(rotationDegrees || 0));
+            return draftFromParameters('oval', {
+                ...ovalParamsFromBox(boxFromHandleDrag(box, key, localPoint)),
+                rotationDegrees,
+            });
+        };
         return BOX_HANDLE_KEYS.map((key) => ({
             key,
-            ...positions[key],
-            onDrag: (point) =>
-                onLiveUpdate(
-                    draftFromParameters(
-                        'oval',
-                        ovalParamsFromBox(boxFromHandleDrag(box, key, point))
-                    )
-                ),
-            onDragEnd: (point) =>
-                onCommit(
-                    draftFromParameters(
-                        'oval',
-                        ovalParamsFromBox(boxFromHandleDrag(box, key, point))
-                    )
-                ),
+            ...rotatePoint(positions[key], center, rotationDegrees),
+            onDrag: (point) => onLiveUpdate(applyDrag(key, point)),
+            onDragEnd: (point) => onCommit(applyDrag(key, point)),
         }));
     }
 

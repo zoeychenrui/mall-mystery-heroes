@@ -461,7 +461,7 @@ describe('BoundaryEditorModal — rotating a shape', () => {
         expect(screen.queryByTestId('handle-rotate')).not.toBeInTheDocument();
     });
 
-    it('rotating a rectangle converts it to a Freehand shape, keeping its vertices (and so its on-map position) in place', () => {
+    it('rotating a rectangle keeps it a Rectangle with box handles, still movable to the correct centroid', () => {
         renderModal();
         fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
         dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -73.99 });
@@ -475,10 +475,12 @@ describe('BoundaryEditorModal — rotating a shape', () => {
             lng: beforeCenter.lng + 0.02,
         });
 
-        // It's no longer box-edited — the box handles are gone, replaced
-        // by one handle per vertex, the same as any other Freehand shape.
-        expect(screen.queryByTestId('handle-sw')).not.toBeInTheDocument();
-        expect(screen.getByTestId('handle-vertex-0')).toBeInTheDocument();
+        // Still a box-edited Rectangle — the same 8 handles, not
+        // converted to per-vertex Freehand handles.
+        BOX_HANDLE_KEYS.forEach((key) => {
+            expect(screen.getByTestId(`handle-${key}`)).toBeInTheDocument();
+        });
+        expect(screen.queryByTestId('handle-vertex-0')).not.toBeInTheDocument();
 
         const after = lastProps.boundaryVertices;
         expect(after).not.toEqual(before);
@@ -486,6 +488,41 @@ describe('BoundaryEditorModal — rotating a shape', () => {
         const afterCenter = centroid(after);
         expect(afterCenter.lat).toBeCloseTo(beforeCenter.lat, 3);
         expect(afterCenter.lng).toBeCloseTo(beforeCenter.lng, 3);
+    });
+
+    it('resizing a rotated rectangle by its corner handle still keeps it a well-formed, differently-shaped Rectangle', () => {
+        renderModal();
+        fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
+        dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -73.99 });
+
+        // Rotate 90 degrees: due east of center becomes the new "north" handle.
+        const center = centroid(lastProps.boundaryVertices);
+        simulateMarkerDrag('handle-rotate', { lat: center.lat, lng: center.lng + 0.02 });
+
+        const beforeResize = lastProps.boundaryVertices;
+        const beforeCenter = centroid(beforeResize);
+
+        // Drag the "sw" handle: in the rotated frame this still means
+        // "resize from one corner" — the rotated shape's centroid must
+        // shift as a result, since only one corner moved, not stay
+        // exactly where it was.
+        simulateMarkerDrag('handle-sw', { lat: center.lat - 0.02, lng: center.lng - 0.02 });
+
+        const afterResize = lastProps.boundaryVertices;
+        expect(afterResize).not.toEqual(beforeResize);
+        const afterCenter = centroid(afterResize);
+        expect(
+            Math.abs(afterCenter.lat - beforeCenter.lat) +
+                Math.abs(afterCenter.lng - beforeCenter.lng)
+        ).toBeGreaterThan(0.0001);
+
+        // Still a box-edited Rectangle with its full handle set, including
+        // the rotation handle — resizing while rotated must not drop back
+        // to Freehand or lose a handle.
+        BOX_HANDLE_KEYS.forEach((key) => {
+            expect(screen.getByTestId(`handle-${key}`)).toBeInTheDocument();
+        });
+        expect(screen.getByTestId('handle-rotate')).toBeInTheDocument();
     });
 
     it('rotating a Freehand shape stays Freehand and rotates around its own centroid', () => {
@@ -515,9 +552,13 @@ describe('BoundaryEditorModal — rotating a shape', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
         dragMap({ lat: 40, lng: -74 }, { lat: 40.01, lng: -73.99 });
         const beforeRotate = lastProps.boundaryVertices;
+        expect(screen.getByTestId('handle-sw')).toBeInTheDocument();
 
         simulateMarkerDrag('handle-rotate', { lat: 40.005, lng: -73.97 });
-        expect(screen.queryByTestId('handle-sw')).not.toBeInTheDocument();
+        // Rotating keeps it a box-edited Rectangle — the handle persists,
+        // just at its new, rotated position.
+        expect(screen.getByTestId('handle-sw')).toBeInTheDocument();
+        expect(lastProps.boundaryVertices).not.toEqual(beforeRotate);
 
         fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
         expect(lastProps.boundaryVertices).toEqual(beforeRotate);

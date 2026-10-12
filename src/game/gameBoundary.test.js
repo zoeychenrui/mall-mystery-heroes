@@ -3,6 +3,7 @@ const {
     shapeToPolygon,
     validateBoundaryShape,
     projectToMeters,
+    rotatePoint,
 } = require('./gameBoundary');
 
 const square = [
@@ -43,6 +44,72 @@ describe('shapeToPolygon', () => {
             radiusYMeters: 50,
         });
         expect(ring).toHaveLength(65);
+    });
+
+    it('a rectangle with no rotationDegrees, or exactly 0, is identical to the unrotated one', () => {
+        const params = {
+            corners: [
+                { lat: 40.0, lng: -74.0 },
+                { lat: 40.001, lng: -73.999 },
+            ],
+        };
+        const unrotated = shapeToPolygon('rectangle', params);
+        expect(shapeToPolygon('rectangle', { ...params, rotationDegrees: 0 })).toEqual(unrotated);
+        expect(shapeToPolygon('rectangle', { ...params, rotationDegrees: null })).toEqual(
+            unrotated
+        );
+    });
+
+    it('rotating a rectangle 90 degrees keeps its center and side lengths, but swaps which sides are long/short', () => {
+        const params = {
+            corners: [
+                { lat: 40.0, lng: -74.0 },
+                { lat: 40.001, lng: -73.998 }, // taller east-west than north-south
+            ],
+        };
+        const unrotated = shapeToPolygon('rectangle', params);
+        const rotated = shapeToPolygon('rectangle', { ...params, rotationDegrees: 90 });
+
+        const spanMeters = (ring, axis) => {
+            const origin = ring[0];
+            const projected = ring.map((p) => projectToMeters(p, origin));
+            const values = projected.map((p) => p[axis]);
+            return Math.max(...values) - Math.min(...values);
+        };
+        // A 90-degree turn swaps which axis is the long one.
+        expect(spanMeters(rotated, 'x')).toBeCloseTo(spanMeters(unrotated, 'y'), 0);
+        expect(spanMeters(rotated, 'y')).toBeCloseTo(spanMeters(unrotated, 'x'), 0);
+    });
+
+    it('a rotated rectangle is still rejected as a rectangle by its own validation rules (self-intersection, area) exactly like an unrotated one', () => {
+        const params = {
+            corners: [
+                { lat: 40.0, lng: -74.0 },
+                { lat: 40.001, lng: -73.999 },
+            ],
+            rotationDegrees: 37,
+        };
+        const ring = shapeToPolygon('rectangle', params);
+        expect(validateBoundaryShape('rectangle', ring)).toEqual({ ok: true });
+    });
+
+    it('rotating an oval keeps it centered, and rejects a non-finite rotationDegrees', () => {
+        const params = { center: { lat: 40.0, lng: -74.0 }, radiusXMeters: 200, radiusYMeters: 50 };
+        const rotated = shapeToPolygon('oval', { ...params, rotationDegrees: 45 });
+        expect(rotated).toHaveLength(65);
+
+        expect(() => shapeToPolygon('oval', { ...params, rotationDegrees: NaN })).toThrow(
+            /rotationDegrees/
+        );
+        expect(() =>
+            shapeToPolygon('rectangle', {
+                corners: [
+                    { lat: 40.0, lng: -74.0 },
+                    { lat: 40.001, lng: -73.999 },
+                ],
+                rotationDegrees: 'forty-five',
+            })
+        ).toThrow(/rotationDegrees/);
     });
 
     it('rejects an unknown shape type', () => {
@@ -262,6 +329,40 @@ describe('offsetPoint', () => {
     it('east/north of zero is the center itself', () => {
         const center = { lat: 40, lng: -74 };
         expect(offsetPoint(center, 0, 0)).toEqual(center);
+    });
+});
+
+describe('rotatePoint', () => {
+    const center = { lat: 40, lng: -74 };
+
+    it('is a no-op for 0, null, or undefined degrees', () => {
+        const point = offsetPoint(center, 500, 0);
+        expect(rotatePoint(point, center, 0)).toEqual(point);
+        expect(rotatePoint(point, center, null)).toEqual(point);
+        expect(rotatePoint(point, center, undefined)).toEqual(point);
+    });
+
+    it('rotating a point 90 degrees clockwise turns "due east" into "due south"', () => {
+        const east = offsetPoint(center, 500, 0);
+        const rotated = rotatePoint(east, center, 90);
+        const { x, y } = projectToMeters(rotated, center);
+        expect(x).toBeCloseTo(0, 0);
+        expect(y).toBeCloseTo(-500, 0);
+    });
+
+    it('rotating by 360 degrees returns to very close to the original point', () => {
+        const point = offsetPoint(center, 300, 400);
+        const rotated = rotatePoint(point, center, 360);
+        expect(rotated.lat).toBeCloseTo(point.lat, 9);
+        expect(rotated.lng).toBeCloseTo(point.lng, 9);
+    });
+
+    it('never changes the distance from center, only the direction', () => {
+        const point = offsetPoint(center, 300, -400);
+        const before = projectToMeters(point, center);
+        const rotated = rotatePoint(point, center, 53);
+        const after = projectToMeters(rotated, center);
+        expect(Math.hypot(after.x, after.y)).toBeCloseTo(Math.hypot(before.x, before.y), 3);
     });
 });
 
