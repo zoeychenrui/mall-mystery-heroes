@@ -40,6 +40,7 @@ import MessageComposer from '../components/player_messages_components/MessageCom
 import PlayerTaskListModal from '../components/task_components/PlayerTaskListModal';
 import LeaderboardModal from '../components/game_end_components/LeaderboardModal';
 import { buildLeaderboardStandings } from '../game/leaderboard';
+import { formatMessageTime } from '../utils/formatMessageTime';
 import useBoundaryLocation from '../hooks/useBoundaryLocation';
 import PlayerMapModal from '../components/map_components/PlayerMapModal';
 // require(), not a named `import` — gameBoundary.js is CommonJS
@@ -271,6 +272,19 @@ const PlayerGame = () => {
           )
         : { status: 'unavailable', reason: 'no_fix' };
 
+    // Spec: the "Location unavailable" explanation shows the last
+    // successful check time "if any" — null (not just an empty string)
+    // when there has never been one yet, e.g. before this player's very
+    // first report lands, so the render below can tell "no time to show"
+    // apart from "time formatted as empty". formatMessageTime already
+    // handles a null/undefined Timestamp the same way, for the same
+    // reason (a still-pending serverTimestamp()). Only computed for the
+    // unavailable status, the only branch that renders it.
+    const lastCheckTime =
+        liveBoundaryStatus.status === 'unavailable'
+            ? formatMessageTime(boundaryStatusDoc?.lastUsableReceivedAt ?? null)
+            : null;
+
     const statusText = {
         inside: 'In game area.',
         near: 'You are near the edge of the game area; check the map.',
@@ -435,6 +449,7 @@ const PlayerGame = () => {
                             {liveBoundaryStatus.status === 'unavailable' && (
                                 <Text mb={2}>
                                     Location unavailable ({liveBoundaryStatus.reason ?? 'no_fix'}).
+                                    {lastCheckTime && ` Last confirmed at ${lastCheckTime}.`}
                                 </Text>
                             )}
                             <Button size="sm" mb={2} onClick={onMapOpen}>

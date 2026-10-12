@@ -785,7 +785,10 @@ describe('PlayerGame', () => {
                         data: () => ({
                             status: 'inside',
                             reason: null,
-                            lastUsableReceivedAt: { toMillis: () => lastUsableMs },
+                            lastUsableReceivedAt: {
+                                toMillis: () => lastUsableMs,
+                                toDate: () => new Date(lastUsableMs),
+                            },
                             boundaryRevision: 1,
                         }),
                     });
@@ -804,9 +807,41 @@ describe('PlayerGame', () => {
             });
 
             expect(screen.getByText(/Location unavailable/)).toBeInTheDocument();
+            // Spec (docs/superpowers/specs/2026-09-30-game-boundaries-design.md:119):
+            // "Location unavailable" must also show the last successful
+            // check time, when there is one — this doc's own
+            // lastUsableReceivedAt, formatted the same way MessageBubble's
+            // chat timestamps already are.
+            expect(screen.getByText(/Last confirmed at/)).toBeInTheDocument();
         } finally {
             jest.useRealTimers();
         }
+    });
+
+    it('does not show a last-confirmed time once unavailable when no report has ever landed', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            } else if (ref === 'status-ref') {
+                // Before this player's first report, the status doc does
+                // not exist at all yet — "if any" means render nothing
+                // extra, not an empty/garbled time.
+                callback({ exists: () => false });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        expect(screen.getByText(/Location unavailable/)).toBeInTheDocument();
+        expect(screen.queryByText(/Last confirmed at/)).not.toBeInTheDocument();
     });
 
     it('hides status entirely once the boundary is disabled', () => {

@@ -569,7 +569,8 @@ already documented under [Cloud Functions](./architecture.md#cloud-functions).
 The server's verdict lands back on this player's own `boundaryStatuses`
 doc, which `PlayerGame.js` subscribes to live and renders as a status
 line (In/near/outside the game area, or "Location unavailable" once the
-reading goes stale) — independent of whether `PlayerMapModal` is open,
+reading goes stale, with the last successful check time shown alongside
+it when there has been one) — independent of whether `PlayerMapModal` is open,
 which shows the boundary and the player's own position on a map at any
 time without affecting tracking either way. A later boundary revision
 restarts the watch with fresh readings and surfaces a "Game area updated"
