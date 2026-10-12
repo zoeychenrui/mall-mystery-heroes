@@ -51,6 +51,33 @@ import PlayerMapModal from '../components/map_components/PlayerMapModal';
 // hit; see boundaryDraft.js's header comment for the full story.
 const { deriveFreshStatus, GAME_BOUNDARY_CONFIG } = require('../game/gameBoundary');
 
+// Plain-language text for every reason deriveFreshStatus/gameBoundary.js
+// and the reportPlayerLocation callable can actually produce for an
+// `unavailable` status, so players see an explanation instead of a raw
+// internal code. wrong_revision/wrong_uid are internal consistency
+// reasons, not anything a player can act on, so both fold into the same
+// generic "still checking" message. invalid_fix/poor_accuracy are the
+// two classifyFix reasons (src/game/gameBoundary.js) that can land here
+// via the server-stored status doc's own `reason` field.
+const UNAVAILABLE_REASON_TEXT = {
+    stale: 'No recent location reading.',
+    no_fix: 'No location reading yet.',
+    wrong_revision: 'Still checking against the updated game area.',
+    wrong_uid: 'Still checking against the updated game area.',
+    permission_denied: 'Location permission was denied.',
+    timeout: 'Could not get a location fix in time.',
+    unavailable: 'Location services are unavailable on this device.',
+    invalid_fix: 'Location services are unavailable on this device.',
+    poor_accuracy: 'Location accuracy is too low right now.',
+    clock_skew: "This device's clock looks out of sync — check it and retry.",
+};
+const DEFAULT_UNAVAILABLE_TEXT = 'Checking your location status.';
+// Reasons worth offering Retry for here, alongside the stored message —
+// the ones a fresh attempt could plausibly fix. permission_denied already
+// gets its own Retry via the permissionState === 'denied' box above, so
+// it is deliberately left out here to avoid a second, redundant button.
+const UNAVAILABLE_RETRY_REASONS = new Set(['timeout', 'unavailable']);
+
 const PlayerGame = () => {
     const { roomID } = useParams();
     const navigate = useNavigate();
@@ -292,6 +319,37 @@ const PlayerGame = () => {
         unavailable: null, // handled separately below — needs its own explanation/Retry
     }[liveBoundaryStatus.status];
 
+    // deriveFreshStatus checks staleness FIRST, against lastUsableMs — so a
+    // player who has never had a usable fix in the last freshnessMs always
+    // gets reason 'stale', even when the stored status doc itself carries a
+    // more specific reason (e.g. a real permission_denied/timeout/unavailable
+    // from an error report). An error report never updates lastUsableMs (only
+    // an in-tolerance/inside/outside/near fix does), so that specific, truer
+    // reason would otherwise be masked by the generic staleness fallback.
+    // boundaryStatusDoc.reason is never itself 'stale' — nothing server-side
+    // ever writes that value — so preferring it here can't loop back on
+    // itself.
+    const unavailableReason =
+        liveBoundaryStatus.status === 'unavailable'
+            ? liveBoundaryStatus.reason === 'stale' && boundaryStatusDoc?.reason
+                ? boundaryStatusDoc.reason
+                : (liveBoundaryStatus.reason ?? 'no_fix')
+            : null;
+    const unavailableText = unavailableReason
+        ? (UNAVAILABLE_REASON_TEXT[unavailableReason] ?? DEFAULT_UNAVAILABLE_TEXT)
+        : null;
+    const showUnavailableRetry = UNAVAILABLE_RETRY_REASONS.has(unavailableReason);
+
+    // The same words whether the player is looking at the page or has the
+    // map open — PlayerMapModal gets this via its own `statusText` prop
+    // (spec: status is visible "on the player page as well as inside the
+    // map"), independent of whether the page itself is currently showing it
+    // (e.g. suppressed below while permissionState is still 'unknown').
+    const mapStatusText =
+        liveBoundaryStatus.status === 'unavailable'
+            ? `Location unavailable: ${unavailableText}`
+            : statusText;
+
     const handleLeaveClick = () => {
         onOpen();
     };
@@ -430,6 +488,11 @@ const PlayerGame = () => {
                                     </Button>
                                 </Box>
                             )}
+                            {permissionState === 'unavailable' && (
+                                <Box bg="orange.800" color="white" borderRadius="md" p={3} mb={2}>
+                                    <Text>{UNAVAILABLE_REASON_TEXT.unavailable}</Text>
+                                </Box>
+                            )}
                             {liveBoundaryStatus.status === 'outside' && (
                                 <Box
                                     bg="red.700"
@@ -446,12 +509,30 @@ const PlayerGame = () => {
                                 liveBoundaryStatus.status !== 'unavailable' && (
                                     <Text mb={2}>{statusText}</Text>
                                 )}
-                            {liveBoundaryStatus.status === 'unavailable' && (
-                                <Text mb={2}>
-                                    Location unavailable ({liveBoundaryStatus.reason ?? 'no_fix'}).
-                                    {lastCheckTime && ` Last confirmed at ${lastCheckTime}.`}
-                                </Text>
-                            )}
+                            {/* Suppressed while permissionState is still 'unknown' — the
+                                pre-permission box above already explains why there is
+                                nothing to show yet; stacking both is confusing. */}
+                            {permissionState !== 'unknown' &&
+                                liveBoundaryStatus.status === 'unavailable' && (
+                                    <Box
+                                        bg="orange.800"
+                                        color="white"
+                                        borderRadius="md"
+                                        p={3}
+                                        mb={2}
+                                    >
+                                        <Text mb={showUnavailableRetry ? 2 : 0}>
+                                            Location unavailable: {unavailableText}
+                                            {lastCheckTime &&
+                                                ` Last confirmed at ${lastCheckTime}.`}
+                                        </Text>
+                                        {showUnavailableRetry && (
+                                            <Button size="sm" onClick={requestPermission}>
+                                                Retry
+                                            </Button>
+                                        )}
+                                    </Box>
+                                )}
                             <Button size="sm" mb={2} onClick={onMapOpen}>
                                 View Game Map
                             </Button>
@@ -466,6 +547,7 @@ const PlayerGame = () => {
                                         ? ownPosition
                                         : null
                                 }
+                                statusText={mapStatusText}
                             />
                         </>
                     )}

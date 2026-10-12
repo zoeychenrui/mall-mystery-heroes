@@ -65,4 +65,20 @@ describe('PlayerMapModal', () => {
             expect.objectContaining({ center: [20, 10] })
         );
     });
+
+    it('renders the boundary status prominently above the map, so it stays visible while the modal is full-screen', () => {
+        // Finding 2: the modal is full-screen on phones, hiding the page's
+        // own status line entirely for as long as it stays open — the
+        // spec requires status display "on the player page as well as
+        // inside the map."
+        renderModal({ statusText: 'You are outside the game area. Please return inside.' });
+        expect(
+            screen.getByText('You are outside the game area. Please return inside.')
+        ).toBeInTheDocument();
+    });
+
+    it('renders nothing extra when no statusText is given', () => {
+        renderModal({ statusText: null });
+        expect(screen.getByTestId('mock-game-map')).toBeInTheDocument();
+    });
 });

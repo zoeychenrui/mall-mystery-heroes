@@ -33,6 +33,9 @@ import {
 import { leaveGame } from '../components/leaveGame';
 import { writePlayerSession, readPlayerSession } from '../utils/playerSession';
 import useBoundaryLocation from '../hooks/useBoundaryLocation';
+// require(), not a named import — gameBoundary.js is CommonJS by design
+// (see its own header comment); PlayerGame.js itself loads it the same way.
+const { GAME_BOUNDARY_CONFIG } = require('../game/gameBoundary');
 
 jest.mock('firebase/auth', () => ({
     signOut: jest.fn(),
@@ -62,15 +65,19 @@ jest.mock('../hooks/useBoundaryLocation', () =>
 // The Close button here is this stub's own affordance, not the real
 // modal's ModalCloseButton, so the "closing the map modal" test below has
 // something to click without pulling in the real Modal/GameMap tree.
-jest.mock(
-    '../components/map_components/PlayerMapModal',
-    () => (props) =>
-        props.isOpen ? (
-            <div data-testid="mock-player-map-modal">
-                <button onClick={props.onClose}>Close</button>
-            </div>
-        ) : null
-);
+// `mockLastPlayerMapModalProps` captures every render's props (regardless
+// of isOpen, since the function component itself still runs) so tests can
+// assert what PlayerGame actually hands down — e.g. the freshness-filtered
+// ownPosition (Finding 6) and the plain-language statusText (Finding 2).
+let mockLastPlayerMapModalProps;
+jest.mock('../components/map_components/PlayerMapModal', () => (props) => {
+    mockLastPlayerMapModalProps = props;
+    return props.isOpen ? (
+        <div data-testid="mock-player-map-modal">
+            <button onClick={props.onClose}>Close</button>
+        </div>
+    ) : null;
+});
 // Stubbed — has its own dedicated test file (PlayerTaskListModal.test.jsx).
 // This file only checks that the button opens/closes it and passes roomID
 // through, same reasoning as the MessageFeed/MessageComposer stubs below.
@@ -769,6 +776,16 @@ describe('PlayerGame', () => {
         jest.useFakeTimers();
         try {
             writePlayerSession('Fluffy42317', 'Alice');
+            // Non-'unknown', since this status doc can only exist after this
+            // player already granted permission and reported at least once —
+            // 'unknown' is covered by its own dedicated test below, where the
+            // unavailable line must stay hidden instead.
+            useBoundaryLocation.mockReturnValue({
+                permissionState: 'granted',
+                lastResult: null,
+                ownPosition: null,
+                requestPermission: jest.fn(),
+            });
             const lastUsableMs = Date.now();
             onSnapshot.mockImplementation((ref, callback) => {
                 if (ref === 'room-ref') {
@@ -820,6 +837,13 @@ describe('PlayerGame', () => {
 
     it('does not show a last-confirmed time once unavailable when no report has ever landed', () => {
         writePlayerSession('Fluffy42317', 'Alice');
+        // Non-'unknown' for the same reason as the stale-status test above.
+        useBoundaryLocation.mockReturnValue({
+            permissionState: 'granted',
+            lastResult: null,
+            ownPosition: null,
+            requestPermission: jest.fn(),
+        });
         onSnapshot.mockImplementation((ref, callback) => {
             if (ref === 'room-ref') {
                 callback({
@@ -963,5 +987,214 @@ describe('PlayerGame', () => {
         });
 
         expect(await screen.findByText(/Game area updated/)).toBeInTheDocument();
+    });
+
+    // --- Final-review fixes: plain-language reasons, map status, and
+    // ownPosition freshness (Findings 1, 2, 6) --------------------------
+
+    it('hides the Location unavailable line while permissionState is unknown, since the pre-permission box already explains it', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            }
+            return () => {};
+        });
+        // useBoundaryLocation's default mock (beforeEach) already returns
+        // permissionState: 'unknown'.
+
+        renderWaiting();
+
+        expect(screen.getByRole('button', { name: 'Enable Location' })).toBeInTheDocument();
+        expect(screen.queryByText(/Location unavailable/)).not.toBeInTheDocument();
+    });
+
+    it('shows an explanation when the browser has no geolocation API at all', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            }
+            return () => {};
+        });
+        useBoundaryLocation.mockReturnValue({
+            permissionState: 'unavailable',
+            lastResult: null,
+            ownPosition: null,
+            requestPermission: jest.fn(),
+        });
+
+        renderWaiting();
+
+        expect(
+            screen.getByText(/Location services are unavailable on this device/)
+        ).toBeInTheDocument();
+    });
+
+    it('prefers a more specific stored reason over the generic staleness fallback', () => {
+        // Finding 1: deriveFreshStatus checks staleness FIRST against
+        // lastUsableMs, so a player with no usable fix in the freshness
+        // window always gets reason 'stale' locally — even when the
+        // stored status doc's own `reason` (from a real error report)
+        // says exactly why: here, permission_denied.
+        writePlayerSession('Fluffy42317', 'Alice');
+        useBoundaryLocation.mockReturnValue({
+            permissionState: 'granted',
+            lastResult: null,
+            ownPosition: null,
+            requestPermission: jest.fn(),
+        });
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            } else if (ref === 'status-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        status: 'unavailable',
+                        reason: 'permission_denied',
+                        lastUsableReceivedAt: null,
+                        boundaryRevision: 1,
+                    }),
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        expect(screen.getByText(/Location permission was denied/)).toBeInTheDocument();
+    });
+
+    it('offers Retry inside the unavailable-status box when the stored reason is a timeout, not just on denial', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        const requestPermission = jest.fn();
+        useBoundaryLocation.mockReturnValue({
+            permissionState: 'granted',
+            lastResult: null,
+            ownPosition: null,
+            requestPermission,
+        });
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            } else if (ref === 'status-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        status: 'unavailable',
+                        reason: 'timeout',
+                        lastUsableReceivedAt: null,
+                        boundaryRevision: 1,
+                    }),
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        expect(requestPermission).toHaveBeenCalled();
+    });
+
+    it('passes the current status text through to PlayerMapModal so it is visible inside the map too', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            } else if (ref === 'status-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        status: 'inside',
+                        reason: null,
+                        lastUsableReceivedAt: { toMillis: () => Date.now() },
+                        boundaryRevision: 1,
+                    }),
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
+
+        expect(mockLastPlayerMapModalProps.statusText).toBe('In game area.');
+    });
+
+    it('passes a fresh ownPosition through to PlayerMapModal, then null once it goes stale', () => {
+        jest.useFakeTimers();
+        try {
+            writePlayerSession('Fluffy42317', 'Alice');
+            const acquiredAtMs = Date.now();
+            onSnapshot.mockImplementation((ref, callback) => {
+                if (ref === 'room-ref') {
+                    callback({
+                        exists: () => true,
+                        data: () => ({
+                            gameStarted: false,
+                            gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                        }),
+                    });
+                }
+                return () => {};
+            });
+            useBoundaryLocation.mockReturnValue({
+                permissionState: 'granted',
+                lastResult: null,
+                ownPosition: { lat: 10, lng: 20, accuracyM: 5, acquiredAtMs },
+                requestPermission: jest.fn(),
+            });
+
+            renderWaiting();
+            fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
+
+            expect(mockLastPlayerMapModalProps.ownPosition).toEqual({
+                lat: 10,
+                lng: 20,
+                accuracyM: 5,
+                acquiredAtMs,
+            });
+
+            act(() => {
+                jest.advanceTimersByTime(GAME_BOUNDARY_CONFIG.freshnessMs + 1000);
+            });
+
+            expect(mockLastPlayerMapModalProps.ownPosition).toBeNull();
+        } finally {
+            jest.useRealTimers();
+        }
     });
 });

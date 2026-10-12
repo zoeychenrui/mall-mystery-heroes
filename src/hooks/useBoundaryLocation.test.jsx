@@ -45,9 +45,23 @@ beforeEach(() => {
     nextWatchId = 1;
     activeWatches = new Map();
     fakeGeolocation = {
+        // A PERMISSION_DENIED error delivered to an active watch kills
+        // that watch for good, per the real W3C Geolocation spec — the
+        // browser will not resume delivering results on it even once the
+        // user later re-grants permission. The wrapped onError mirrors
+        // that by dropping the watch from activeWatches right after
+        // delivering the error, so a test can tell whether the hook
+        // actually started a FRESH watchPosition call afterward (Finding
+        // 3) rather than relying on this one, now-dead id.
         watchPosition: jest.fn((onSuccess, onError) => {
             const id = nextWatchId++;
-            activeWatches.set(id, { onSuccess, onError });
+            const wrappedOnError = (positionError) => {
+                onError(positionError);
+                if (positionError.code === 1) {
+                    activeWatches.delete(id);
+                }
+            };
+            activeWatches.set(id, { onSuccess, onError: wrappedOnError });
             return id;
         }),
         clearWatch: jest.fn((id) => {
@@ -141,6 +155,37 @@ describe('useBoundaryLocation', () => {
         expect(reportPlayerLocation).not.toHaveBeenCalled();
     });
 
+    it("resets the send throttle on a revision restart, so the restarted watch's own immediate check is not silently dropped", () => {
+        // Finding 5: lastSentMsRef must not survive a watch restart. Here
+        // a report goes out, then — only 2s later, well under the 5s
+        // minimum send interval — the GM republishes the boundary. The
+        // restarted watch's own immediate fresh check must still be sent
+        // despite that short gap, because it belongs to a NEW revision,
+        // not a resend of the old one.
+        const { result, rerender } = renderHook((props) => useBoundaryLocation(props), {
+            initialProps: baseProps,
+        });
+        act(() => result.current.requestPermission());
+        const [initialOnSuccess] = fakeGeolocation.getCurrentPosition.mock.calls[0];
+        act(() => initialOnSuccess(makePosition()));
+        expect(reportPlayerLocation).toHaveBeenCalledTimes(1);
+
+        reportPlayerLocation.mockClear();
+        fakeGeolocation.getCurrentPosition.mockClear();
+        act(() => jest.advanceTimersByTime(2000));
+
+        rerender({ ...baseProps, boundaryRevision: 2 });
+        const [restartedOnSuccess] = fakeGeolocation.getCurrentPosition.mock.calls[0];
+        act(() => restartedOnSuccess(makePosition()));
+
+        // Without resetting lastSentMsRef on restart, shouldSendFix would
+        // see only 2s elapsed since the last send (under the 5s minimum)
+        // and silently drop this report.
+        expect(reportPlayerLocation).toHaveBeenCalledWith(
+            expect.objectContaining({ boundaryRevision: 2 })
+        );
+    });
+
     it('also stops the old watch and starts a fresh one when the room changes', () => {
         const { result, rerender } = renderHook((props) => useBoundaryLocation(props), {
             initialProps: baseProps,
@@ -180,12 +225,53 @@ describe('useBoundaryLocation', () => {
         expect(fakeGeolocation.getCurrentPosition).toHaveBeenCalledTimes(2);
     });
 
+    it('starts a genuinely new watchPosition call on Retry after a PERMISSION_DENIED, not just another one-shot check', () => {
+        // Finding 3: a PERMISSION_DENIED error kills the active watch for
+        // good (the fakeGeolocation mock above now mirrors that by
+        // dropping it from activeWatches), so Retry must tear down and
+        // restart the watch itself — relying solely on another one-shot
+        // getCurrentPosition call would leave the player with no live
+        // watch ever again, only the ~15s backstop.
+        const { result } = renderHook(() => useBoundaryLocation(baseProps));
+        act(() => result.current.requestPermission());
+        const watchId = fakeGeolocation.watchPosition.mock.results[0].value;
+
+        act(() => {
+            activeWatches.get(watchId)?.onError(makePositionError(1));
+        });
+        expect(result.current.permissionState).toBe('denied');
+        // The mock already proves the watch is dead, the same way a real
+        // denied watch would be.
+        expect(activeWatches.has(watchId)).toBe(false);
+
+        fakeGeolocation.watchPosition.mockClear();
+        act(() => result.current.requestPermission());
+
+        expect(fakeGeolocation.watchPosition).toHaveBeenCalledTimes(1);
+        const newWatchId = fakeGeolocation.watchPosition.mock.results[0].value;
+        expect(newWatchId).not.toBe(watchId);
+        expect(activeWatches.has(newWatchId)).toBe(true);
+    });
+
     it('forces a fresh getCurrentPosition check once the max-fresh interval elapses with nothing sent', () => {
         const { result } = renderHook(() => useBoundaryLocation(baseProps));
         act(() => result.current.requestPermission());
+        // Resolve the watch-start effect's own immediate check first —
+        // the in-flight guard (Finding 4) would otherwise still consider
+        // it pending and suppress the backstop's call below, which is
+        // exactly what the dedicated in-flight-guard test further down
+        // exercises on purpose; this test is about the timer, not the
+        // guard, so it clears the way for the timer first.
+        const [initialOnSuccess] = fakeGeolocation.getCurrentPosition.mock.calls[0];
+        act(() => initialOnSuccess(makePosition()));
         fakeGeolocation.getCurrentPosition.mockClear();
 
-        act(() => jest.advanceTimersByTime(15000));
+        // 16000, not 15000: the backstop timer only ticks every 2s
+        // (POLL_CHECK_INTERVAL_MS), and lastSentMsRef is now a real
+        // timestamp (set by resolving the initial check above), so the
+        // first tick actually past the 15000ms isPollDue threshold lands
+        // at 16000ms, not at a bare 15000ms advance.
+        act(() => jest.advanceTimersByTime(16000));
 
         expect(fakeGeolocation.getCurrentPosition).toHaveBeenCalled();
     });
@@ -193,6 +279,10 @@ describe('useBoundaryLocation', () => {
     it('reacquires a fresh fix when the page becomes visible again', () => {
         const { result } = renderHook(() => useBoundaryLocation(baseProps));
         act(() => result.current.requestPermission());
+        // Same reasoning as the backstop test above: resolve the initial
+        // in-flight call so the guard doesn't suppress this one.
+        const [initialOnSuccess] = fakeGeolocation.getCurrentPosition.mock.calls[0];
+        act(() => initialOnSuccess(makePosition()));
         fakeGeolocation.getCurrentPosition.mockClear();
 
         Object.defineProperty(document, 'visibilityState', {
@@ -254,6 +344,37 @@ describe('useBoundaryLocation', () => {
 
         act(() => result.current.requestPermission());
         expect(fakeGeolocation.getCurrentPosition).toHaveBeenCalled();
+    });
+
+    it('passes a finite timeout to one-shot getCurrentPosition calls, so a fix that never arrives can still time out', () => {
+        // Finding 4: GEOLOCATION_OPTIONS (used for watchPosition) has no
+        // timeout, which is correct for the watch — but the one-shot
+        // calls need one, or a device that can't get a fix (weak signal,
+        // indoors) never produces the spec's "timeout gets an actionable
+        // message" path at all.
+        const { result } = renderHook(() => useBoundaryLocation(baseProps));
+        act(() => result.current.requestPermission());
+
+        const [, , options] = fakeGeolocation.getCurrentPosition.mock.calls[0];
+        expect(Number.isFinite(options.timeout)).toBe(true);
+        expect(options.timeout).toBeGreaterThan(0);
+    });
+
+    it('does not pile up a second getCurrentPosition call from the backstop while one is already in flight', () => {
+        // Finding 4: simulates a device that can never get a fix at all —
+        // the initial check is left unresolved (no success/error ever
+        // delivered), exactly like a real getCurrentPosition call that is
+        // taking long enough to still be pending. Every 2s backstop tick
+        // over the next 10s would, without an in-flight guard, fire
+        // another getCurrentPosition call since isPollDue stays true the
+        // whole time (lastSentMsRef never got set).
+        const { result } = renderHook(() => useBoundaryLocation(baseProps));
+        act(() => result.current.requestPermission());
+        fakeGeolocation.getCurrentPosition.mockClear();
+
+        act(() => jest.advanceTimersByTime(10000));
+
+        expect(fakeGeolocation.getCurrentPosition).not.toHaveBeenCalled();
     });
 
     it('clears the watch on unmount', () => {

@@ -10,6 +10,17 @@ const POLL_CHECK_INTERVAL_MS = 2000;
 
 const GEOLOCATION_OPTIONS = { enableHighAccuracy: true, maximumAge: 0 };
 
+// Only for one-shot getCurrentPosition calls — never watchPosition. A
+// stationary watch given a timeout can fire repeated spurious TIMEOUT
+// errors even while the player hasn't moved, which would incorrectly
+// flip an actually-fine "inside" player to "unavailable". A one-shot
+// call has no such risk: it either gets a fix or gives up exactly once,
+// which is what lets the spec's "timeout gets an actionable message"
+// path actually happen on a device that can't get a fix at all (weak
+// signal, indoors) instead of hanging forever.
+const ONE_SHOT_TIMEOUT_MS = 10000;
+const ONE_SHOT_OPTIONS = { ...GEOLOCATION_OPTIONS, timeout: ONE_SHOT_TIMEOUT_MS };
+
 /**
  * Owns exactly one browser geolocation watch per mounted player
  * session: requests permission on demand, reports fixes/errors to the
@@ -33,6 +44,18 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
     const [enabled, setEnabled] = useState(false);
     const [lastResult, setLastResult] = useState(null);
     const [ownPosition, setOwnPosition] = useState(null);
+    // Bumped on every requestPermission() call. Its value is never read —
+    // it exists purely as a watch-effect dependency, so a Retry call (made
+    // after `enabled` is already true, and so would otherwise change none
+    // of that effect's other dependencies) still forces the effect to tear
+    // down and restart. That restart matters because, per the W3C
+    // Geolocation spec, a PERMISSION_DENIED error on an active
+    // watchPosition call kills that watch for good — the browser will not
+    // resume delivering results on it even once the user later re-grants
+    // permission in browser/OS settings. Only a brand-new watchPosition
+    // call can receive updates again, and this is what makes Retry start
+    // one.
+    const [watchEpoch, setWatchEpoch] = useState(0);
 
     // The context this watch/poll cycle runs under, read inside the
     // position/error callbacks — which can fire well after the browser
@@ -44,12 +67,13 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
     }, [roomID, boundaryRevision]);
 
     const lastSentMsRef = useRef(null);
-
-    // Tracks whether `enabled` was already true as of the start of the
-    // current requestPermission call, read synchronously (state updates
-    // are not visible until the next render) — see requestPermission's
-    // own comment for why this matters.
-    const enabledRef = useRef(enabled);
+    // Whether a one-shot getCurrentPosition call (requestFreshFix, below)
+    // is currently pending. Without this, the backstop's 2 s-interval
+    // check would fire another getCurrentPosition call on every tick for
+    // as long as nothing has landed yet — including the exact "a fix will
+    // never arrive" scenario (weak signal, indoors) that the timeout above
+    // is meant to surface — piling up concurrent calls without bound.
+    const oneShotInFlightRef = useRef(false);
 
     const isTrackingActive = enabled && boundaryEnabled && isGameActive && Boolean(roomID);
 
@@ -121,9 +145,32 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
         [sendReport]
     );
 
+    // Shared one-shot fresh-fix request, used by every "force a check now"
+    // path: the watch effect's own immediate check on (re)start, the
+    // backstop, and the visibility-change reacquire. Centralizing it here
+    // is what lets all of them share the same timeout options and the same
+    // in-flight guard (oneShotInFlightRef, above) instead of each piling up
+    // their own uncoordinated calls.
+    const requestFreshFix = useCallback(() => {
+        if (oneShotInFlightRef.current) return;
+        oneShotInFlightRef.current = true;
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                oneShotInFlightRef.current = false;
+                handlePosition(position);
+            },
+            (positionError) => {
+                oneShotInFlightRef.current = false;
+                handlePositionError(positionError);
+            },
+            ONE_SHOT_OPTIONS
+        );
+    }, [handlePosition, handlePositionError]);
+
     // The watch itself. Restarts (so it checks fresh under the new
-    // context) whenever tracking turns on/off or the boundary revision
-    // changes, and always tears down on unmount — "only one watch per
+    // context) whenever tracking turns on/off, the boundary revision
+    // changes, or `watchEpoch` is bumped by a Retry (see its own comment
+    // above) — and always tears down on unmount — "only one watch per
     // mounted player session." `roomID` is listed explicitly, not just
     // through `isTrackingActive` — that boolean only flips on
     // true/false transitions, so a room-to-room change with tracking
@@ -137,6 +184,20 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
             setPermissionState('unavailable');
             return undefined;
         }
+        // Reset both throttles on every (re)start, not just the very
+        // first: a stale lastSentMsRef left over from the PREVIOUS
+        // context (old revision, old room) could otherwise throttle away
+        // THIS restart's own immediate check below — e.g. a report went
+        // out just a couple of seconds before the GM republished the
+        // boundary, and without this reset shouldSendFix would see "too
+        // soon" and silently drop the first fresh, revision-correct fix,
+        // leaving the player stuck on wrong_revision/unavailable until
+        // the next natural watch event or the ~15 s backstop. A stale
+        // in-flight flag could likewise block this restart's check if the
+        // previous context's one-shot call never got a chance to resolve
+        // before being superseded.
+        lastSentMsRef.current = null;
+        oneShotInFlightRef.current = false;
         const watchId = navigator.geolocation.watchPosition(
             handlePosition,
             handlePositionError,
@@ -145,14 +206,19 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
         // An immediate fresh check on every (re)start — covers the very
         // first enable, a boundary revision changing while tracking is
         // already on (spec: boundary changes get "a new location
-        // check"), and a room change.
-        navigator.geolocation.getCurrentPosition(
-            handlePosition,
-            handlePositionError,
-            GEOLOCATION_OPTIONS
-        );
+        // check"), a room change, and a Retry after a denial (which can
+        // no longer rely on a live watch to ever call back again).
+        requestFreshFix();
         return () => navigator.geolocation.clearWatch(watchId);
-    }, [isTrackingActive, roomID, boundaryRevision, handlePosition, handlePositionError]);
+    }, [
+        isTrackingActive,
+        roomID,
+        boundaryRevision,
+        watchEpoch,
+        requestFreshFix,
+        handlePosition,
+        handlePositionError,
+    ]);
 
     // Backstop: force a fresh getCurrentPosition call if nothing has
     // been sent recently enough on its own. Gated on permissionState,
@@ -168,15 +234,11 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
         if (!isTrackingActive || permissionState === 'denied') return undefined;
         const intervalId = setInterval(() => {
             if (isPollDue(lastSentMsRef.current, Date.now())) {
-                navigator.geolocation.getCurrentPosition(
-                    handlePosition,
-                    handlePositionError,
-                    GEOLOCATION_OPTIONS
-                );
+                requestFreshFix();
             }
         }, POLL_CHECK_INTERVAL_MS);
         return () => clearInterval(intervalId);
-    }, [isTrackingActive, permissionState, handlePosition, handlePositionError]);
+    }, [isTrackingActive, permissionState, requestFreshFix]);
 
     // Reacquire a fresh fix as soon as the tab becomes visible again —
     // the browser may have throttled or suspended updates while
@@ -187,44 +249,30 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
         if (!isTrackingActive || permissionState === 'denied') return undefined;
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
-                navigator.geolocation.getCurrentPosition(
-                    handlePosition,
-                    handlePositionError,
-                    GEOLOCATION_OPTIONS
-                );
+                requestFreshFix();
             }
         };
         document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-    }, [isTrackingActive, permissionState, handlePosition, handlePositionError]);
+    }, [isTrackingActive, permissionState, requestFreshFix]);
 
     // Enable Location / Retry. The very first call (enabled false ->
     // true) flips `isTrackingActive` on, which is enough on its own to
-    // start the watch effect below — and that effect already makes its
-    // own immediate getCurrentPosition check on every (re)start, so
-    // this call must not duplicate it. Every call AFTER that one is a
-    // no-op as far as `enabled` goes (already true), so the watch
-    // effect's dependencies never change and it will not re-fire on its
-    // own — a denial does not latch the watch effect out of trying
-    // again, so this call makes its own direct, immediate attempt
-    // instead. That direct attempt is the only path a user-initiated
-    // Retry has.
+    // start the watch effect above. Every call AFTER that one is a no-op
+    // as far as `enabled` goes (already true), so it instead bumps
+    // `watchEpoch` to force that same effect to tear down its (possibly
+    // dead, post-denial) watch and start a genuinely new one — whose own
+    // immediate requestFreshFix call covers what a separate direct
+    // getCurrentPosition call here used to do. One restart path handles
+    // both first-activation and every subsequent Retry uniformly.
     const requestPermission = useCallback(() => {
-        const wasAlreadyEnabled = enabledRef.current;
-        enabledRef.current = true;
         setEnabled(true);
         if (!('geolocation' in navigator)) {
             setPermissionState('unavailable');
             return;
         }
-        if (wasAlreadyEnabled) {
-            navigator.geolocation.getCurrentPosition(
-                handlePosition,
-                handlePositionError,
-                GEOLOCATION_OPTIONS
-            );
-        }
-    }, [handlePosition, handlePositionError]);
+        setWatchEpoch((epoch) => epoch + 1);
+    }, []);
 
     return { permissionState, lastResult, ownPosition, requestPermission };
 };
