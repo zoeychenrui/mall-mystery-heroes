@@ -44,8 +44,18 @@ jest.mock('react-map-gl', () => {
                 </div>
             );
         },
-        Source: ({ children, data }) => (
-            <div data-testid="mock-source" data-geojson={JSON.stringify(data)}>
+        Source: ({ children, data, id }) => (
+            <div
+                data-testid={
+                    id === 'own-position-accuracy' ? 'own-position-accuracy-source' : 'mock-source'
+                }
+                data-geojson={JSON.stringify(data)}
+            >
+                {children}
+            </div>
+        ),
+        Marker: ({ longitude, latitude, children }) => (
+            <div data-testid="mock-marker" data-lng={longitude} data-lat={latitude}>
                 {children}
             </div>
         ),
@@ -180,5 +190,40 @@ describe('GameMap', () => {
     it('renders children inside the map, alongside the boundary overlay', () => {
         renderMap({ children: <div data-testid="child-marker" /> });
         expect(screen.getByTestId('child-marker')).toBeInTheDocument();
+    });
+});
+
+describe('GameMap — own position', () => {
+    it('renders no marker and no accuracy source when ownPosition is null', () => {
+        renderMap({ ownPosition: null });
+        expect(screen.queryByTestId('mock-marker')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('own-position-accuracy-source')).not.toBeInTheDocument();
+    });
+
+    it('renders a marker at the given position', () => {
+        renderMap({ ownPosition: { lat: 10, lng: 20, accuracyM: 15 } });
+        const marker = screen.getByTestId('mock-marker');
+        expect(marker).toHaveAttribute('data-lng', '20');
+        expect(marker).toHaveAttribute('data-lat', '10');
+    });
+
+    it('renders the accuracy circle as a sampled polygon centered on the position', () => {
+        renderMap({ ownPosition: { lat: 10, lng: 20, accuracyM: 15 } });
+        const source = screen.getByTestId('own-position-accuracy-source');
+        const geojson = JSON.parse(source.getAttribute('data-geojson'));
+        const ring = geojson.geometry.coordinates[0];
+        // A circle's own center is the average of its ring's points —
+        // close enough to 20/10 to confirm this used the position, not
+        // some other default.
+        const avgLng = ring.reduce((sum, [lng]) => sum + lng, 0) / ring.length;
+        const avgLat = ring.reduce((sum, [, lat]) => sum + lat, 0) / ring.length;
+        expect(avgLng).toBeCloseTo(20, 3);
+        expect(avgLat).toBeCloseTo(10, 3);
+    });
+
+    it('renders the marker but no accuracy circle when accuracyM is zero or invalid', () => {
+        renderMap({ ownPosition: { lat: 10, lng: 20, accuracyM: 0 } });
+        expect(screen.getByTestId('mock-marker')).toBeInTheDocument();
+        expect(screen.queryByTestId('own-position-accuracy-source')).not.toBeInTheDocument();
     });
 });

@@ -1,7 +1,10 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { Box, Button, Text } from '@chakra-ui/react';
-import { Map, Source, Layer } from 'react-map-gl';
+import { Map, Source, Layer, Marker } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+// require(), not a named import — gameBoundary.js is CommonJS by design
+// (see BoundaryEditorModal.js for the same pattern and why).
+const { shapeToPolygon } = require('../../game/gameBoundary');
 
 // One provider, kept behind this component (docs/superpowers/specs/
 // 2026-09-30-game-boundaries-design.md, "Open implementation choice").
@@ -52,8 +55,29 @@ const toGeoJson = (vertices) => ({
  * (editing handles, a position marker) on top of the boundary overlay
  * without this component needing to know what they are.
  */
-const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapError, children }) => {
+const GameMap = ({
+    boundaryVertices,
+    fitTo,
+    dragPan = true,
+    ownPosition,
+    onMapLoad,
+    onMapError,
+    children,
+}) => {
     const mapboxToken = getMapboxToken();
+
+    let ownAccuracyGeoJson = null;
+    if (ownPosition && Number.isFinite(ownPosition.accuracyM) && ownPosition.accuracyM > 0) {
+        try {
+            const ring = shapeToPolygon('circle', {
+                center: { lat: ownPosition.lat, lng: ownPosition.lng },
+                radiusMeters: ownPosition.accuracyM,
+            });
+            ownAccuracyGeoJson = toGeoJson(ring);
+        } catch {
+            ownAccuracyGeoJson = null;
+        }
+    }
     const [styleMode, setStyleMode] = useState('satellite');
     const [hasError, setHasError] = useState(false);
     const hasFitRef = useRef(false);
@@ -172,6 +196,26 @@ const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapErro
                             paint={{ 'line-color': '#38B2AC', 'line-width': 3 }}
                         />
                     </Source>
+                )}
+                {ownAccuracyGeoJson && (
+                    <Source id="own-position-accuracy" type="geojson" data={ownAccuracyGeoJson}>
+                        <Layer
+                            id="own-position-accuracy-fill"
+                            type="fill"
+                            paint={{ 'fill-color': '#4299E1', 'fill-opacity': 0.15 }}
+                        />
+                    </Source>
+                )}
+                {ownPosition && (
+                    <Marker longitude={ownPosition.lng} latitude={ownPosition.lat}>
+                        <Box
+                            w="14px"
+                            h="14px"
+                            borderRadius="full"
+                            bg="#4299E1"
+                            border="2px solid white"
+                        />
+                    </Marker>
                 )}
                 {children}
             </Map>
