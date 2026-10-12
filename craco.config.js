@@ -1,42 +1,63 @@
-// mapbox-gl ships dist/mapbox-gl.js already minified by Mapbox. Re-running
-// Terser over it a second time during our own production build corrupted
-// its vector-tile worker code: Safari threw "ReferenceError: Can't find
-// variable: n" inside mapbox-gl's own web_worker_transfer.ts whenever a
-// vector-tile style (e.g. the streets/"Standard" map style) tried to load a
-// tile, while raster-only styles (satellite) were unaffected, since they
-// never exercise that worker code path. CRA/react-scripts offers no way to
-// adjust Terser's config without this override.
-const TerserPlugin = require('terser-webpack-plugin');
-
+// mapbox-gl creates its tile-parsing Web Worker by extracting specific
+// functions out of its own bundled module and running their `.toString()`
+// text inside a Blob-URL worker — those functions must be fully
+// self-contained, since a worker has no access to the main thread's module
+// registry or closures.
+//
+// CRA's webpack config runs EVERY .js/.mjs file under node_modules through
+// Babel (react-scripts/config/webpack.config.js, the "Process any JS
+// outside of the app with Babel" rule), using babel-preset-react-app's
+// dependencies preset with externalized runtime helpers. mapbox-gl ships
+// dist/mapbox-gl.js already built, including 74 native object-spread
+// (`{...x}`) expressions it never needed to down-level for its own targets
+// — CRA's Babel pass "fixes" those anyway, injecting
+// `require('@babel/runtime/helpers/objectSpread2')`-style calls directly
+// into mapbox-gl's own compiled module. Any mapbox-gl function that uses
+// that helper AND gets `.toString()`-extracted into the worker Blob now
+// references a variable with no binding in the worker's isolated scope —
+// "ReferenceError: Can't find variable: _objectSpread" (or its minified
+// name) the moment that code runs, only for vector-tile styles (e.g.
+// streets/"Standard"), since raster styles like satellite never touch that
+// code path.
+//
+// The fix is to stop re-processing mapbox-gl's already-built file at all:
+// exclude it from that one babel-loader rule. CRA/react-scripts offers no
+// way to do this without an override like this one.
 module.exports = {
     webpack: {
         configure: (webpackConfig) => {
-            webpackConfig.optimization.splitChunks = {
-                ...webpackConfig.optimization.splitChunks,
-                cacheGroups: {
-                    ...webpackConfig.optimization.splitChunks?.cacheGroups,
-                    // A stable chunk name (unlike the default numeric chunk
-                    // id) so the TerserPlugin exclude pattern below keeps
-                    // matching it across builds despite the content hash.
-                    mapboxgl: {
-                        test: /[\\/]node_modules[\\/]mapbox-gl[\\/]/,
-                        name: 'mapboxgl',
-                        chunks: 'all',
-                        enforce: true,
-                    },
-                },
-            };
-
-            const terser = webpackConfig.optimization.minimizer.find(
-                (plugin) => plugin instanceof TerserPlugin
-            );
-            if (!terser) {
+            const oneOfRule = webpackConfig.module.rules.find((rule) => Array.isArray(rule.oneOf));
+            if (!oneOfRule) {
                 throw new Error(
-                    'craco.config.js expected a TerserPlugin minimizer in the CRA webpack config, ' +
+                    'craco.config.js expected a "oneOf" rule in the CRA webpack config, ' +
                         'but did not find one — react-scripts may have changed its build config.'
                 );
             }
-            terser.options.exclude = /mapboxgl/;
+            const dependenciesBabelRule = oneOfRule.oneOf.find(
+                (rule) =>
+                    rule.loader &&
+                    rule.loader.includes('babel-loader') &&
+                    rule.options &&
+                    rule.options.presets &&
+                    rule.options.presets.some(
+                        (preset) =>
+                            Array.isArray(preset) &&
+                            preset[0].includes('babel-preset-react-app/dependencies')
+                    )
+            );
+            if (!dependenciesBabelRule) {
+                throw new Error(
+                    'craco.config.js expected to find CRA\'s "process any JS outside of the ' +
+                        'app with Babel" rule (babel-preset-react-app/dependencies), but did not ' +
+                        'find one — react-scripts may have changed its build config.'
+                );
+            }
+            const existingExclude = dependenciesBabelRule.exclude;
+            dependenciesBabelRule.exclude = (path) =>
+                /[\\/]node_modules[\\/]mapbox-gl[\\/]/.test(path) ||
+                (typeof existingExclude === 'function'
+                    ? existingExclude(path)
+                    : existingExclude.test(path));
 
             return webpackConfig;
         },
