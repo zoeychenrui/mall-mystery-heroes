@@ -72,7 +72,7 @@ const sampleEllipse = (center, radiusXMeters, radiusYMeters) => {
             offsetPoint(center, radiusXMeters * Math.cos(theta), radiusYMeters * Math.sin(theta))
         );
     }
-    ring.push({ ...ring[0] });
+    ring.push(Object.assign({}, ring[0]));
     return ring;
 };
 
@@ -82,7 +82,7 @@ const closeRing = (points) => {
     if (first && last && first.lat === last.lat && first.lng === last.lng) {
         return points;
     }
-    return [...points, { ...first }];
+    return [...points, Object.assign({}, first)];
 };
 
 /**
@@ -339,38 +339,35 @@ const nextBoundaryState = (prev, classification, times) => {
     const t = times.receivedMs;
 
     if (classification.kind === 'unusable') {
-        return {
-            ...prev,
+        return Object.assign({}, prev, {
             status: 'unavailable',
             reason: classification.reason,
             outsideSinceMs: null,
             outsideSampleCount: 0,
             lastSampleMs: times.sampleMs,
-        };
+        });
     }
 
-    const usable = { ...prev, lastUsableMs: t, lastSampleMs: times.sampleMs };
+    const usable = Object.assign({}, prev, { lastUsableMs: t, lastSampleMs: times.sampleMs });
 
     if (classification.kind === 'inside') {
-        return {
-            ...usable,
+        return Object.assign({}, usable, {
             status: 'inside',
             reason: null,
             outsideSinceMs: null,
             lastOutsideSampleMs: null,
             outsideSampleCount: 0,
             outsideConfirmedAt: null,
-        };
+        });
     }
     if (classification.kind === 'near') {
         const status = prev.outsideConfirmedAt !== null ? 'outside' : 'near';
-        return {
-            ...usable,
+        return Object.assign({}, usable, {
             status,
             reason: null,
             outsideSinceMs: null,
             outsideSampleCount: 0,
-        };
+        });
     }
 
     // outside candidate
@@ -383,24 +380,22 @@ const nextBoundaryState = (prev, classification, times) => {
 
     if (confirmed) {
         const outsideConfirmedAt = prev.outsideConfirmedAt !== null ? prev.outsideConfirmedAt : t;
-        return {
-            ...usable,
+        return Object.assign({}, usable, {
             status: 'outside',
             reason: null,
             outsideSinceMs,
             lastOutsideSampleMs: t,
             outsideSampleCount,
             outsideConfirmedAt,
-        };
+        });
     }
-    return {
-        ...usable,
+    return Object.assign({}, usable, {
         status: prev.outsideConfirmedAt !== null ? 'outside' : 'near',
         reason: null,
         outsideSinceMs,
         lastOutsideSampleMs: t,
         outsideSampleCount,
-    };
+    });
 };
 
 // `current` is optional. When both currentRevision and currentUid are given, a
@@ -426,6 +421,15 @@ const deriveFreshStatus = (state, nowMs, current = {}) => {
     return { status: state.status, reason };
 };
 
+// Object.assign, not `{ ...spread }`, throughout this file: object-spread
+// syntax makes Babel inject an `import` for its `_objectSpread2` runtime
+// helper, which flips webpack's view of this file to "ES module" even
+// though it never uses import/export itself — and that in turn makes the
+// `module.exports` reassignment below throw "ES Modules may not assign
+// module.exports" at runtime, in the client bundle only (this file stays
+// CommonJS for the Cloud Functions vendoring, but also gets pulled into the
+// client bundle via the `require()` calls in boundaryDraft.js and
+// BoundaryEditorModal.js). Array spread (`[...arr]`) does not trigger this.
 module.exports = {
     EARTH_RADIUS_M,
     MAX_VERTICES,
