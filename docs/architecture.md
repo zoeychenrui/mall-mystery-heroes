@@ -164,6 +164,21 @@ render the button off their own live `onSnapshot` subscription to the
 room doc's `gameBoundary` field, the same subscription shape
 `GameMasterView` already used for `isGameActive`.
 
+Phase 3 adds the player-facing half. `src/hooks/useBoundaryLocation.js`
+owns the one browser geolocation watch a mounted player session gets:
+permission on demand, fixes reported through `reportPlayerLocation` at
+`locationReportCadence.js`'s cadence, a backstop timer and a
+visibility-change handler that both reacquire a fresh fix (gated on
+`permissionState` so a denial never re-prompts on its own), and its own
+`ownPosition`/`permissionState` surfaced for the UI to render — it does
+not derive the player's displayed status itself.
+`src/components/map_components/PlayerMapModal.js` is the read-only
+counterpart to `BoundaryEditorModal.js`: a Mapbox view of the published
+boundary plus the player's own position, built on the same `GameMap.js`.
+`PlayerGame.js` mounts `useBoundaryLocation` at its own level, not inside
+the modal, so closing the map never stops tracking — the modal is purely
+presentational.
+
 ## State management ✅ Resolved (improvements item 13)
 
 There is no state library. Until item 13, state lived in three separate

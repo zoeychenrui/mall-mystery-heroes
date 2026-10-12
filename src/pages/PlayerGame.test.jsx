@@ -17,7 +17,7 @@
  */
 import React from 'react';
 import { ChakraProvider } from '@chakra-ui/react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { onSnapshot } from 'firebase/firestore';
@@ -28,9 +28,11 @@ import {
     fetchPlayerReferenceForRoom,
     fetchPlayersQueryByDescendPointsThenIsAliveForRoom,
     fetchTasksQueryForRoom,
+    fetchBoundaryStatusReferenceForPlayer,
 } from '../components/firebase_calls/dbCalls';
 import { leaveGame } from '../components/leaveGame';
 import { writePlayerSession, readPlayerSession } from '../utils/playerSession';
+import useBoundaryLocation from '../hooks/useBoundaryLocation';
 
 jest.mock('firebase/auth', () => ({
     signOut: jest.fn(),
@@ -44,8 +46,31 @@ jest.mock('../components/firebase_calls/dbCalls', () => ({
     fetchPlayerReferenceForRoom: jest.fn(),
     fetchPlayersQueryByDescendPointsThenIsAliveForRoom: jest.fn(),
     fetchTasksQueryForRoom: jest.fn(),
+    fetchBoundaryStatusReferenceForPlayer: jest.fn(() => 'status-ref'),
 }));
 jest.mock('../components/leaveGame', () => ({ leaveGame: jest.fn() }));
+jest.mock('../components/reportPlayerLocation', () => ({ reportPlayerLocation: jest.fn() }));
+jest.mock('../hooks/useBoundaryLocation', () =>
+    jest.fn(() => ({
+        permissionState: 'unknown',
+        lastResult: null,
+        ownPosition: null,
+        requestPermission: jest.fn(),
+    }))
+);
+// Mocked, not the real Chakra modal — PlayerMapModal has its own test file.
+// The Close button here is this stub's own affordance, not the real
+// modal's ModalCloseButton, so the "closing the map modal" test below has
+// something to click without pulling in the real Modal/GameMap tree.
+jest.mock(
+    '../components/map_components/PlayerMapModal',
+    () => (props) =>
+        props.isOpen ? (
+            <div data-testid="mock-player-map-modal">
+                <button onClick={props.onClose}>Close</button>
+            </div>
+        ) : null
+);
 // Stubbed — has its own dedicated test file (PlayerTaskListModal.test.jsx).
 // This file only checks that the button opens/closes it and passes roomID
 // through, same reasoning as the MessageFeed/MessageComposer stubs below.
@@ -115,6 +140,18 @@ beforeEach(() => {
     localStorage.clear();
     fetchRoomReferenceForRoom.mockReturnValue('room-ref');
     fetchPlayerReferenceForRoom.mockReturnValue('player-ref');
+    fetchBoundaryStatusReferenceForPlayer.mockReturnValue('status-ref');
+    // clearMocks (jest.config.js) only clears call history, not a mocked
+    // implementation set via mockReturnValue — same reason the two lines
+    // above re-seed every test rather than relying on the jest.mock
+    // factory's own default sticking around once some other test (e.g.
+    // the Retry test below) has overridden it.
+    useBoundaryLocation.mockReturnValue({
+        permissionState: 'unknown',
+        lastResult: null,
+        ownPosition: null,
+        requestPermission: jest.fn(),
+    });
     signOut.mockResolvedValue(undefined);
     leaveGame.mockResolvedValue({
         removedPlayerName: 'Alice',
@@ -639,5 +676,257 @@ describe('PlayerGame', () => {
                     ])
             )
         ).toBeInTheDocument();
+    });
+
+    // --- Game boundary tracking/status UI (Phase 3) ---------------------
+
+    it('shows the pre-permission explanation and an Enable Location button once a boundary is published', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        expect(
+            screen.getByText(/Turn on location so we can check that you are inside the game area/)
+        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Enable Location' })).toBeInTheDocument();
+    });
+
+    it('shows "In game area." when the live-derived status is inside', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            } else if (ref === 'status-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        status: 'inside',
+                        reason: null,
+                        lastUsableReceivedAt: { toMillis: () => Date.now() },
+                        boundaryRevision: 1,
+                    }),
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        expect(screen.getByText('In game area.')).toBeInTheDocument();
+    });
+
+    it('shows the persistent outside warning', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            } else if (ref === 'status-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        status: 'outside',
+                        reason: null,
+                        lastUsableReceivedAt: { toMillis: () => Date.now() },
+                        boundaryRevision: 1,
+                    }),
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        expect(
+            screen.getByText('You are outside the game area. Please return inside.')
+        ).toBeInTheDocument();
+    });
+
+    it('shows Location unavailable once the stored status has gone stale, even though it was last Inside', () => {
+        jest.useFakeTimers();
+        try {
+            writePlayerSession('Fluffy42317', 'Alice');
+            const lastUsableMs = Date.now();
+            onSnapshot.mockImplementation((ref, callback) => {
+                if (ref === 'room-ref') {
+                    callback({
+                        exists: () => true,
+                        data: () => ({
+                            gameStarted: false,
+                            gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                        }),
+                    });
+                } else if (ref === 'status-ref') {
+                    callback({
+                        exists: () => true,
+                        data: () => ({
+                            status: 'inside',
+                            reason: null,
+                            lastUsableReceivedAt: { toMillis: () => lastUsableMs },
+                            boundaryRevision: 1,
+                        }),
+                    });
+                }
+                return () => {};
+            });
+
+            renderWaiting();
+
+            // Fresh at mount — the stale-ness is introduced only by the
+            // local ticker advancing below, with no new Firestore snapshot.
+            expect(screen.getByText('In game area.')).toBeInTheDocument();
+
+            act(() => {
+                jest.advanceTimersByTime(31000);
+            });
+
+            expect(screen.getByText(/Location unavailable/)).toBeInTheDocument();
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it('hides status entirely once the boundary is disabled', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: false, revision: 1, vertices: [] },
+                    }),
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        expect(screen.queryByText('In game area.')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Enable Location' })).not.toBeInTheDocument();
+    });
+
+    it('Retry calls requestPermission again after a denial', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            }
+            return () => {};
+        });
+        const requestPermission = jest.fn();
+        useBoundaryLocation.mockReturnValue({
+            permissionState: 'denied',
+            lastResult: null,
+            ownPosition: null,
+            requestPermission,
+        });
+
+        renderWaiting();
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+        expect(requestPermission).toHaveBeenCalled();
+    });
+
+    it('closing the map modal does not unmount or otherwise stop useBoundaryLocation', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
+        const mockModal = screen.getByTestId('mock-player-map-modal');
+        const argsWhileOpen =
+            useBoundaryLocation.mock.calls[useBoundaryLocation.mock.calls.length - 1][0];
+
+        // Scoped to the mock modal itself — the "Game area is ready" toast
+        // fired on this same mount also renders its own Close button with
+        // an accessible name matching /close/i, which would otherwise make
+        // this query ambiguous.
+        fireEvent.click(within(mockModal).getByRole('button', { name: /close/i }));
+
+        expect(screen.queryByTestId('mock-player-map-modal')).not.toBeInTheDocument();
+        // useBoundaryLocation is called once per PlayerGame render
+        // regardless of the modal's own open/closed state — it kept being
+        // called across the toggle (never unmounted), and with the exact
+        // same roomID/boundary/isGameActive args both times, i.e. closing
+        // the modal was not a side channel that touched the hook's inputs.
+        const callsAfterToggle = useBoundaryLocation.mock.calls.length;
+        expect(callsAfterToggle).toBeGreaterThan(0);
+        const argsAfterClose = useBoundaryLocation.mock.calls[callsAfterToggle - 1][0];
+        expect(argsAfterClose).toEqual(argsWhileOpen);
+    });
+
+    it('shows a "Game area updated" notice when the boundary revision increases after the room is already loaded', async () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        let roomCallback;
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                roomCallback = callback;
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        act(() => {
+            roomCallback({
+                exists: () => true,
+                data: () => ({
+                    gameStarted: false,
+                    gameBoundary: { enabled: true, revision: 2, vertices: [] },
+                }),
+            });
+        });
+
+        expect(await screen.findByText(/Game area updated/)).toBeInTheDocument();
     });
 });

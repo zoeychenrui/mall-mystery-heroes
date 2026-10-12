@@ -556,6 +556,25 @@ reload) and, eventually, every player's device via
 boundary status yet). Disable follows the identical path through
 `disableGameBoundary`.
 
+## 8. Tracking a player inside the game area
+
+Once a boundary is published and this player's own `PlayerGame.js` picks
+it up off its existing room-doc `onSnapshot` (the same subscription flow
+7 above describes), the player sees a "Game area is ready" toast and a
+pre-permission explanation with an Enable Location button. Tapping it
+calls `useBoundaryLocation`'s `requestPermission`, which starts one
+geolocation watch for the session; each fix (or error) goes through the
+`reportPlayerLocation` callable, the same server-side evaluation Phase 1
+already documented under [Cloud Functions](./architecture.md#cloud-functions).
+The server's verdict lands back on this player's own `boundaryStatuses`
+doc, which `PlayerGame.js` subscribes to live and renders as a status
+line (In/near/outside the game area, or "Location unavailable" once the
+reading goes stale) — independent of whether `PlayerMapModal` is open,
+which shows the boundary and the player's own position on a map at any
+time without affecting tracking either way. A later boundary revision
+restarts the watch with fresh readings and surfaces a "Game area updated"
+notice through the same room-doc subscription.
+
 ---
 
 ## Where each flow updates the screen
@@ -563,14 +582,15 @@ boundary status yet). Disable follows the identical path through
 Because [state lives in three places](./architecture.md#state-management), each
 flow updates the UI differently:
 
-| Surface                                        | Mechanism                                                                       | Stale after reload?    |
-| ---------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------- |
-| Player list with scores and targets            | `onSnapshot`                                                                    | No — always live       |
-| Photo queue                                    | `onSnapshot`                                                                    | No — always live       |
-| Reconnect request queue (GM console)           | `onSnapshot`                                                                    | No — always live       |
-| Reconnect status (requester's own screen)      | `onSnapshot` on the single request doc                                          | No — always live       |
-| Log panel                                      | `onSnapshot` (`docs/improvements.md` item 22)                                   | No — always live       |
-| `Players (n)` header count                     | derived from the same live `onSnapshot` roster (item 13)                        | No — always live       |
-| Alive/dead arrays driving `/revive` validation | refetched via `fetchPlayersByStatusForRoom` on every command                    | No — always current    |
-| Photo undo history                             | persisted on the photo doc itself (`preKillSnapshot`), not React state (item 6) | No — survives a reload |
-| Game Area button label (Lobby/GameMasterView)  | `onSnapshot` on the room doc's `gameBoundary` field                             | No — always live       |
+| Surface                                        | Mechanism                                                                           | Stale after reload?       |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------- |
+| Player list with scores and targets            | `onSnapshot`                                                                        | No — always live          |
+| Photo queue                                    | `onSnapshot`                                                                        | No — always live          |
+| Reconnect request queue (GM console)           | `onSnapshot`                                                                        | No — always live          |
+| Reconnect status (requester's own screen)      | `onSnapshot` on the single request doc                                              | No — always live          |
+| Log panel                                      | `onSnapshot` (`docs/improvements.md` item 22)                                       | No — always live          |
+| `Players (n)` header count                     | derived from the same live `onSnapshot` roster (item 13)                            | No — always live          |
+| Alive/dead arrays driving `/revive` validation | refetched via `fetchPlayersByStatusForRoom` on every command                        | No — always current       |
+| Photo undo history                             | persisted on the photo doc itself (`preKillSnapshot`), not React state (item 6)     | No — survives a reload    |
+| Game Area button label (Lobby/GameMasterView)  | `onSnapshot` on the room doc's `gameBoundary` field                                 | No — always live          |
+| Player's own boundary status (`PlayerGame`)    | `onSnapshot` on `boundaryStatuses/{playerId}`, plus a local 1s ticker for freshness | No — resubscribes on load |
