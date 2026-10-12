@@ -414,6 +414,14 @@ export const fetchPlayerReferenceForRoom = (playerName, roomID) => {
     return doc(db, 'rooms', roomID, 'players', normalizePlayerName(playerName));
 };
 
+// A player's own boundary-status document — read-only from the client,
+// and only the player's own (firestore.rules checks the uid on their
+// player doc), same normalized ID scheme as fetchPlayerReferenceForRoom
+// above (docs/data-model.md's boundaryStatuses section).
+export const fetchBoundaryStatusReferenceForPlayer = (playerName, roomID) => {
+    return doc(db, 'rooms', roomID, 'boundaryStatuses', normalizePlayerName(playerName));
+};
+
 // A reference to a specific reconnect request, for onSnapshot — lets
 // ReconnectPending.js watch its own request's status live
 // (docs/superpowers/specs/2026-08-30-player-reconnect-design.md).
