@@ -92,10 +92,15 @@ const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapErro
         [boundaryVertices, fitTo, onMapLoad]
     );
 
-    const handleError = useCallback(() => {
-        setHasError(true);
-        if (onMapError) onMapError();
-    }, [onMapError]);
+    const handleError = useCallback(
+        (event) => {
+            // eslint-disable-next-line no-console
+            console.error('GameMap: mapbox-gl error event', event?.error ?? event);
+            setHasError(true);
+            if (onMapError) onMapError();
+        },
+        [onMapError]
+    );
 
     const handleRetry = () => {
         hasFitRef.current = false;
