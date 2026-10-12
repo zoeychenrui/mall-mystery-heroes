@@ -1,4 +1,4 @@
-import { parseCommand, KNOWN_COMMANDS } from './commands';
+import { parseCommand, KNOWN_COMMANDS, UNIMPLEMENTED_COMMANDS } from './commands';
 
 describe('parseCommand', () => {
     it('splits a command from its arguments', () => {
@@ -64,5 +64,17 @@ describe('parseCommand', () => {
 
     it.each(KNOWN_COMMANDS)('accepts %s', (command) => {
         expect(parseCommand(`${command} x y`).ok).toBe(true);
+    });
+
+    it('lists every unimplemented command as a known command', () => {
+        // ChatInput.js checks UNIMPLEMENTED_COMMANDS.includes(commandLine)
+        // only after parseCommand has already accepted it — an entry here
+        // that isn't in KNOWN_COMMANDS would be dead, since parseCommand
+        // would reject it as UNKNOWN_COMMAND first (improvements item 21).
+        // UNIMPLEMENTED_COMMANDS is currently empty (/whisper, /broadcast,
+        // /leaderboard are all implemented) — this guards any future addition.
+        expect(UNIMPLEMENTED_COMMANDS.every((command) => KNOWN_COMMANDS.includes(command))).toBe(
+            true
+        );
     });
 });

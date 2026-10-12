@@ -10,6 +10,7 @@
 export const KNOWN_COMMANDS = [
     '/add',
     '/broadcast',
+    '/kick',
     '/kill',
     '/leaderboard',
     '/mission',
@@ -19,7 +20,7 @@ export const KNOWN_COMMANDS = [
 ];
 
 /** Commands accepted by the whitelist but not yet implemented. */
-export const UNIMPLEMENTED_COMMANDS = ['/broadcast', '/leaderboard', '/whisper'];
+export const UNIMPLEMENTED_COMMANDS = [];
 
 // Matches a leading /command, a [bracketed placeholder], or a bare word.
 const TOKEN = /\/\S+|\[[^\]]+\]|\S+/g;

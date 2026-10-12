@@ -1,0 +1,192 @@
+rules_version = '2';
+
+// Minimum-viable rules for docs/improvements.md item 2. All game state is
+// scoped to the room's host: `hostId` is the creating user's auth.uid, set
+// once in DashBoard.handleHostRoom and never changed (docs/data-model.md).
+// Reads are additionally scoped to players who have actually joined a room
+// (docs/superpowers/specs/2026-08-07-join-flow-ui-and-room-scoping-design.md)
+// — `joinedUids`, appended to by joinRoom's transaction, is what makes that
+// checkable from a rule at all, since Firestore rules can only fetch a
+// specific known path, not query "does any player doc have field X == Y."
+//
+// Not addressed here, on purpose (see docs/testing.md Phase 3 scope):
+//   - item 4's atomicity problem is resolved — kills now run inside a
+//     Cloud Function transaction (functions/callableFunctions/killPlayer.js),
+//     which uses the Admin SDK and bypasses these rules entirely (it
+//     re-implements the isHostOfExistingRoom check itself). What's NOT
+//     resolved: the host can still write any *other* player field
+//     directly from the client — score via task completion,
+//     ResetTargetsButton's manual reset, open-season toggling,
+//     addPlayerForRoom. Only kills moved server-side; auditing and
+//     re-homing everything else client-writable is separate, larger scope.
+//   - write access is unchanged (host-only) — this pass only widens who can
+//     *read* a room beyond its host.
+//   - route guards (item 3) and storage.rules are separate concerns.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Both functions must be null-safe: `get(path).data` on a nonexistent
+    // doc evaluates to `null`, and dereferencing `.hostId`/`.joinedUids` on
+    // that null is a rule-evaluation error (denied as permission-denied,
+    // not a clean "doesn't exist" result) — so `exists()` must be checked
+    // first, and short-circuit to `false` via `&&`, not `!exists(..) ||`
+    // (that would make a nonexistent room's own OWN result true here, which
+    // is wrong: these two functions are reused verbatim by the six
+    // subcollections' rules below, and a Firestore subcollection document
+    // exists completely independently of its parent room document — a
+    // "nonexistent room is readable" result here would let a signed-in
+    // stranger create/read/delete arbitrary docs under
+    // rooms/<made-up-id>/players|tasks|logs|photos|playerMessages/*, a
+    // public, unrestricted write surface. So: strictly `false` whenever the
+    // room doesn't exist, full stop. DashBoard.handleHostRoom's
+    // checkForRoomIDDupes still needs to read a not-yet-created room ID
+    // without erroring — that carve-out is handled separately, ONLY on the
+    // room document's own `allow read` below, not in these two functions.
+    function isHostOfExistingRoom(roomId) {
+      let roomPath = /databases/$(database)/documents/rooms/$(roomId);
+      return isSignedIn() &&
+        exists(roomPath) &&
+        get(roomPath).data.hostId == request.auth.uid;
+    }
+
+    function isPlayerOfRoom(roomId) {
+      let roomPath = /databases/$(database)/documents/rooms/$(roomId);
+      return isSignedIn() &&
+        exists(roomPath) &&
+        request.auth.uid in get(roomPath).data.get('joinedUids', []);
+    }
+
+    // A player's boundary status doc is keyed by the same playerId as their
+    // players/{playerId} doc; the player's auth uid is stored on that doc
+    // (joinRoom), so ownership is checked there. Same null-safety rule as
+    // the two functions above: exists() first, short-circuited by &&.
+    function isOwnBoundaryStatus(roomId, playerId) {
+      let playerPath = /databases/$(database)/documents/rooms/$(roomId)/players/$(playerId);
+      return exists(playerPath) && get(playerPath).data.uid == request.auth.uid;
+    }
+
+    function isHostOrPlayerOfRoom(roomId) {
+      return isHostOfExistingRoom(roomId) || isPlayerOfRoom(roomId);
+    }
+
+    match /rooms/{roomId} {
+      // The `!exists(...)` carve-out is intentionally only here, not inside
+      // isHostOfExistingRoom/isPlayerOfRoom: this is the one call site
+      // (DashBoard.handleHostRoom -> checkForRoomIDDupes) that legitimately
+      // reads a room ID expected NOT to exist yet, and it only ever reads
+      // the room document itself, never a subcollection of it.
+      allow get: if isSignedIn() &&
+        (!exists(/databases/$(database)/documents/rooms/$(roomId)) || isHostOrPlayerOfRoom(roomId));
+      // Lets a returning GM find the room they're already hosting
+      // (DashBoard.js, docs/superpowers/specs/2026-08-08-dashboard-removal-design.md)
+      // instead of always creating a new one. Firestore denies a `list`
+      // query outright unless the rule is provably true for every possible
+      // result of that exact query shape — a plain `get()`-based check like
+      // isHostOfExistingRoom can't be verified that way (it depends on
+      // roomId, which a broad query doesn't fix in advance), so this checks
+      // resource.data directly instead, which Firestore CAN verify against
+      // the query's own `where('hostId', '==', uid)` filter. Deliberately
+      // narrower than `allow get` above: no equivalent "am I a player"
+      // list capability exists or is needed here.
+      allow list: if isSignedIn() && resource.data.hostId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.hostId == request.auth.uid;
+      // The gameBoundary field is written only by the gameBoundary Cloud
+      // Functions (Admin SDK, bypasses these rules), so the client may not
+      // change it. Split from delete on purpose: the old single clause
+      // granted both, and delete must stay host-only with no field restriction.
+      allow update: if isHostOfExistingRoom(roomId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gameBoundary']);
+      allow delete: if isHostOfExistingRoom(roomId);
+
+      match /players/{playerId} {
+        allow read: if isHostOrPlayerOfRoom(roomId);
+        allow write: if isHostOfExistingRoom(roomId);
+      }
+
+      // Game boundary status and events are written only by the Cloud
+      // Functions (Admin SDK). A player reads only their own status doc, and
+      // there is no list grant for players, so the roster of statuses stays
+      // host-only.
+      match /boundaryStatuses/{playerId} {
+        allow read: if isHostOfExistingRoom(roomId) ||
+          (isSignedIn() && isOwnBoundaryStatus(roomId, playerId));
+        allow write: if false;
+      }
+
+      match /boundaryEvents/{eventId} {
+        allow read: if isHostOfExistingRoom(roomId);
+        allow write: if false;
+      }
+
+      match /tasks/{taskId} {
+        allow read: if isHostOrPlayerOfRoom(roomId);
+        allow write: if isHostOfExistingRoom(roomId);
+      }
+
+      match /logs/{logId} {
+        allow read: if isHostOrPlayerOfRoom(roomId);
+        allow write: if isHostOfExistingRoom(roomId);
+      }
+
+      // Interim scope — see file header.
+      match /photos/{photoId} {
+        allow read: if isHostOrPlayerOfRoom(roomId);
+        allow write: if isHostOfExistingRoom(roomId);
+        // Player-facing `allow create` removed — kill-photo submission now
+        // goes through functions/callableFunctions/submitKillPhoto.js (Admin
+        // SDK, bypasses rules entirely), which derives the submitter's
+        // identity from their own uid instead of trusting a client-supplied
+        // `assassin` field, and re-implements this clause's old url-origin
+        // validation itself (docs/superpowers/specs/
+        // 2026-08-22-identity-verified-player-writes-design.md).
+      }
+
+      // Interim scope, same reasoning as photos above — see file header.
+      match /playerMessages/{messageId} {
+        allow read: if isHostOrPlayerOfRoom(roomId);
+        allow write: if isHostOfExistingRoom(roomId);
+        // Player-facing `allow create` removed — player chat now goes through
+        // functions/callableFunctions/submitChatMessage.js (Admin SDK,
+        // bypasses rules entirely), same reasoning as photos above. GM
+        // broadcasts/whispers/leaderboard/mission messages still go through
+        // dbCalls.addPlayerMessageForRoom, authorized by `allow write` above —
+        // untouched, a fully independent path.
+      }
+
+      // No Player-facing `allow create` here at all, unlike photos/
+      // playerMessages above — every write to this collection goes
+      // through the three Cloud Functions in
+      // functions/callableFunctions/reconnectRequest.js (Admin SDK,
+      // bypasses rules entirely)
+      // (docs/superpowers/specs/2026-08-30-player-reconnect-design.md).
+      // The read grant covers both get and list uniformly (unlike the
+      // top-level rooms collection's split grant) — this subcollection's
+      // path is already bound to a known {roomId}, so it doesn't need
+      // the query-shape workaround the rooms-level `allow list` grant
+      // needs.
+      match /reconnectRequests/{requestId} {
+        allow read: if isHostOfExistingRoom(roomId) ||
+          (isSignedIn() && resource.data.requestingUid == request.auth.uid);
+        allow write: if false;
+      }
+    }
+
+    // Collection-group list, for session recovery (Homepage.js) when
+    // localStorage has been cleared but the caller's Firebase Auth session
+    // survived — finds which room this uid already joined without needing
+    // the room ID from anywhere else. Deliberately independent of
+    // isPlayerOfRoom/isHostOfExistingRoom: the query itself is already
+    // scoped to the caller's own uid via `resource.data.uid ==
+    // request.auth.uid`, which Firestore can verify against the query's own
+    // where() filter the same way the rooms-list grant above does — no
+    // room lookup is needed or possible here (the wildcard path doesn't
+    // bind {roomId}).
+    match /{path=**}/players/{playerId} {
+      allow list: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+  }
+}

@@ -3,6 +3,7 @@
         {
             "source": "functions",
             "codebase": "default",
+            "predeploy": ["node functions/scripts/sync-shared-game-logic.js"],
             "ignore": [
                 "node_modules",
                 ".git",
@@ -30,7 +31,41 @@
             "port": 9199
         }
     },
+    "firestore": {
+        "rules": "firestore.rules",
+        "indexes": "firestore.indexes.json"
+    },
     "storage": {
         "rules": "storage.rules"
+    },
+    "hosting": {
+        "public": "build",
+        "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+        "rewrites": [
+            {
+                "source": "**",
+                "destination": "/index.html"
+            }
+        ],
+        "headers": [
+            {
+                "source": "**",
+                "headers": [
+                    {
+                        "key": "Cache-Control",
+                        "value": "no-cache, no-store, must-revalidate"
+                    }
+                ]
+            },
+            {
+                "source": "/static/**",
+                "headers": [
+                    {
+                        "key": "Cache-Control",
+                        "value": "public, max-age=31536000, immutable"
+                    }
+                ]
+            }
+        ]
     }
 }

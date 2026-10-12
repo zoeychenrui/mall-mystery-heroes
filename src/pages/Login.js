@@ -1,8 +1,7 @@
 import React from 'react';
-import { Heading, Box, Flex, Image } from '@chakra-ui/react';
+import { Heading, Box, Flex } from '@chakra-ui/react';
 import Auth from '../components/auth';
 import bgimg from '../assets/logo-3.png'; // Ensure this path is correct
-import logo from '../assets/mall-logo-white-2.png';
 
 const LoginPage = () => {
     return (
@@ -22,24 +21,11 @@ const LoginPage = () => {
                 height="100vh"
                 p={4}
             >
-                <Box
-                    display="flex"
-                    flexDirection="column"
-                    alignItems="center" // Center align items horizontally
-                >
-                    <Image
-                        src={logo}
-                        maxWidth="300px"
-                        maxHeight="300px"
-                        alt="logo white"
-                        mb={5} // Adds margin bottom to the Image
-                    />
-                    <Heading mb={8} color="brand.100" textAlign="center" marginLeft="10px">
-                        Mall Mystery Heroes
-                    </Heading>
-                    <Box display="flex" justifyContent="center" width="100%">
-                        <Auth isLoginPage={true} />
-                    </Box>
+                <Heading mb={8} color="brand.100" textAlign="center">
+                    Log In
+                </Heading>
+                <Box display="flex" justifyContent="center" width="100%">
+                    <Auth isLoginPage={true} />
                 </Box>
             </Flex>
         </Box>

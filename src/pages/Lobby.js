@@ -1,20 +1,26 @@
 import { Button, Divider, Flex, Heading, Image } from '@chakra-ui/react';
 import { signOut } from 'firebase/auth';
+import { onSnapshot } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import mallLogo from '../assets/mall-logo-black-green.png';
 import CreateAlert from '../components/CreateAlert';
-import PlayerAddition from '../components/lobby_components/PlayerAddition';
 import PlayerList from '../components/lobby_components/PlayerList';
 import PlayerRemove from '../components/lobby_components/PlayerRemove';
+import AbandonRoomButton from '../components/lobby_components/AbandonRoomButton';
 import TargetGenerator from '../components/TargetGenerator';
-import { fetchAllPlayersForRoom } from '../components/firebase_calls/dbCalls';
+import GameBoundaryButton from '../components/map_components/GameBoundaryButton';
+import {
+    fetchAllPlayersQueryForRoom,
+    fetchRoomReferenceForRoom,
+} from '../components/firebase_calls/dbCalls';
 import { auth } from '../utils/firebase';
 
 const Lobby = () => {
     const navigate = useNavigate();
     const { roomID } = useParams();
     const [arrayOfPlayers, setArrayOfPlayers] = useState([]);
+    const [gameBoundary, setGameBoundary] = useState(undefined);
     const createAlert = CreateAlert();
 
     const logout = async () => {
@@ -27,22 +33,37 @@ const Lobby = () => {
         }
     };
 
-    //fetches players when roomID or playerCollectionRef changes
+    // Live subscription, not a one-time fetch (docs/improvements.md item
+    // 13, extended here from GameMasterView to Lobby) — a player joining
+    // from another device now shows up without the GM reloading the page.
     useEffect(() => {
-        const fetchPlayers = async () => {
-            try {
-                const players = await fetchAllPlayersForRoom(roomID);
-                setArrayOfPlayers(players);
-            } catch (error) {
-                console.log(error);
+        if (!roomID) return undefined;
+        const playersQuery = fetchAllPlayersQueryForRoom(roomID);
+        const unsubscribe = onSnapshot(
+            playersQuery,
+            (snapshot) => {
+                setArrayOfPlayers(snapshot.docs.map((doc) => doc.data().name));
+            },
+            (error) => {
+                console.error(error);
                 createAlert('error', 'Error updating arrayOfPlayers', 'Check console.', 1500);
             }
-        };
-
-        if (roomID) {
-            fetchPlayers();
-        }
+        );
+        return () => unsubscribe();
         // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [roomID]);
+
+    // Live subscription to the room doc's gameBoundary field, mirroring the
+    // players-query subscription above in structure — GameBoundaryButton
+    // needs to know whether a boundary already exists to pick its own
+    // label ("Set Game Area" vs "Edit Game Area").
+    useEffect(() => {
+        if (!roomID) return undefined;
+        const roomRef = fetchRoomReferenceForRoom(roomID);
+        const unsubscribe = onSnapshot(roomRef, (snapshot) => {
+            setGameBoundary(snapshot.data()?.gameBoundary);
+        });
+        return () => unsubscribe();
     }, [roomID]);
 
     //navigates to lobby
@@ -62,49 +83,25 @@ const Lobby = () => {
         }
 
         try {
-            navigate(`/rooms/${roomID}/GameMasterView`, { state: { arrayOfPlayers } });
+            // GameMasterView derives its own player count from a live
+            // Firestore subscription now, not router state
+            // (docs/improvements.md item 13) — nothing reads this anymore.
+            navigate(`/rooms/${roomID}/GameMasterView`);
         } catch (error) {
             console.error('Error navigating to game view: ', error);
             createAlert('error', 'Error navigating to game view', 'Check console.', 1500);
         }
     };
-    //adds player to arrayOfPlayers when they are added
-    const handlePlayerAdded = (PlayerName) => {
-        setArrayOfPlayers((arrayOfPlayers) => [...arrayOfPlayers, PlayerName]);
-    };
-    //removes player from arrayOfPlayers when they are removed
-    const handlePlayerRemoved = (PlayerName) => {
-        try {
-            const index = arrayOfPlayers.indexOf(PlayerName);
-            const spliced = arrayOfPlayers.slice();
-            spliced.splice(index, 1);
-            setArrayOfPlayers(spliced);
-        } catch (error) {
-            console.error('Error removing player: ', error);
-            createAlert('error', 'Error removing player', 'Check console.', 1500);
-        }
-    };
 
+    // Single centered column: green banner (logo + Log Out) up top, then
+    // game ID, roster, Remove Player, and Start Game below — replacing the
+    // old 40/70 split-screen layout and its manual "Add Player" form, now
+    // redundant since players self-join via JoinGame.js
+    // (docs/superpowers/specs/2026-08-14-simplified-lobby-design.md).
     return (
-        <Flex h="100vh" w="100vw" justify="center" align="center" direction="row">
-            <Flex direction="column" w="40%" h="100%" bg="#66bf78" justify="center" align="center">
-                <Image src={mallLogo} alt="logo" w="45%" h="40%" mt="20%" />
-                <Heading as="h2" size="md" mt="10%" color="black">
-                    Lobby ID: {roomID}
-                </Heading>
-                <Heading size="md" mt="6%" mb="4px" color="black">
-                    Add Player
-                </Heading>
-                <PlayerAddition roomID={roomID} onPlayerAdded={handlePlayerAdded} />
-                <TargetGenerator
-                    roomID={roomID}
-                    arrayOfPlayers={arrayOfPlayers}
-                    handleLobbyRoom={handleLobbyRoom}
-                />
-            </Flex>
-
-            <Flex direction="column" h="100%" w="70%" bg="black">
-                <Flex justify="flex-end" h="6%">
+        <Flex h="100vh" w="100vw" direction="column">
+            <Flex direction="column" w="100%" h="30%" bg="#66bf78">
+                <Flex justify="flex-end" w="100%">
                     <Button
                         colorScheme="red"
                         m="12px"
@@ -116,24 +113,38 @@ const Lobby = () => {
                         Log Out
                     </Button>
                 </Flex>
-
-                <Flex justify="center" align="center" mb="1%">
-                    <Heading>Players ({arrayOfPlayers.length})</Heading>
+                <Flex flex="1" justify="center" align="center">
+                    <Image src={mallLogo} alt="logo" w="120px" h="120px" />
                 </Flex>
+            </Flex>
+
+            <Flex direction="column" w="100%" flex="1" bg="black" align="center" overflow="auto">
+                <Heading as="h2" size="md" mt="4%">
+                    Game ID: {roomID}
+                </Heading>
+                <Heading mt="4%" mb="1%">
+                    Players ({arrayOfPlayers.length})
+                </Heading>
                 <Divider />
 
-                <Flex h="76%" justify="center" align="center" overflow="auto">
+                <Flex flex="1" w="100%" justify="center" align="center" overflow="auto">
                     <PlayerList arrayOfPlayers={arrayOfPlayers} />
                 </Flex>
 
-                <Flex h="16%" align="center" justify="center" w="100%">
+                <Flex mb="2%" align="center" justify="center" w="100%">
                     {arrayOfPlayers.length > 0 && (
-                        <PlayerRemove
-                            roomID={roomID}
-                            arrayOfPlayers={arrayOfPlayers}
-                            onPlayerRemoved={handlePlayerRemoved}
-                        />
+                        <PlayerRemove roomID={roomID} arrayOfPlayers={arrayOfPlayers} />
                     )}
+                </Flex>
+
+                <Flex mb="4%" gap="12px" align="center">
+                    <TargetGenerator
+                        roomID={roomID}
+                        arrayOfPlayers={arrayOfPlayers}
+                        handleLobbyRoom={handleLobbyRoom}
+                    />
+                    <AbandonRoomButton roomID={roomID} />
+                    <GameBoundaryButton roomID={roomID} gameBoundary={gameBoundary} />
                 </Flex>
             </Flex>
         </Flex>

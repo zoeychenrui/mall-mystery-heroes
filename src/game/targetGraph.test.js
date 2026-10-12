@@ -1,4 +1,4 @@
-import { maxTargetsFor, shuffle, buildTargetGraph } from './targetGraph';
+import { maxTargetsFor, shuffle, buildTargetGraph, playersNeedingConnections } from './targetGraph';
 
 /** Deterministic stand-in for Math.random: cycles a fixed sequence. */
 const seededRng = (values) => {
@@ -131,5 +131,64 @@ describe('buildTargetGraph', () => {
 
         expect(targets.a).toEqual(['b']);
         expect(targets.b).toEqual(['a']);
+    });
+});
+
+describe('playersNeedingConnections', () => {
+    it('includes a freshly revived player (no targets, no assassins) in both lists', () => {
+        const roster = [
+            { name: 'a', targets: ['b', 'c'], assassins: ['b', 'c'] },
+            { name: 'b', targets: ['c', 'a'], assassins: ['c', 'a'] },
+            { name: 'c', targets: ['a', 'b'], assassins: ['a', 'b'] },
+            { name: 'revived', targets: [], assassins: [] },
+        ];
+
+        const result = playersNeedingConnections(roster);
+
+        expect(result.needTargets).toContain('revived');
+        expect(result.needAssassins).toContain('revived');
+    });
+
+    it('also includes other players already below the room current cap, not just the empty one', () => {
+        // 7 players -> maxTargetsFor gives 2. 'short' only has 1 target and
+        // 1 assassin, one shy of the cap, same as it would be after a kill
+        // elsewhere in the game left it under-provisioned too.
+        const roster = [
+            { name: 'revived', targets: [], assassins: [] },
+            { name: 'short', targets: ['x'], assassins: ['y'] },
+            { name: 'full1', targets: ['x', 'y'], assassins: ['x', 'y'] },
+            { name: 'full2', targets: ['x', 'y'], assassins: ['x', 'y'] },
+            { name: 'full3', targets: ['x', 'y'], assassins: ['x', 'y'] },
+            { name: 'full4', targets: ['x', 'y'], assassins: ['x', 'y'] },
+            { name: 'full5', targets: ['x', 'y'], assassins: ['x', 'y'] },
+        ];
+
+        const result = playersNeedingConnections(roster);
+
+        expect(result.needTargets.sort()).toEqual(['revived', 'short']);
+        expect(result.needAssassins.sort()).toEqual(['revived', 'short']);
+    });
+
+    it('excludes players already at the current cap', () => {
+        const roster = [
+            { name: 'revived', targets: [], assassins: [] },
+            { name: 'full', targets: ['x'], assassins: ['y'] },
+        ];
+
+        // 2 players -> maxTargetsFor gives 1, so 'full' already has its one
+        // target and one assassin and should not be asked for more.
+        const result = playersNeedingConnections(roster);
+
+        expect(result.needTargets).toEqual(['revived']);
+        expect(result.needAssassins).toEqual(['revived']);
+    });
+
+    it('returns empty lists when the whole roster is already fully provisioned', () => {
+        const roster = [
+            { name: 'a', targets: ['b'], assassins: ['b'] },
+            { name: 'b', targets: ['a'], assassins: ['a'] },
+        ];
+
+        expect(playersNeedingConnections(roster)).toEqual({ needTargets: [], needAssassins: [] });
     });
 });

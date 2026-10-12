@@ -17,11 +17,11 @@ npm run build       # CRA production build
 
 ## Where code goes
 
-| Kind                                              | Location                                   | Rule                                                                                          |
-| ------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| Game rules, parsing, anything decidable from data | `src/game/`                                | Pure. No Firebase, no React, no `Math.random()` without an injectable `rng`.                  |
-| Firestore reads/writes                            | `src/components/firebase_calls/dbCalls.js` | The only place the SDK is touched (two legacy exceptions: `UnmapPlayers.js`, `DashBoard.js`). |
-| Components                                        | `src/pages/`, `src/components/`            | Thin. Call into `src/game/`, hand the result to `dbCalls`.                                    |
+| Kind                                              | Location                                   | Rule                                                                                                                                                                                                                                                          |
+| ------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Game rules, parsing, anything decidable from data | `src/game/`                                | Pure. No Firebase, no React, no `Math.random()` without an injectable `rng`.                                                                                                                                                                                  |
+| Firestore reads/writes                            | `src/components/firebase_calls/dbCalls.js` | The only place the client SDK is touched (one legacy exception: `DashBoard.js`). `functions/callableFunctions/killPlayer.js` touches the server-side Admin SDK directly, inside a `runTransaction` — a separate, intentional exception, not a seam violation. |
+| Components                                        | `src/pages/`, `src/components/`            | Thin. Call into `src/game/`, hand the result to `dbCalls`.                                                                                                                                                                                                    |
 
 **Separate deciding from writing.** `planRemap` returns a list of writes rather
 than performing them; keep that shape when adding logic. It is what makes the
@@ -48,24 +48,6 @@ that way.
 `REACT_APP_USE_EMULATORS=true` lives in `.env.development` — read by
 `npm start` only. It must never go in `.env`, which `npm run build` reads and
 would bake into a production bundle.
-
-## Traps
-
-- **Player names must be lowercase.** Commands lowercase their arguments but
-  `dbCalls` queries the case-preserved `name` field. A player entered as
-  `Alice` cannot be referenced from the command bar. `improvements.md` item 1.
-- **`dbCalls` swallows errors** — most functions `try/catch`, log, and return
-  `undefined`. Callers don't check, so failures surface as a `TypeError` on
-  `.docs[0]` somewhere unrelated.
-- **`GameMasterView` state disagrees with Firestore.** Its player arrays are
-  fetched once on mount and mutated optimistically, while `PlayersList` and
-  `PhotosDisplay` use live `onSnapshot`. Don't write component tests asserting
-  game-state outcomes until that's fixed (`improvements.md` item 13).
-- **`src/components/old-components/` is dead code** — unreferenced, imports
-  already broken. Excluded from Prettier and ESLint. Don't fix it; it should be
-  deleted.
-- **`/kill` and photo approval take different paths** and produce different
-  graphs for the same event (`improvements.md` item 5).
 
 ## Before starting work
 

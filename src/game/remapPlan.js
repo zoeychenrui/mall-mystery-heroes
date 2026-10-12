@@ -1,4 +1,4 @@
-import { maxTargetsFor, shuffle } from './targetGraph';
+const { maxTargetsFor, shuffle } = require('./targetGraph');
 
 /**
  * Works out who should hunt whom after a kill or a revival, and returns a plan.
@@ -11,6 +11,10 @@ import { maxTargetsFor, shuffle } from './targetGraph';
  * Here the caller fetches the alive roster once, passes it in, and hands the
  * resulting writes to the data layer — ideally as one batch.
  *
+ * CommonJS require/exports — see targetGraph.js's header comment; this file
+ * is also `require()`d by the Cloud Function in
+ * functions/callableFunctions/killPlayer.js (docs/improvements.md item 4).
+ *
  * @param roster       alive players: [{ name, targets: string[], assassins: string[] }]
  * @param needTargets  names that are short of targets
  * @param needAssassins names that are short of assassins
@@ -20,10 +24,7 @@ import { maxTargetsFor, shuffle } from './targetGraph';
  *   logs: string[]
  * }}
  */
-export const planRemap = (
-    roster,
-    { needTargets = [], needAssassins = [], rng = Math.random } = {}
-) => {
+const planRemap = (roster, { needTargets = [], needAssassins = [], rng = Math.random } = {}) => {
     const maxTargets = maxTargetsFor(roster.length);
 
     // Local mutable copy: assignments made for one player must be visible to
@@ -125,3 +126,5 @@ export const planRemap = (
 
     return { writes, added, logs };
 };
+
+module.exports = { planRemap };

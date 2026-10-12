@@ -11,7 +11,6 @@ const Log = ({ logList }) => {
     return (
         <Box flex="1" ml="12px" mr="16px" mt="10px" fontSize="20px" overflow="auto">
             <List styleType="none" textColor="gray.400">
-                <ListItem>Game has begun!</ListItem>
                 {logs}
             </List>
         </Box>

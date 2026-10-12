@@ -5,7 +5,4 @@ functions/node_modules/
 package-lock.json
 functions/package-lock.json
 
-# Dead code, excluded from tooling. See docs/improvements.md item 14.
-src/components/old-components/
-
 *.log

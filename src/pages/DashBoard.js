@@ -1,23 +1,38 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { auth, db } from '../utils/firebase';
-import { setDoc, doc } from 'firebase/firestore';
-import { Button, ButtonGroup, Flex, Heading } from '@chakra-ui/react';
+import { setDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { Center, Spinner } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
-import { signOut } from 'firebase/auth';
-import { adjectives, uniqueNamesGenerator } from 'unique-names-generator';
-import { checkForRoomIDDupes } from '../components/firebase_calls/dbCalls';
+import { checkForRoomIDDupes, fetchActiveRoomForHost } from '../components/firebase_calls/dbCalls';
+import { generateRoomCode, isBlockedRoomCode } from '../game/roomId';
 import CreateAlert from '../components/CreateAlert';
 
+// No visible UI: resolves where a logged-in GM belongs and redirects there
+// immediately, rather than making them click "Host Room" on a static page
+// every time (docs/superpowers/specs/2026-08-08-dashboard-removal-design.md).
+// Wrapped in RequireAuth (see App.js), so auth.currentUser is already
+// resolved by the time this mounts — no onAuthStateChanged subscription
+// needed here, unlike Homepage.js, which isn't behind that guard.
 const DashBoard = () => {
     const navigate = useNavigate();
     const createAlert = CreateAlert();
 
-    const handleHostRoom = async () => {
-        try {
-            const user = auth.currentUser;
+    useEffect(() => {
+        const resolveDestination = async () => {
+            try {
+                const user = auth.currentUser;
+                if (!user) {
+                    console.error('No user is signed in.');
+                    return;
+                }
 
-            if (user) {
-                let randomRoomNumber;
+                const existingRoom = await fetchActiveRoomForHost(user.uid);
+                if (existingRoom) {
+                    const destination = existingRoom.gameStarted ? 'GameMasterView' : 'lobby';
+                    navigate(`/rooms/${existingRoom.id}/${destination}`, { replace: true });
+                    return;
+                }
+
                 let roomID;
                 let check = false;
                 let runningTime = 0;
@@ -25,61 +40,37 @@ const DashBoard = () => {
                 while (!check) {
                     runningTime++;
                     if (runningTime > 300) {
-                        console.log('timed out');
-                        return createAlert('error', 'Timed Out', 'No Available Room Found', 1500);
+                        createAlert('error', 'Timed Out', 'No Available Room Found', 1500);
+                        return;
                     }
-                    randomRoomNumber = Math.floor(Math.random() * 90000) + 10000;
-                    console.log('running');
-                    roomID = uniqueNamesGenerator({
-                        dictionaries: [adjectives, [randomRoomNumber.toString()]],
-                        separator: '',
-                        style: 'capital',
-                    });
-                    check = await checkForRoomIDDupes(roomID);
+                    roomID = generateRoomCode();
+                    check = !isBlockedRoomCode(roomID) && (await checkForRoomIDDupes(roomID));
                 }
 
                 const roomRef = doc(db, 'rooms', roomID);
                 await setDoc(roomRef, {
                     hostId: user.uid,
                     isGameActive: true,
-                    logs: [],
+                    gameStarted: false,
+                    joinedUids: [],
                     taskIndex: 1,
                     storageReference: [],
+                    createdAt: serverTimestamp(),
                 });
-                navigate(`/rooms/${roomRef.id}/lobby`);
-            } else {
-                console.error('No user is signed in.');
+                navigate(`/rooms/${roomRef.id}/lobby`, { replace: true });
+            } catch (error) {
+                console.error('Error resolving dashboard destination:', error);
             }
-        } catch (error) {
-            console.error('Error hosting room:', error);
-        }
-    };
+        };
 
-    const logout = async () => {
-        try {
-            await signOut(auth);
-            console.log('User successfully logged out');
-            navigate('/');
-        } catch (err) {
-            console.error(err);
-        }
-    };
+        resolveDestination();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
-        <Flex direction="column" align="center" justify="center" h="100vh">
-            <Heading as="h1" size="xl" mb={4}>
-                Mall Mystery Heroes DashBoard
-            </Heading>
-            <div>OLD LOBBY DATA maybe?</div>
-            <ButtonGroup mt={4}>
-                <Button colorScheme="teal" variant="outline" onClick={handleHostRoom}>
-                    Host Room
-                </Button>
-                <Button colorScheme="teal" variant="solid" onClick={logout}>
-                    Log Out
-                </Button>
-            </ButtonGroup>
-        </Flex>
+        <Center h="100vh">
+            <Spinner size="xl" />
+        </Center>
     );
 };
 

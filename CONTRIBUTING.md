@@ -15,10 +15,9 @@ how to run against the Firebase emulators.
 The short version:
 
 ```bash
-npm install
-(cd functions && npm install)
-npm run firebase:emulate   # terminal 1
-npm start                  # terminal 2
+npm install                 # covers functions/ too, via npm workspaces
+npm run firebase:emulate    # terminal 1
+npm start                   # terminal 2
 ```
 
 Everything runs against local emulators — you do not need access to the
@@ -95,25 +94,26 @@ they get data or a subscription:
 | `fetch…QueryFor…`                   | an unexecuted `Query`, for the caller to pass to `onSnapshot` |
 | `update…For…`                       | writes                                                        |
 
-Two files bypass this seam today (`UnmapPlayers.js` and `DashBoard.js`). They
-are known exceptions, not precedent. Don't add a third.
-
-### Never add to `src/components/old-components/`
-
-It is dead code, unreferenced, and its imports are already broken. It is
-excluded from ESLint and Prettier. If you're tempted to copy something out of
-it, read it carefully first — it does not reflect how the app currently works.
+One file bypasses this seam today (`DashBoard.js`). It's a known exception,
+not precedent. Don't add another — `functions/callableFunctions/killPlayer.js`
+touching the Admin SDK directly doesn't count here; it's server-side code in
+a different package, not a component reaching around `dbCalls.js`.
 
 ### Don't swallow errors
 
-Every function in `dbCalls.js` currently wraps its body in `try/catch`, logs
-with `console.error`, and returns `undefined`. Callers don't check, so failures
-resurface later as `TypeError: Cannot read properties of undefined` somewhere
-unrelated, with nothing shown to the user.
+`dbCalls.js` functions throw on failure rather than wrapping their body in
+`try/catch`, logging with `console.error`, and returning `undefined` —
+callers checking a resolved value can't tell success from silent failure,
+and it used to resurface later as `TypeError: Cannot read properties of
+undefined` somewhere unrelated, with nothing shown to the user
+([improvements item 10](docs/improvements.md)).
 
-Don't add more of this. Let the error propagate, or surface it with
-`CreateAlert`. (Fixing the existing cases is
-[improvements item 10](docs/improvements.md).)
+Don't add that pattern back. Let the error propagate to an existing or new
+`try/catch` at the call site and surface it with `CreateAlert`, or — if the
+call site is somewhere a failure genuinely shouldn't interrupt or alarm the
+GM (`GameMasterView.addLog`, called from many places, is the existing
+example) — catch it locally and degrade gracefully, but still `console.error`
+so it's not silent to a developer.
 
 ### Prefer live subscriptions over fetch-once-and-mutate
 
@@ -126,19 +126,23 @@ New rendered state should come from a subscription.
 
 ### Put game rules in a pure function
 
-The target-assignment algorithm currently exists in three near-identical copies
-(`TargetGenerator.js`, `ResetTargetsButton.js`, and a variant in
-`RemapPlayers.js`). Any change has to be made in all three.
+The target-assignment algorithm used to exist in three near-identical copies;
+it's now one, `src/game/targetGraph.js`, which `TargetGenerator.js`,
+`ResetTargetsButton.js`, and `RemapPlayers.js` all call into.
 
-New game logic belongs in a plain, testable function — not inside a component.
+New game logic belongs in a plain, testable function in `src/game/` — not
+inside a component. That's what makes it unit-testable without Firebase or
+React, and it's the pattern every fix in `improvements.md` follows.
 
-### Player names are case-sensitive
+### Multi-word player names aren't normalized consistently
 
-Lookups query the Firestore `name` field directly, while the command bar
-lowercases its arguments. The mismatch means players entered with a capital
-letter can't be referenced from commands. Keep this in mind when touching
-either side. See
-[improvements item 1](docs/improvements.md).
+`dbCalls.js`'s `normalizePlayerName` strips **all** whitespace
+(`"Alice Smith"` → `"alicesmith"`); the command bar's `.toLowerCase()` calls
+strip none. For a single-word name these produce the same key, so most of the
+codebase's case-insensitivity (improvements item 1) already covers it. A
+multi-word name entered via the command bar's bracket syntax
+(`/kill [Alice Smith] bob`) still won't match the stored key. See
+[improvements item 35](docs/improvements.md).
 
 ### `eslint-disable` must name its rule and say why
 

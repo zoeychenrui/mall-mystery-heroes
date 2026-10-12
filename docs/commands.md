@@ -27,10 +27,19 @@ Two parser caveats:
 
 - Pressing Enter on an **empty input** throws. `.match()` returns `null` and
   `.map()` is called on it before the `if (!parts) return null` guard runs.
-- The autosuggest inserts the literal help text, brackets included. Accepting the
-  suggestion for `/kill [player] [assassin]` and pressing Enter runs
-  `/kill player assassin` — the placeholders become the arguments. Suggestions
-  are a reference, not a template to submit.
+- **Tab completion is shell-style, one argument at a time** (see
+  `docs/superpowers/specs/2026-08-05-shell-style-command-completion-design.md`),
+  not a whole-line guess. Tab resolves only the argument slot currently being
+  typed — the command word, a player name, a mission index, and so on — and
+  completes it to the longest prefix shared by every remaining match. A
+  unique match gets a trailing space appended so typing can continue straight
+  into the next argument; an ambiguous match stops at the shared prefix with
+  no trailing space, and the dropdown still lists every candidate. A
+  multi-word player name is wrapped in `[brackets]` automatically. Candidates
+  come from live data where it makes sense — the current player roster (via
+  `gameContext`, the same live subscription `GameMasterView` uses) and active
+  mission indices (fetched on demand the first time a `/mission …` slot needs
+  them, cached for that typing session).
 
 ## Argument case sensitivity
 
@@ -64,11 +73,11 @@ Writes via `updatePointsForPlayer`, which is a read-modify-write, not an atomic
 Records a kill. See [game-flows.md](./game-flows.md#2-killing-a-player-kill-target-assassin)
 for the full sequence.
 
-| Check                                                                         | Failure                                                                  |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| At least 2 arguments                                                          | `Missing Arguments`                                                      |
-| Both names in roster                                                          | `Invalid players: …`                                                     |
-| Target is on the assassin's target list **or** the assassin is in open season | `{target} is not a valid taret for {assassin}` _(typo is in the source)_ |
+| Check                                                                                                               | Failure                                                                  |
+| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| At least 2 arguments                                                                                                | `Missing Arguments`                                                      |
+| Both names in roster                                                                                                | `Invalid players: …`                                                     |
+| Target is on the assassin's target list, **or** the target is in open season, **or** the assassin is in open season | `{target} is not a valid taret for {assassin}` _(typo is in the source)_ |
 
 Effects: assassin gains the target's full score (floored at 0); target's score
 is zeroed, `isAlive` set false, `openSeason` cleared; target is unmapped from the
@@ -107,6 +116,7 @@ number shown in the mission list — not a document ID).
 | `Number(args[2])` is not `-1`       | `{arg} is not a valid index`                      |
 | Player in roster                    | `Player {name} is invalid`                        |
 | Mission with that index exists      | `Invalid task index`                              |
+| Mission is not already `isComplete` | `Mission {index} has already ended`               |
 | Player not already in `completedBy` | `Player {name} has already completed the mission` |
 
 Effect depends on `taskType`:
@@ -115,7 +125,12 @@ Effect depends on `taskType`:
 - **`Revival Mission`** — requires the player to be dead (`Player {name} is not
 dead` otherwise), revives them, and remaps them into the graph.
 
-Either way the player is appended to `completedBy`.
+Either way: the player is appended to `completedBy`, the completion is
+logged to chat and broadcast to players' chat feed (`{player} completed mission: {title}`), and — if the
+mission has a `maxCompletions` cap (improvements item 41) and this
+completion reaches it — the mission auto-ends the same way `/mission end`
+does, with its own chat announcement also broadcast to players
+(`Mission "{title}" auto-ended — reached its {N}-completion cap`).
 
 Note the index validation only rejects the literal value `-1`; any other
 non-numeric argument becomes `NaN`, passes the check, and fails later as
@@ -125,42 +140,132 @@ non-numeric argument becomes `NaN`, passes the check, and fails later as
 
 Closes a mission for everyone by setting `isComplete: true`.
 
-The success toast ("Task has been saved as completed") fires **before** the
-lookup and write, so it appears even when the index does not exist — in which
-case the subsequent `task.title` access throws.
+The index is validated and the mission is looked up and written **before**
+the success toast ("Task has been saved as completed") fires, mirroring
+`/mission done`'s guard — a bad index now fails with "Invalid task index"
+instead of toasting success and then throwing on `task.title` (improvements
+item 20).
 
----
+### `/mission start`
 
-## Declared but not implemented
+Opens a popup (`TaskCreationModal`) with the mission creation form —
+title, description, task type, points, and an optional completion cap
+(improvements item 41) — the same form `TaskCreation` always had. Ignores
+any extra arguments. Closes automatically once a mission is created
+successfully; stays open on a validation error or a duplicate title so the
+GM can fix the form without retyping.
 
-These appear in the autosuggest list and pass the whitelist check, so they
-consume the input and clear the box, but their `case` bodies are empty `// TO DO`
-stubs. **They fail silently.**
+### `/mission view`
 
-| Command        | Suggested syntax              |
-| -------------- | ----------------------------- |
-| `/broadcast`   | `/broadcast [message]`        |
-| `/leaderboard` | `/leaderboard send`           |
-| `/whisper`     | `/whisper [player] [message]` |
+Opens a read-only popup (`TaskListModal`) listing missions split into
+Active/Completed tabs — this popup has no actions of its own
+(docs/superpowers/specs/2026-08-04-mission-modal-ui-design.md). Closing a
+mission out is still only done via `/mission end`; marking one done is now
+reachable two ways — `/mission done`, or approving a submitted photo as
+that mission from the kill-photo moderation screen
+(`PhotosDisplay.js`, docs/superpowers/specs/2026-08-27-mission-completion-via-photo-design.md).
 
-All three imply an out-of-band delivery channel to players — most likely the
-Discord bot hinted at by the unused `DISCORD_TOKEN` in `.env`.
+### `/mission undo`
+
+Takes no arguments. Undoes the single most recent mission completed via
+`/mission done` — not one approved via a photo, which has its own,
+separate Undo button on the photo-moderation screen
+(`PhotosDisplay.js`), tracked independently
+(docs/superpowers/specs/2026-08-29-mission-undo-design.md). Restores the
+completing player's score/revival/target-regeneration state exactly as it
+was before the completion, and removes them from the mission's
+`completedBy` list — reversing an auto-end too, if the completion had
+triggered one. Shows an error ("Nothing to undo.") if there is no typed
+completion left to undo, either because none was ever made or because it
+was already undone.
+
+### `/kick <player>`
+
+Permanently removes a player from the game — self-service leaving has an
+equivalent player-facing "Leave" button
+(docs/superpowers/specs/2026-08-29-player-leave-and-kick-design.md).
+
+| Check            | Failure                    |
+| ---------------- | -------------------------- |
+| Player in roster | `Player {name} is invalid` |
+
+Effects: the player is unmapped from the target graph (whoever was
+hunting them gets a new target; whoever they were hunting gets a new
+assassin, the same remap `/kill` triggers), and their document is deleted
+outright — not marked dead, no trace kept. No score changes hands. This
+cannot be undone, and the removed player won't be able to rejoin once the
+game has started. (`/kick` itself is only reachable once the game has
+already started — the console it lives in doesn't exist before Begin
+Game — so this is unconditional for `/kick`; it's the player-facing
+Leave button, reachable pre-game too, where a player who leaves during
+the Lobby phase can still rejoin under a new identity before Begin Game
+is clicked.)
+
+### `/whisper <player> <message>`
+
+Sends a private, player-facing message — visible only to the named player,
+in their in-game chat feed (`MessageFeed`,
+`src/components/player_messages_components/MessageFeed.js`, mounted in
+`PlayerGame.js`). Writes to `rooms/{roomID}/playerMessages`
+(docs/superpowers/specs/2026-08-06-player-messaging-mobile-prep-design.md).
+
+| Check                                                    | Failure                           |
+| -------------------------------------------------------- | --------------------------------- |
+| Player in roster                                         | `Player {name} is invalid`        |
+| Message (everything after the player token) is non-empty | `Whisper message cannot be blank` |
+
+Logs a GM-facing confirmation to chat: `Whisper sent to {name}: "{message}"`.
+
+### `/broadcast <message>`
+
+Sends a player-facing message visible to every player, in their in-game
+chat feed (`MessageFeed`). Same `playerMessages` write as `/whisper`, with
+`recipient: null`.
+
+| Check                | Failure                             |
+| -------------------- | ----------------------------------- |
+| Message is non-empty | `Broadcast message cannot be blank` |
+
+Logs: `Broadcast sent: "{message}"`.
+
+### `/leaderboard send`
+
+Packages the live roster's current standings (sorted by score descending,
+dead players included), keeps only the top 3, and sends that snapshot as a
+player-facing message, visible to every player as a standings list (not
+text) in their in-game chat feed (`MessageFeed`) — a quick reminder, not the
+full roster, so a routine send doesn't spam the chat feed with everyone's
+score. Takes no custom text — the second word must be the literal `send`.
+
+| Check                                                  | Failure                      |
+| ------------------------------------------------------ | ---------------------------- |
+| Second argument is literally `send` (case-insensitive) | `{arg} is not a valid input` |
+
+Logs: `Leaderboard sent to all players`.
+
+### `/leaderboard view`
+
+Opens a read-only popup (`LeaderboardModal`) on the moderator's own screen
+showing every player's current score, full roster, sorted highest to
+lowest — nothing is sent to players and nothing is logged. The same popup a
+player can open for themselves via the "View Leaderboard" button on their
+own screen (`PlayerGame.js`).
+
+| Check                                                  | Failure                      |
+| ------------------------------------------------------ | ---------------------------- |
+| Second argument is literally `view` (case-insensitive) | `{arg} is not a valid input` |
 
 ---
 
 ## Implementation note
 
-The `commands` array that backs the autosuggest is declared as:
-
-```js
-const commands = [
-    { text: '/add [player] points', command: console.log('running') },
-    …
-];
-```
-
-`console.log('running')` is **evaluated at module load**, not stored as a
-callback — so importing `ChatInput` prints nine `running` lines to the console,
-and every `command` property is `undefined`. Nothing reads the property; dispatch
-happens through the `switch` on `commandLine`. The array is effectively a list of
-help strings.
+Completion is a pure function, `complete(input, { players, missions })` in
+`src/game/commandCompletion.js`, unit tested independently of any component
+(`src/game/commandCompletion.test.js`). It tokenizes the raw input the same
+way `parseCommand` does (`src/game/commands.js`'s own `TOKEN` regex, so a
+`[bracketed group]` is one argument, not several), works out which argument
+slot is currently being typed, and returns the candidates and shared prefix
+for that slot — nothing else. `ChatInput.js` calls it, applies the result to
+the input value, and is responsible for sourcing the live `players`/
+`missions` data the pure function needs; it does not decide the completion
+itself.

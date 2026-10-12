@@ -1,41 +1,16 @@
-import React, { useState, useEffect, useContext, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Box, VStack, Flex } from '@chakra-ui/react';
-import { onSnapshot } from 'firebase/firestore';
-import { fetchPlayersQueryByDescendPointsThenIsAliveForRoom } from '../firebase_calls/dbCalls';
-import { gameContext } from '../Contexts';
 
-const PlayersList = () => {
-    const { roomID } = useContext(gameContext);
-    const playersQuery = fetchPlayersQueryByDescendPointsThenIsAliveForRoom(roomID);
-    const [players, setPlayers] = useState([]);
-
-    // When the component mounts, subscribe to the query and update the state whenever it changes
-    useEffect(() => {
-        // subscribe to changes in the query results
-        const unsubscribe = onSnapshot(playersQuery, (snapshot) => {
-            // Get the updated list of players from the snapshot
-            const updatedPlayers = snapshot.docs.map((doc) => ({
-                name: doc.data().name,
-                score: doc.data().score,
-                targets: doc.data().targets,
-                openSeason: doc.data().openSeason,
-                isAlive: doc.data().isAlive,
-            }));
-            // Update the state with the new values
-            setPlayers(updatedPlayers);
-        });
-
-        // Clean up the subscription when the component unmounts
-        return () => unsubscribe();
-        // disabled next line because playerAlivePlayersQuery should not be in dependency array
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
+// Presentational — GameMasterView owns the live subscription and passes
+// players down, rather than this component subscribing independently
+// (docs/improvements.md item 13). Two live listeners on the same query would
+// double the reads for no benefit.
+const PlayersList = ({ players }) => {
     // creates an array of mapped players
     const arrayOfPlayersListed = useMemo(
         () =>
             players.map((player, index) => (
-                <Flex sx={styles.playerContainer}>
+                <Flex sx={styles.playerContainer} key={player.name}>
                     <Flex sx={styles.playerWrapper}>
                         <Box
                             sx={{

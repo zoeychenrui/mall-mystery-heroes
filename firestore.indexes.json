@@ -1,0 +1,13 @@
+{
+    "indexes": [
+        {
+            "collectionGroup": "players",
+            "queryScope": "COLLECTION",
+            "fields": [
+                { "fieldPath": "isAlive", "order": "DESCENDING" },
+                { "fieldPath": "score", "order": "DESCENDING" }
+            ]
+        }
+    ],
+    "fieldOverrides": []
+}

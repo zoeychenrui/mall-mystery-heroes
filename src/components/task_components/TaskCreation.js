@@ -18,12 +18,13 @@ import {
 } from '../firebase_calls/dbCalls';
 import { gameContext, taskContext } from '../Contexts';
 
-const TaskCreation = () => {
+const TaskCreation = React.forwardRef((props, titleInputRef) => {
     const { handleNewTaskAdded } = useContext(taskContext);
     const { roomID } = useContext(gameContext);
     const [TaskTitle, setTaskTitle] = useState('');
     const [TaskDescription, setTaskDescription] = useState('');
     const [PointValue, setPointValue] = useState('0');
+    const [MaxCompletions, setMaxCompletions] = useState('');
     const time = new Date();
     const [selectedTaskType, setSelectedTaskType] = useState('');
     const createAlert = CreateAlert();
@@ -44,6 +45,11 @@ const TaskCreation = () => {
         setPointValue(value);
     };
 
+    //stores the optional completion cap
+    const handleMaxCompletionsChange = (value) => {
+        setMaxCompletions(value);
+    };
+
     //stores task type
     const handleChangeTaskType = (event) => {
         setSelectedTaskType(event.target.value);
@@ -57,9 +63,20 @@ const TaskCreation = () => {
     };
 
     //handles task submisison
+    //
+    // fetchTaskIndexThenIncrement throws on failure rather than swallowing
+    // errors (docs/improvements.md item 10) — this function had no try/catch
+    // at all, so a failure would have been an unhandled promise rejection.
+    //
+    // The index is fetched last, only once every validation check and the
+    // dupe check have already passed — fetchTaskIndexThenIncrement
+    // atomically consumes a taskIndex the moment it's called, whether or not
+    // a task ends up created with it. Fetching it up front (the previous
+    // order) meant a failed submission — wrong task type, blank title, a
+    // duplicate title — permanently burned an index with no task ever using
+    // it, so the next successful creation skipped a number.
     const handleAddTask = async () => {
         const titleTrimmedLowerCase = TaskTitle.replace(/\s/g, '').toLowerCase();
-        const taskIndex = await fetchTaskIndexThenIncrement(roomID);
 
         const newTask = {
             title: TaskTitle,
@@ -67,7 +84,10 @@ const TaskCreation = () => {
             description: TaskDescription,
             pointValue: PointValue,
             taskType: selectedTaskType,
-            taskIndex: taskIndex,
+            // Optional — blank means unlimited, same as missions created
+            // before this field existed. Checked against completedBy's
+            // length after each /mission done to auto-end the mission.
+            maxCompletions: MaxCompletions ? Number(MaxCompletions) : null,
             dateCreated: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             isComplete: false,
             completedBy: [],
@@ -94,18 +114,29 @@ const TaskCreation = () => {
             newTask.pointValue = 0;
         }
 
-        const dupeExists = await checkForTaskDupesForRoom(newTask, roomID);
-        if (!dupeExists) {
+        // checkForTaskDupesForRoom, fetchTaskIndexThenIncrement, and
+        // addTaskForRoom all throw on failure rather than swallowing
+        // (docs/improvements.md item 10) — this component is mounted inside
+        // TaskCreationModal (item 15), and the try/catch matches the pattern
+        // used everywhere else in this file so it doesn't reintroduce an
+        // unhandled rejection.
+        try {
+            const dupeExists = await checkForTaskDupesForRoom(newTask, roomID);
+            if (dupeExists) {
+                return createAlert('error', 'Error', 'Task already exists', 1500);
+            }
+            newTask.taskIndex = await fetchTaskIndexThenIncrement(roomID);
             await addTaskForRoom(newTask, roomID);
             handleNewTaskAdded(newTask);
             setTaskTitle('');
             setTaskDescription('');
             setPointValue('0');
+            setMaxCompletions('');
             setSelectedTaskType('');
             createAlert('success', 'Task Added', 'Your task has been created', 1500);
-        }
-        if (dupeExists) {
-            createAlert('error', 'Error', 'Task already exists', 1500);
+        } catch (error) {
+            console.error('Error creating task: ', error);
+            createAlert('error', 'Error creating task', error.message, 1500);
         }
     };
 
@@ -117,6 +148,7 @@ const TaskCreation = () => {
         <Flex m="6px" direction="column">
             <Flex mb="4px">
                 <Input
+                    ref={titleInputRef}
                     sx={styles.titleInput}
                     value={TaskTitle}
                     onChange={handleTitleChange}
@@ -155,13 +187,29 @@ const TaskCreation = () => {
                     </NumberInputStepper>
                 </NumberInput>
 
+                <NumberInput
+                    style={styles.pointInput}
+                    value={MaxCompletions}
+                    onChange={handleMaxCompletionsChange}
+                    min={0}
+                    m="2px"
+                    marginX="4px"
+                >
+                    <NumberInputField placeholder="Max completions" />
+                    <NumberInputStepper>
+                        <NumberIncrementStepper color="white" />
+                        <NumberDecrementStepper color="white" />
+                    </NumberInputStepper>
+                </NumberInput>
+
                 <Button sx={styles.addButton} onClick={handleAddTask} colorScheme="blue">
                     Add
                 </Button>
             </Flex>
         </Flex>
     );
-};
+});
+TaskCreation.displayName = 'TaskCreation';
 
 const styles = {
     titleInput: {

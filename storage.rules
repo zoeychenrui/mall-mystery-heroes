@@ -1,12 +1,26 @@
 rules_version = '2';
 
-// Craft rules based on data in your Firestore database
-// allow write: if firestore.get(
-//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
+// Path-scoped, not room-membership-scoped (docs/superpowers/specs/
+// 2026-08-13-kill-photo-submission-design.md) — the kill-photo submission
+// feature is the first thing in this repo to actually upload to Storage.
+// Only rooms/{roomId}/photos/** is reachable; any signed-in user can
+// read/write within that path, same trust level as everywhere else a
+// player-provided value is trusted in this app (no per-player auth
+// identity to scope against, and no cross-service rules calling into
+// Firestore to verify room membership — this repo has no test setup for
+// that). Revisit if that identity work ever happens.
+//
+// Writes are create-only (`resource == null`): permits uploading to a
+// path that doesn't exist yet, denies overwriting or deleting an
+// existing object. uploadKillPhoto always uploads to a fresh
+// crypto.randomUUID()-based path, so this doesn't affect the real upload
+// flow — it just closes off evidence tampering (overwriting/deleting a
+// photo already in the moderation queue) at negligible cost.
 service firebase.storage {
   match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read, write: if true;
+    match /rooms/{roomId}/photos/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && resource == null;
     }
   }
 }

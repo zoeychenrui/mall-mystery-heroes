@@ -8,13 +8,21 @@
  * roster in and get a plan out, then hand that plan to the data layer.
  *
  * Randomness arrives as an `rng` parameter so tests can pin it.
+ *
+ * CommonJS exports, not `export`/`import` — this file (and remapPlan.js,
+ * which depends on it) is also `require()`d directly by the Cloud Function
+ * in functions/callableFunctions/killPlayer.js (docs/improvements.md item 4),
+ * which runs under plain Node with no build step. Every existing `import`
+ * of this file on the client side keeps working unchanged: webpack's
+ * CommonJS interop resolves named imports against `module.exports` the
+ * same way it would against a real ES module.
  */
 
 /**
  * How many targets each player should hold, given the roster size.
  * Clamped to `playerCount - 1` so a 1- or 2-player room is representable.
  */
-export const maxTargetsFor = (playerCount) => {
+const maxTargetsFor = (playerCount) => {
     const desired = playerCount > 15 ? 3 : playerCount > 5 ? 2 : 1;
     return Math.max(0, Math.min(desired, playerCount - 1));
 };
@@ -26,7 +34,7 @@ export const maxTargetsFor = (playerCount) => {
  * which left the final element pinned in its starting position — for a
  * 3-element array only 2 of the 6 orderings were reachable.
  */
-export const shuffle = (array, rng = Math.random) => {
+const shuffle = (array, rng = Math.random) => {
     const copy = [...array];
     for (let i = copy.length - 1; i > 0; i--) {
         const j = Math.floor(rng() * (i + 1));
@@ -49,7 +57,7 @@ export const shuffle = (array, rng = Math.random) => {
  *
  * @returns {{targets: Record<string,string[]>, assassins: Record<string,string[]>}}
  */
-export const buildTargetGraph = (players, { rng = Math.random } = {}) => {
+const buildTargetGraph = (players, { rng = Math.random } = {}) => {
     const ring = shuffle(players, rng);
     const count = ring.length;
     const maxTargets = maxTargetsFor(count);
@@ -72,3 +80,29 @@ export const buildTargetGraph = (players, { rng = Math.random } = {}) => {
 
     return { targets, assassins };
 };
+
+/**
+ * Every alive player currently short of the room's normal per-player
+ * target/assassin count for its current size — not just a single named
+ * player. Used to spread a revival's new connections across whoever
+ * actually needs one, rather than asking planRemap to fill only the
+ * returning player's own gap, which lets it pile every new link onto
+ * whichever one or two candidates happen to have room, leaving the rest
+ * of the roster untouched and those candidates over their normal cap.
+ *
+ * @param roster alive players: [{ name, targets: string[], assassins: string[] }]
+ * @returns {{needTargets: string[], needAssassins: string[]}}
+ */
+const playersNeedingConnections = (roster) => {
+    const maxTargets = maxTargetsFor(roster.length);
+    return {
+        needTargets: roster
+            .filter((player) => player.targets.length < maxTargets)
+            .map((player) => player.name),
+        needAssassins: roster
+            .filter((player) => player.assassins.length < maxTargets)
+            .map((player) => player.name),
+    };
+};
+
+module.exports = { maxTargetsFor, shuffle, buildTargetGraph, playersNeedingConnections };

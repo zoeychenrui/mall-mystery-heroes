@@ -19,10 +19,12 @@ import {
 import { updateAssassinsForPlayer, updateTargetsForPlayer } from '../firebase_calls/dbCalls';
 import { gameContext } from '../Contexts';
 import { buildTargetGraph } from '../../game/targetGraph';
+import CreateAlert from '../CreateAlert';
 const ResetTargetsButton = ({ arrayOfPlayers, addLog }) => {
     const { roomID } = useContext(gameContext);
     // The target/assassin adjacency lists for the reset, built on open.
     const [graph, setGraph] = useState({ targets: {}, assassins: {} });
+    const createAlert = CreateAlert();
 
     //reference to players subcollection
     const { isOpen, onOpen, onClose } = useDisclosure();
@@ -53,7 +55,11 @@ const ResetTargetsButton = ({ arrayOfPlayers, addLog }) => {
                 await updateAssassinsForPlayer(player, assassins[player] ?? [], roomID);
             }
         } catch (error) {
+            // dbCalls functions throw on failure rather than swallowing
+            // errors (docs/improvements.md item 10) — this catch previously
+            // only logged, with no UI feedback.
             console.error('Error adding targets to database: ', error);
+            createAlert('error', 'Error resetting targets', error.message, 1500);
         }
     };
 

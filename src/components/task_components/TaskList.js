@@ -3,26 +3,35 @@ import { Tabs, Tab, Accordion, TabPanels, TabPanel, TabList } from '@chakra-ui/r
 import TaskAccordion from './TaskAccordion';
 import { fetchTasksByCompletionForRoom, fetchTasksQueryForRoom } from '../firebase_calls/dbCalls';
 import { onSnapshot } from 'firebase/firestore';
+import CreateAlert from '../CreateAlert';
 import { gameContext } from '../Contexts';
 
 const TaskList = () => {
     const { roomID } = useContext(gameContext);
     const [arrayOfActiveTasks, setArrayOfActiveTasks] = useState([]);
     const [arrayOfInactiveTasks, setArrayOfInactiveTasks] = useState([]);
+    const createAlert = CreateAlert();
     const taskQuery = fetchTasksQueryForRoom(roomID);
 
-    // Fetch tasks from Firestore
+    // fetchTasksByCompletionForRoom throws on failure rather than swallowing
+    // (docs/improvements.md item 10) — surfaced with createAlert rather than
+    // console.error only, since item 15 remounted this as TaskListModal and a
+    // failure here is visible to the GM again.
     const fetchTaskForRooms = async () => {
-        const activeTasks = await fetchTasksByCompletionForRoom(false, roomID);
-        const inactiveTasks = await fetchTasksByCompletionForRoom(true, roomID);
-        setArrayOfActiveTasks(activeTasks.docs.map((doc) => doc.data()));
-        setArrayOfInactiveTasks(inactiveTasks.docs.map((doc) => doc.data()));
+        try {
+            const activeTasks = await fetchTasksByCompletionForRoom(false, roomID);
+            const inactiveTasks = await fetchTasksByCompletionForRoom(true, roomID);
+            setArrayOfActiveTasks(activeTasks.docs.map((doc) => doc.data()));
+            setArrayOfInactiveTasks(inactiveTasks.docs.map((doc) => doc.data()));
+        } catch (error) {
+            console.error('Error fetching tasks: ', error);
+            createAlert('error', 'Error fetching missions', error.message, 1500);
+        }
     };
 
     useEffect(() => {
         const unsubscribe = onSnapshot(taskQuery, () => {
             fetchTaskForRooms();
-            console.log('running unsubscribe');
         });
 
         return () => unsubscribe();
