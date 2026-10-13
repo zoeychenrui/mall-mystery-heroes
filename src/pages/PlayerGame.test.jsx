@@ -1157,6 +1157,50 @@ describe('PlayerGame', () => {
         expect(mockLastPlayerMapModalProps.statusText).toBe('In game area.');
     });
 
+    it('passes the exact same outside-status text to PlayerMapModal as the page itself renders, for the outside case', () => {
+        // Regression test: a prior fix gave the page's own "outside" box
+        // and the modal's statusText prop two independently-hardcoded
+        // copies of this text, which drifted — the page said the player's
+        // location is now visible to everyone, but the modal (fed from the
+        // stale statusText.outside entry) still said the old "please
+        // return inside," contradicting this file's own comment that the
+        // words must be identical whether the player is on the page or has
+        // the map open. Comparing the page's own rendered text against the
+        // modal's prop (rather than each against a separately-duplicated
+        // literal) is what actually catches a future re-drift.
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            } else if (ref === 'status-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        status: 'outside',
+                        reason: null,
+                        lastUsableReceivedAt: { toMillis: () => Date.now() },
+                        boundaryRevision: 1,
+                    }),
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        const pageOutsideText = screen.getByText(/visible to everyone/i).textContent;
+
+        fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
+
+        expect(mockLastPlayerMapModalProps.statusText).toBe(pageOutsideText);
+    });
+
     it('passes a fresh ownPosition through to PlayerMapModal, then null once it goes stale', () => {
         jest.useFakeTimers();
         try {

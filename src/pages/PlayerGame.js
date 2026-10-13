@@ -374,7 +374,8 @@ const PlayerGame = () => {
     const statusText = {
         inside: 'In game area.',
         near: 'You are near the edge of the game area; check the map.',
-        outside: 'You are outside the game area. Please return inside.',
+        outside:
+            'You are outside the game area — your location is visible to everyone until you return.',
         unavailable: null, // handled separately below — needs its own explanation/Retry
     }[liveBoundaryStatus.status];
 
@@ -576,10 +577,7 @@ const PlayerGame = () => {
                                     mb={2}
                                     textAlign="center"
                                 >
-                                    <Text fontWeight="bold">
-                                        You are outside the game area — your location is visible to
-                                        everyone until you return.
-                                    </Text>
+                                    <Text fontWeight="bold">{statusText}</Text>
                                 </Box>
                             )}
                             {liveBoundaryStatus.status !== 'outside' &&
