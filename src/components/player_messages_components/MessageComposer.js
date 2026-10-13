@@ -1,11 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Flex, Input, Button, VisuallyHidden } from '@chakra-ui/react';
+import { Box, Flex, Image, Input, Button, VisuallyHidden } from '@chakra-ui/react';
 import { submitChatMessage } from '../submitChatMessage';
 import { submitKillPhoto } from '../submitKillPhoto';
 import { compressImage } from '../../utils/compressImage';
 import { uploadKillPhoto } from '../firebase_calls/storageCalls';
 import CreateAlert from '../CreateAlert';
 import KillPhotoModal from './KillPhotoModal';
+import redX from '../../assets/red-x.png';
+// require(), not a named `import` — powerUpEffects.js is CommonJS; see
+// PowerUpShopModal.js.
+const { isCameraBlocked } = require('../../game/powerUpEffects');
+
+// A stored Firestore Timestamp, or plain ms in tests.
+const toMs = (value) =>
+    typeof value?.toMillis === 'function' ? value.toMillis() : (value ?? null);
 
 // Sends player-authored group-chat messages and captures/submits a
 // kill-photo claim. The camera button triggers a hidden file input
@@ -24,8 +32,24 @@ const MessageComposer = ({
     onOptimisticSendFailed,
     players = [],
     missions = [],
+    // From this player's own doc — set when someone uses "Block a player's
+    // camera" on them (purchasePowerUp.js).
+    cameraBlockedUntil = null,
 }) => {
     const [text, setText] = useState('');
+    const blockedUntilMs = toMs(cameraBlockedUntil);
+    const [nowMs, setNowMs] = useState(Date.now());
+    // One timer, set for the exact moment the block ends, so the camera
+    // re-enables on its own without ticking every second.
+    useEffect(() => {
+        setNowMs(Date.now());
+        if (blockedUntilMs == null) return undefined;
+        const remainingMs = blockedUntilMs - Date.now();
+        if (remainingMs <= 0) return undefined;
+        const id = setTimeout(() => setNowMs(Date.now()), remainingMs);
+        return () => clearTimeout(id);
+    }, [blockedUntilMs]);
+    const cameraBlocked = isCameraBlocked(blockedUntilMs, nowMs);
     const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
     const [compressedBlob, setCompressedBlob] = useState(null);
     const [previewUrl, setPreviewUrl] = useState(null);
@@ -163,7 +187,7 @@ const MessageComposer = ({
     // photo — the moderator's combined target/mission dropdown may still
     // have an open mission to offer them even with no live kill target
     // (docs/superpowers/specs/2026-08-27-mission-completion-via-photo-design.md).
-    const photoDisabled = disabled || !isGameActive;
+    const photoDisabled = disabled || !isGameActive || cameraBlocked;
 
     return (
         <Flex p={2} borderTop="1px solid" borderColor="gray.600">
@@ -187,14 +211,27 @@ const MessageComposer = ({
                     disabled={photoDisabled}
                 />
             </VisuallyHidden>
-            <Button
-                isDisabled={photoDisabled}
-                onClick={() => fileInputRef.current.click()}
-                mr={2}
-                aria-label="Send photo"
-            >
-                📷
-            </Button>
+            <Box position="relative" mr={2}>
+                <Button
+                    isDisabled={photoDisabled}
+                    onClick={() => fileInputRef.current.click()}
+                    aria-label={cameraBlocked ? 'Send photo (camera blocked)' : 'Send photo'}
+                >
+                    📷
+                </Button>
+                {/* The spec's X-cross over a blocked player's camera icon. */}
+                {cameraBlocked && (
+                    <Image
+                        src={redX}
+                        alt=""
+                        position="absolute"
+                        inset={0}
+                        m="auto"
+                        boxSize="70%"
+                        pointerEvents="none"
+                    />
+                )}
+            </Box>
             <Button onClick={handleSend} colorScheme="teal" isDisabled={disabled}>
                 Send
             </Button>

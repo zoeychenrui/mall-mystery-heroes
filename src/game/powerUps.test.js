@@ -4,7 +4,6 @@ const {
     cooldownRemaining,
     pickRandomPingTarget,
     purchaseLogText,
-    pingMessageText,
     formatSeconds,
 } = require('./powerUps');
 
@@ -136,6 +135,22 @@ describe('pickRandomPingTarget', () => {
     });
 });
 
+describe('purchaseBlockReason — Horcrux', () => {
+    const base = { score: 100, cooldownEndsAtMs: null, nowMs: 1000, targetName: null };
+
+    it('blocks a second Horcrux while one is active', () => {
+        expect(purchaseBlockReason({ ...base, item: byId('horcrux'), horcruxActive: true })).toBe(
+            'Horcrux already active'
+        );
+    });
+
+    it('only affects the Horcrux itself', () => {
+        expect(
+            purchaseBlockReason({ ...base, item: byId('mystery-box'), horcruxActive: true })
+        ).toBeNull();
+    });
+});
+
 describe('purchaseLogText', () => {
     it('names the buyer, the item, and the points spent', () => {
         expect(purchaseLogText({ buyerName: 'alice', item: byId('horcrux') })).toBe(
@@ -143,20 +158,20 @@ describe('purchaseLogText', () => {
         );
     });
 
-    it('names who was pinged for a ping', () => {
+    it('appends what the purchase did', () => {
         expect(
             purchaseLogText({
                 buyerName: 'alice',
                 item: byId('global-ping-random'),
-                pingedName: 'bob',
+                detail: 'pinged bob',
             })
         ).toBe(`alice bought ${byId('global-ping-random').name} (-3 pts) — pinged bob`);
     });
-});
 
-describe('pingMessageText', () => {
-    it('announces who was pinged', () => {
-        expect(pingMessageText('bob')).toBe('📍 bob has been pinged!');
+    it('leaves out the price for the free ad', () => {
+        expect(
+            purchaseLogText({ buyerName: 'alice', item: byId('watch-ad'), detail: '+3 points' })
+        ).toBe('alice bought Watch an ad — +3 points');
     });
 });
 

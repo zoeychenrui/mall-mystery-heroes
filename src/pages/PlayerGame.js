@@ -57,6 +57,8 @@ const {
     GAME_BOUNDARY_CONFIG,
     isPositionFresh,
 } = require('../game/gameBoundary');
+// require() for the same CommonJS reason as gameBoundary.js above.
+const { isHorcruxActive } = require('../game/powerUpEffects');
 
 // Plain-language text for every reason deriveFreshStatus/gameBoundary.js
 // and the reportPlayerLocation callable can actually produce for an
@@ -127,6 +129,30 @@ const PlayerGame = () => {
     } = useDisclosure();
     const cancelRef = useRef();
     const createAlert = CreateAlert();
+    // Positions from a ping card's "View on map", shown alongside the
+    // live ones until the map closes. Snapshots — never updated.
+    const [pingPositions, setPingPositions] = useState([]);
+    const handleShowPings = useCallback(
+        (pings) => {
+            setPingPositions(
+                pings
+                    .filter((ping) => Number.isFinite(ping.lat) && Number.isFinite(ping.lng))
+                    .map((ping) => ({
+                        id: `ping-${ping.name}`,
+                        lat: ping.lat,
+                        lng: ping.lng,
+                        label: `📍 ${ping.name}`,
+                        alwaysShowLabel: true,
+                    }))
+            );
+            onMapOpen();
+        },
+        [onMapOpen]
+    );
+    const handleMapClose = () => {
+        setPingPositions([]);
+        onMapClose();
+    };
     // purchasePowerUp enforces the same rules server-side; this only hides
     // the button. `=== true` keeps it hidden until the player doc loads.
     const canShop = gameStarted && isGameActive && playerData?.isAlive === true;
@@ -337,6 +363,10 @@ const PlayerGame = () => {
     // goes stale and disappears purely from time passing, even with no new
     // Firestore snapshot (Finding 1). Also guards against a legacy/malformed
     // doc whose lat/lng are missing or not finite numbers.
+    // The map exists only under this condition (see the location panel
+    // below), so ping cards offer "View on map" only then too.
+    const isMapAvailable = isGameActive && gameBoundary?.enabled && (playerData?.isAlive ?? true);
+
     const freshOtherOutsidePositions = otherOutsidePositions
         .filter(
             (position) =>
@@ -555,6 +585,17 @@ const PlayerGame = () => {
                 roomID={roomID}
                 score={playerData?.score}
                 cooldowns={playerData?.powerUpCooldowns}
+                horcruxActive={
+                    !!playerData &&
+                    isHorcruxActive(
+                        {
+                            horcrux: playerData.horcrux,
+                            horcruxEndsAtMs: playerData.horcruxEndsAt?.toMillis?.() ?? null,
+                        },
+                        nowMs
+                    )
+                }
+                pendingMysteryItem={playerData?.pendingMysteryItem ?? null}
                 players={players}
                 playerName={playerName}
             />
@@ -674,9 +715,9 @@ const PlayerGame = () => {
                             </Button>
                             <PlayerMapModal
                                 isOpen={isMapOpen}
-                                onClose={onMapClose}
+                                onClose={handleMapClose}
                                 boundaryVertices={gameBoundary.vertices}
-                                otherPositions={freshOtherOutsidePositions}
+                                otherPositions={[...freshOtherOutsidePositions, ...pingPositions]}
                                 ownPosition={
                                     ownPosition &&
                                     nowMs - ownPosition.acquiredAtMs <=
@@ -718,6 +759,7 @@ const PlayerGame = () => {
                 </ModalContent>
             </Modal>
             <MessageFeed
+                onShowPings={isMapAvailable ? handleShowPings : undefined}
                 roomID={roomID}
                 playerName={playerName}
                 pendingMessages={pendingMessages}
@@ -731,6 +773,7 @@ const PlayerGame = () => {
                 onOptimisticSendFailed={handleOptimisticSendFailed}
                 players={players}
                 missions={missions}
+                cameraBlockedUntil={playerData?.cameraBlockedUntil}
             />
         </Flex>
     );

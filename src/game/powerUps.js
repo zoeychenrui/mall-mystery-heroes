@@ -52,7 +52,7 @@ const POWER_UPS = [
     },
     {
         id: 'block-camera',
-        name: 'Block camera of a player',
+        name: "Block a player's camera",
         cost: 7,
         rarity: 'rare',
         cooldownSeconds: 120,
@@ -76,11 +76,21 @@ const POWER_UPS = [
     },
 ];
 
-const purchaseBlockReason = ({ item, score, cooldownEndsAtMs, nowMs, targetName, isAlive }) => {
+const purchaseBlockReason = ({
+    item,
+    score,
+    cooldownEndsAtMs,
+    nowMs,
+    targetName,
+    isAlive,
+    horcruxActive,
+}) => {
     // `=== false`, not `!isAlive`: callers that don't know yet (undefined)
     // aren't treated as dead.
     if (isAlive === false) return "Eliminated players can't shop";
     if (cooldownEndsAtMs != null && nowMs < cooldownEndsAtMs) return 'On cooldown';
+    // Non-stackable (POWER_UPS_SPEC.md): one active Horcrux at a time.
+    if (item.id === 'horcrux' && horcruxActive === true) return 'Horcrux already active';
     if (Number(score) < item.cost) return 'Not enough points';
     if (item.needsTarget === true && !targetName) return 'Pick a player';
     return null;
@@ -109,15 +119,13 @@ const pickRandomPingTarget = (players, buyerName, rng) => {
     return eligible[Math.floor(rng() * eligible.length)].name;
 };
 
-// The GM console's log line for a purchase.
-const purchaseLogText = ({ buyerName, item, pingedName }) => {
-    const base = `${buyerName} bought ${item.name} (-${item.cost} pts)`;
-    return pingedName ? `${base} — pinged ${pingedName}` : base;
+// The GM console's log line for a purchase. `detail` says what it did,
+// e.g. "pinged bob" or "rolled +5 points".
+const purchaseLogText = ({ buyerName, item, detail }) => {
+    const price = item.cost > 0 ? ` (-${item.cost} pts)` : '';
+    const base = `${buyerName} bought ${item.name}${price}`;
+    return detail ? `${base} — ${detail}` : base;
 };
-
-// The player chat announcement for a global ping. Deliberately doesn't
-// name the buyer — the GM log does.
-const pingMessageText = (pingedName) => `📍 ${pingedName} has been pinged!`;
 
 module.exports = {
     POWER_UPS,
@@ -127,5 +135,4 @@ module.exports = {
     formatSeconds,
     pickRandomPingTarget,
     purchaseLogText,
-    pingMessageText,
 };

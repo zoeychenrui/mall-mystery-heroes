@@ -26,7 +26,14 @@ import MessageBubble from './MessageBubble';
 // local Firestore echo of their own send anymore. Confirmed (removed from
 // the pending list) the moment the real, server-written message for this
 // player shows up here.
-const MessageFeed = ({ roomID, playerName, pendingMessages = [], onPendingMessageConfirmed }) => {
+const MessageFeed = ({
+    roomID,
+    playerName,
+    pendingMessages = [],
+    onPendingMessageConfirmed,
+    // Opens the map on a ping card's positions; absent when there's no map.
+    onShowPings,
+}) => {
     const [allMessages, setAllMessages] = useState([]);
     const feedBoxRef = useRef(null);
 
@@ -115,7 +122,12 @@ const MessageFeed = ({ roomID, playerName, pendingMessages = [], onPendingMessag
             <Box flex="1" overflow="auto" p={2} ref={feedBoxRef} data-testid="message-feed">
                 <List styleType="none">
                     {messages.map((message) => (
-                        <MessageBubble key={message.id} message={message} playerName={playerName} />
+                        <MessageBubble
+                            key={message.id}
+                            message={message}
+                            playerName={playerName}
+                            onShowPings={onShowPings}
+                        />
                     ))}
                 </List>
             </Box>

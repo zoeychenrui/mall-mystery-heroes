@@ -27,6 +27,7 @@ const FILES = [
     'missionCompletion.js',
     'gameBoundary.js',
     'powerUps.js',
+    'powerUpEffects.js',
 ];
 
 fs.mkdirSync(DEST_DIR, { recursive: true });

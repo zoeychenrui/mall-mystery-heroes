@@ -15,9 +15,12 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PowerUpShopModal from './PowerUpShopModal';
 import { POWER_UPS } from '../../game/powerUps';
-import { purchasePowerUp } from '../purchasePowerUp';
+import { claimMysteryReward, purchasePowerUp } from '../purchasePowerUp';
 
-jest.mock('../purchasePowerUp', () => ({ purchasePowerUp: jest.fn() }));
+jest.mock('../purchasePowerUp', () => ({
+    purchasePowerUp: jest.fn(),
+    claimMysteryReward: jest.fn(),
+}));
 
 const players = [
     { name: 'Me', isAlive: true },
@@ -43,7 +46,8 @@ const renderShop = (props = {}) => render(shop(props));
 
 describe('PowerUpShopModal', () => {
     beforeEach(() => {
-        purchasePowerUp.mockResolvedValue(undefined);
+        purchasePowerUp.mockResolvedValue({});
+        claimMysteryReward.mockResolvedValue(undefined);
     });
 
     it('shows every item in the catalog', () => {
@@ -152,5 +156,58 @@ describe('PowerUpShopModal', () => {
         // Yourself (matched case-insensitively) and dead players are excluded.
         expect(within(picker).queryByRole('option', { name: 'Me' })).not.toBeInTheDocument();
         expect(within(picker).queryByRole('option', { name: 'Bob' })).not.toBeInTheDocument();
+    });
+
+    describe('abilities', () => {
+        it('shows a mystery box result on the full-screen reveal', async () => {
+            purchasePowerUp.mockResolvedValue({
+                mysteryBox: { label: '+5 points', needsTarget: false },
+            });
+            renderShop();
+
+            await userEvent.click(screen.getByRole('button', { name: 'Buy Mystery box' }));
+
+            expect(await screen.findByText('+5 points')).toBeInTheDocument();
+            await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+            await waitFor(() => expect(screen.queryByText('+5 points')).not.toBeInTheDocument());
+        });
+
+        it('claims a rolled item that needs a player on the picked player', async () => {
+            purchasePowerUp.mockResolvedValue({
+                mysteryBox: { label: "Block a player's camera", needsTarget: true },
+            });
+            renderShop();
+
+            await userEvent.click(screen.getByRole('button', { name: 'Buy Mystery box' }));
+            await userEvent.selectOptions(
+                await screen.findByLabelText('Pick a player for your reward'),
+                'Alice'
+            );
+            await userEvent.click(screen.getByRole('button', { name: 'Use' }));
+
+            expect(claimMysteryReward).toHaveBeenCalledWith({
+                roomId: 'room-1',
+                targetName: 'Alice',
+            });
+        });
+
+        it('offers an unclaimed mystery reward again', async () => {
+            renderShop({ pendingMysteryItem: 'global-ping-picked' });
+
+            expect(screen.getByText(/Your mystery box reward is waiting/)).toBeInTheDocument();
+            await userEvent.click(screen.getByRole('button', { name: 'Pick a player' }));
+
+            expect(
+                await screen.findByLabelText('Pick a player for your reward')
+            ).toBeInTheDocument();
+        });
+
+        it('shows an active Horcrux and blocks buying another', () => {
+            renderShop({ horcruxActive: true });
+
+            expect(screen.getByText('🛡️ Horcrux active')).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Buy Horcrux' })).toBeDisabled();
+            expect(screen.getByText('Horcrux already active')).toBeInTheDocument();
+        });
     });
 });

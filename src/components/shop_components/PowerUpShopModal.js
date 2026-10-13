@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
+    Box,
+    Button,
     Modal,
     ModalBody,
     ModalCloseButton,
@@ -11,8 +13,9 @@ import {
     Text,
 } from '@chakra-ui/react';
 import ShopItemCard from './ShopItemCard';
+import MysteryBoxReveal from './MysteryBoxReveal';
 import CreateAlert from '../CreateAlert';
-import { purchasePowerUp } from '../purchasePowerUp';
+import { claimMysteryReward, purchasePowerUp } from '../purchasePowerUp';
 // require(), not a named `import` — powerUps.js is CommonJS (module.exports)
 // so a future Cloud Function can reuse it, and CRA's production build can't
 // statically analyze a named ES `import` of a CommonJS file. Same reason as
@@ -26,11 +29,16 @@ const toMs = (value) =>
 
 /**
  * The player's power-ups shop (POWER_UPS_SPEC.md). Buying calls the
- * purchasePowerUp Cloud Function, which deducts the points and stores the
- * cooldown on the player doc. This component holds neither: `score` and
- * `cooldowns` both arrive from PlayerGame's live player-doc subscription,
- * so they update on their own after a purchase and survive a reload.
- * Item effects are not implemented yet.
+ * purchasePowerUp Cloud Function, which deducts the points, stores the
+ * cooldown, and uses the item immediately. This component holds none of
+ * that state: `score`, `cooldowns`, `horcruxActive`, and
+ * `pendingMysteryItem` all come from PlayerGame's live player-doc
+ * subscription, so they update on their own and survive a reload.
+ *
+ * A mystery box opens MysteryBoxReveal with what it rolled. A rolled item
+ * that needs a player picked waits server-side (`pendingMysteryItem`)
+ * until it's claimed from the reveal — the shop offers it again if the
+ * reveal was closed first.
  */
 const PowerUpShopModal = ({
     isOpen,
@@ -40,7 +48,11 @@ const PowerUpShopModal = ({
     cooldowns = {}, // { horcrux: Timestamp, ... } — the player doc's powerUpCooldowns
     players = [],
     playerName = '',
+    horcruxActive = false,
+    pendingMysteryItem = null, // an item id, from the player doc
 }) => {
+    // What the last mystery box rolled, while its reveal is showing.
+    const [reveal, setReveal] = useState(null);
     const [nowMs, setNowMs] = useState(Date.now());
     const [targets, setTargets] = useState({}); // { 'block-camera': 'Alice', ... }
     // The item whose purchase is in flight, so a second tap can't fire a
@@ -66,11 +78,17 @@ const PowerUpShopModal = ({
     const handleBuy = async (item) => {
         setBuyingItemId(item.id);
         try {
-            await purchasePowerUp({
+            const result = await purchasePowerUp({
                 roomId: roomID,
                 itemId: item.id,
                 targetName: targets[item.id],
             });
+            if (result?.mysteryBox) {
+                setReveal({
+                    label: result.mysteryBox.label,
+                    needsTarget: result.mysteryBox.needsTarget,
+                });
+            }
             setNowMs(Date.now()); // keep the clock in step, or the timer can briefly show 6:01
         } catch (err) {
             createAlert('error', 'Purchase failed', err.message, 1500);
@@ -88,9 +106,35 @@ const PowerUpShopModal = ({
                     <Text fontSize="md" fontWeight="normal" color="yellow.300">
                         Your points: {Number(score) || 0}
                     </Text>
+                    {horcruxActive && (
+                        <Text fontSize="sm" fontWeight="normal" color="purple.300">
+                            🛡️ Horcrux active
+                        </Text>
+                    )}
                 </ModalHeader>
                 <ModalCloseButton aria-label="Close shop" />
                 <ModalBody pb={6}>
+                    {pendingMysteryItem && !reveal && (
+                        <Box bg="orange.900" borderRadius="md" p={2} mb={3}>
+                            <Text mb={2}>
+                                Your mystery box reward is waiting:{' '}
+                                {POWER_UPS.find((p) => p.id === pendingMysteryItem)?.name}
+                            </Text>
+                            <Button
+                                size="sm"
+                                colorScheme="orange"
+                                onClick={() =>
+                                    setReveal({
+                                        label: POWER_UPS.find((p) => p.id === pendingMysteryItem)
+                                            ?.name,
+                                        needsTarget: true,
+                                    })
+                                }
+                            >
+                                Pick a player
+                            </Button>
+                        </Box>
+                    )}
                     <SimpleGrid columns={2} spacing={3}>
                         {POWER_UPS.map((item) => {
                             const cooldownEndsAtMs = toMs(cooldowns[item.id]);
@@ -108,6 +152,7 @@ const PowerUpShopModal = ({
                                           cooldownEndsAtMs,
                                           nowMs,
                                           targetName: targets[item.id],
+                                          horcruxActive,
                                       });
 
                             return (
@@ -144,6 +189,14 @@ const PowerUpShopModal = ({
                             );
                         })}
                     </SimpleGrid>
+                    <MysteryBoxReveal
+                        isOpen={reveal !== null}
+                        label={reveal?.label}
+                        needsTarget={reveal?.needsTarget}
+                        pickablePlayers={pickablePlayers}
+                        onClaim={(targetName) => claimMysteryReward({ roomId: roomID, targetName })}
+                        onClose={() => setReveal(null)}
+                    />
                 </ModalBody>
             </ModalContent>
         </Modal>

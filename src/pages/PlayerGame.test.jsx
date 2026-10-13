@@ -117,6 +117,18 @@ jest.mock('../components/player_messages_components/MessageFeed', () => (props) 
         </div>
         <div data-testid="pending-messages">{JSON.stringify(props.pendingMessages)}</div>
         <button onClick={() => props.onPendingMessageConfirmed()}>confirm-pending</button>
+        {props.onShowPings && (
+            <button
+                onClick={() =>
+                    props.onShowPings([
+                        { name: 'bob', lat: 36, lng: -78 },
+                        { name: 'carol', lat: null, lng: null },
+                    ])
+                }
+            >
+                show-pings
+            </button>
+        )}
     </div>
 ));
 jest.mock('../components/player_messages_components/MessageComposer', () => (props) => (
@@ -1011,6 +1023,48 @@ describe('PlayerGame', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
         expect(requestPermission).toHaveBeenCalled();
+    });
+
+    it("opens the map on a ping card's positions, and drops them when the map closes", () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+        fireEvent.click(screen.getByRole('button', { name: 'show-pings' }));
+
+        const mockModal = screen.getByTestId('mock-player-map-modal');
+        // carol has no position, so only bob is drawn.
+        expect(mockLastPlayerMapModalProps.otherPositions).toEqual([
+            { id: 'ping-bob', lat: 36, lng: -78, label: '📍 bob', alwaysShowLabel: true },
+        ]);
+
+        fireEvent.click(within(mockModal).getByRole('button', { name: /close/i }));
+        expect(mockLastPlayerMapModalProps.otherPositions).toEqual([]);
+    });
+
+    it('offers no ping map without a published boundary', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({ exists: () => true, data: () => ({ gameStarted: false }) });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        expect(screen.queryByRole('button', { name: 'show-pings' })).not.toBeInTheDocument();
     });
 
     it('closing the map modal does not unmount or otherwise stop useBoundaryLocation', () => {

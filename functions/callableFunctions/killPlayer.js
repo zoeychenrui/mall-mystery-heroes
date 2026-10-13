@@ -1,6 +1,8 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { buildClearedExposureFields } = require('./clearBoundaryExposure');
+// Subpath import — see submitChatMessage.js for why not admin.firestore.*.
+const { FieldValue, Timestamp } = require('firebase-admin/firestore');
 // Vendored copies, not '../../src/game/...' — Cloud Functions deploy
 // uploads only the functions/ directory in isolation, so a require()
 // reaching outside it cannot resolve in the deployed bundle even though it
@@ -9,6 +11,7 @@ const { buildClearedExposureFields } = require('./clearBoundaryExposure');
 // setup) — src/game/ remains the single source of truth.
 const { planRemap } = require('../vendor/game/remapPlan');
 const { normalizePlayerName } = require('../vendor/game/playerNames');
+const { HORCRUX_GRACE_MS, isHorcruxActive } = require('../vendor/game/powerUpEffects');
 
 if (admin.apps.length === 0) {
     admin.initializeApp();
@@ -140,6 +143,46 @@ exports.killPlayer = functions.https.onCall(async (data, context) => {
             );
         }
 
+        // Horcrux (POWER_UPS_SPEC.md): a protected target survives. The
+        // first save starts a 5-second grace period during which any further
+        // attempt also fails; after it, the Horcrux is spent. Returned, not
+        // thrown — throwing would roll back the grace-period write below.
+        // Callers (ChatInput.js /kill, PhotosDisplay.js approval) check
+        // `blockedByHorcrux` before announcing a kill.
+        const nowMs = Date.now();
+        const targetHorcruxEndsAtMs = targetData.horcruxEndsAt
+            ? targetData.horcruxEndsAt.toMillis()
+            : null;
+        if (
+            isHorcruxActive(
+                { horcrux: targetData.horcrux, horcruxEndsAtMs: targetHorcruxEndsAtMs },
+                nowMs
+            )
+        ) {
+            if (targetHorcruxEndsAtMs === null) {
+                transaction.update(targetDoc.ref, {
+                    horcruxEndsAt: Timestamp.fromMillis(nowMs + HORCRUX_GRACE_MS),
+                });
+            }
+            const text = `🛡️ ${targetData.name}'s Horcrux saved them!`;
+            transaction.set(roomRef.collection('logs').doc(), {
+                time: new Date().toLocaleTimeString(),
+                log: `${text} (${assassinData.name}'s kill blocked)`,
+                color: 'purple.300',
+                timestamp: FieldValue.serverTimestamp(),
+            });
+            transaction.create(roomRef.collection('playerMessages').doc(), {
+                type: 'horcruxSaved',
+                recipient: null,
+                text,
+                standings: null,
+                mission: null,
+                sender: null,
+                timestamp: FieldValue.serverTimestamp(),
+            });
+            return { blockedByHorcrux: true, targetName: targetData.name };
+        }
+
         // The target's former hunters and prey — these need unmapping.
         // Deduped by normalized name: a player could in principle appear in
         // both arrays. A name that doesn't resolve to a document is a
@@ -230,6 +273,10 @@ exports.killPlayer = functions.https.onCall(async (data, context) => {
             openSeason: false,
             targets: [],
             assassins: [],
+            // A spent Horcrux (its grace period has passed) is cleared here,
+            // so `horcrux` reads false from now on (POWER_UPS_SPEC.md).
+            horcrux: false,
+            horcruxEndsAt: null,
         });
 
         for (const name of targetData.assassins || []) {
