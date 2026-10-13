@@ -179,6 +179,22 @@ boundary plus the player's own position, built on the same `GameMap.js`.
 the modal, so closing the map never stops tracking — the modal is purely
 presentational.
 
+Live location visibility (`docs/superpowers/specs/2026-10-12-live-location-visibility-design.md`)
+generalizes `GameMap.js`'s single `ownPosition` marker into a list,
+`otherPositions`, each with an optional hover label — the own-position
+marker is now a one-item case of the same rendering path, not a separate
+one. `src/components/map_components/LivePlayerMapButton.js` is the new
+GM-facing entry point (rendered alongside `GameBoundaryButton.js`): it
+owns its own open/closed state and, while open, subscribes to the whole
+`boundaryStatuses` subcollection unfiltered — the host's existing read
+grant covers this — rendering every fresh player's position as a labeled
+marker on the same `GameMap.js`. `PlayerMapModal.js` gained the same
+`otherPositions` prop, passed straight through from `PlayerGame.js`'s own
+`fetchOutsideBoundaryStatusesQueryForRoom` subscription (the one query
+shape the widened `boundaryStatuses` read rule can prove safe for a
+non-host player), so a player sees any other currently-exposed player on
+their own map too.
+
 ## State management ✅ Resolved (improvements item 13)
 
 There is no state library. Until item 13, state lived in three separate

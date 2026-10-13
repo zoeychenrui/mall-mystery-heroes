@@ -576,6 +576,27 @@ time without affecting tracking either way. A later boundary revision
 restarts the watch with fresh readings and surfaces a "Game area updated"
 notice through the same room-doc subscription.
 
+## 9. Becoming visible to other players (live location visibility)
+
+A player who drifts past the boundary edge is first evaluated as `near`
+(within the edge tolerance, not yet confirmed outside); while `near` with
+an `outsideSince` already set, `PlayerGame.js` shows a countdown box
+("your location will be revealed to everyone in `N`s"), ticking down
+against `GAME_BOUNDARY_CONFIG.confirmMinSpanMs` on the same local 1-second
+ticker the status line already uses. If the player returns inside before
+that span elapses, the countdown simply disappears with the next status
+snapshot — nothing was ever exposed. If instead `reportPlayerLocation`
+confirms `outside` first (flow 8 above), the countdown box is replaced
+in-place by a notice that the player's location is now visible to
+everyone, and from that instant every other player's `PlayerMapModal` and
+the GM's `LivePlayerMapButton` map — both subscribed live, the GM to the
+whole `boundaryStatuses` subcollection, every other player to the
+`where('status', '==', 'outside')` subset of it — pick up that player's
+position as a marker. The moment the player returns inside and the status
+flips off `'outside'`, the next snapshot of that same query simply omits
+their document, and the marker disappears from every other screen
+immediately — no explicit "hide" step, just the query no longer matching.
+
 ---
 
 ## Where each flow updates the screen
