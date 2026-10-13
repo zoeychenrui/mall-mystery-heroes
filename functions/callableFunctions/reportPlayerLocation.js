@@ -174,6 +174,8 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
                 {
                     status: 'unavailable',
                     reason: 'clock_skew',
+                    lat: prevLat,
+                    lng: prevLng,
                     boundaryRevision,
                     lastSampleAt: toTimestamp(prev.lastSampleMs),
                 },

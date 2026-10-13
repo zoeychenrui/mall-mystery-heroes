@@ -190,6 +190,18 @@ describe('reportPlayerLocation', () => {
         expect(await readEvents()).toEqual([]);
     });
 
+    it('a brand-new player whose first-ever report is clock-skewed writes null lat and lng, not absent fields', async () => {
+        const alice = await newIdentity();
+        await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
+
+        const result = await reportAs(alice)(fix(INSIDE, Date.now() - 31000));
+
+        expect(result.data).toEqual({ status: 'unavailable', reason: 'clock_skew' });
+        const status = await readStatus('alice');
+        expect(status.lat).toBeNull();
+        expect(status.lng).toBeNull();
+    });
+
     it('a clock-skew report leaves a stored lastSampleAt unchanged', async () => {
         const alice = await newIdentity();
         await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
