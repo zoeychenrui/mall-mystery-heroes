@@ -239,8 +239,9 @@ Also update the doc comment above `exports.reportPlayerLocation` — it currentl
  * boundaryEvents doc fires only on the confirmation edge: outsideConfirmedAt
  * moving from null to set, or from set to cleared by an inside status.
  * ...
-```//Keep the rest of the existing comment's fix/error-report shape description unchanged below this.
 ```
+
+Keep the rest of the existing comment (the fix/error-report shape description below this point) unchanged.
 
 - [ ] **Step 4: Run to verify the tests pass**
 
