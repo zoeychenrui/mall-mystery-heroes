@@ -1125,6 +1125,30 @@ describe('PlayerGame', () => {
         expect(requestPermission).toHaveBeenCalled();
     });
 
+    it("passes this player's own isAlive (from the subscribed player doc) through to useBoundaryLocation", () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: true,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            } else if (ref === 'player-ref') {
+                callback({ exists: () => true, data: () => ({ isAlive: false, targets: [] }) });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        const lastCallArgs =
+            useBoundaryLocation.mock.calls[useBoundaryLocation.mock.calls.length - 1][0];
+        expect(lastCallArgs.isAlive).toBe(false);
+    });
+
     it('passes the current status text through to PlayerMapModal so it is visible inside the map too', () => {
         writePlayerSession('Fluffy42317', 'Alice');
         onSnapshot.mockImplementation((ref, callback) => {

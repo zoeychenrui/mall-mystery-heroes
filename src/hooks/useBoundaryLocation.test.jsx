@@ -90,6 +90,7 @@ const baseProps = {
     boundaryRevision: 1,
     boundaryEnabled: true,
     isGameActive: true,
+    isAlive: true,
 };
 
 describe('useBoundaryLocation', () => {
@@ -390,6 +391,23 @@ describe('useBoundaryLocation', () => {
     it('does not start a watch when the boundary is disabled, and sets no permission state either way', () => {
         renderHook(() => useBoundaryLocation({ ...baseProps, boundaryEnabled: false }));
         expect(fakeGeolocation.watchPosition).not.toHaveBeenCalled();
+    });
+
+    it('does not start a watch when isAlive is false, even with everything else enabled', () => {
+        renderHook(() => useBoundaryLocation({ ...baseProps, isAlive: false }));
+        expect(fakeGeolocation.watchPosition).not.toHaveBeenCalled();
+    });
+
+    it('stops an active watch the moment isAlive flips to false', () => {
+        const { result, rerender } = renderHook((props) => useBoundaryLocation(props), {
+            initialProps: { ...baseProps, isAlive: true },
+        });
+        act(() => result.current.requestPermission());
+        const watchId = fakeGeolocation.watchPosition.mock.results[0].value;
+
+        rerender({ ...baseProps, isAlive: false });
+
+        expect(fakeGeolocation.clearWatch).toHaveBeenCalledWith(watchId);
     });
 
     it('a rejected report is swallowed and never thrown into the hook', async () => {

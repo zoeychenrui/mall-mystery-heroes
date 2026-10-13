@@ -208,6 +208,34 @@ describe('LivePlayerMapButton', () => {
         expect(lastGameMapProps.otherPositions).toEqual([]);
     });
 
+    it("resolves a dead player's real name from the players prop, same as any other player — the component does no filtering of its own, so the caller must pass everyone, not just the alive-names list", () => {
+        // Carol is not alive, but her name is still present here — simulating
+        // a caller now passing the FULL roster (Step 3's HeaderExecution fix),
+        // not just arrayOfAlivePlayers (which, being alive-only by
+        // construction, would never have included her).
+        renderButton({ players: [{ name: 'Alice' }, { name: 'Carol' }] });
+        fireEvent.click(screen.getByRole('button', { name: 'Live Player Map' }));
+
+        act(() => {
+            snapshotCallback(
+                makeSnapshot([
+                    [
+                        'carol',
+                        {
+                            lat: 10,
+                            lng: 20,
+                            lastUsableReceivedAt: { toMillis: () => NOW },
+                        },
+                    ],
+                ])
+            );
+        });
+
+        expect(lastGameMapProps.otherPositions).toEqual([
+            { id: 'carol', lat: 10, lng: 20, label: 'Carol' },
+        ]);
+    });
+
     it('falls back to the raw document id as the label when no matching player name is found', () => {
         renderButton({ players: [] });
         fireEvent.click(screen.getByRole('button', { name: 'Live Player Map' }));

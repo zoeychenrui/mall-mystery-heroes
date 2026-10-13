@@ -348,6 +348,11 @@ const PlayerGame = () => {
         boundaryRevision: gameBoundary?.revision ?? null,
         boundaryEnabled: gameBoundary?.enabled ?? false,
         isGameActive,
+        // Defaults to true (not eliminated) before playerData has loaded at
+        // all — e.g. the waiting room, before gameStarted gates the player-doc
+        // subscription above — matching this hook's own prior behavior of not
+        // gating on aliveness before this change existed.
+        isAlive: playerData?.isAlive ?? true,
     });
 
     // Derived from the subscribed status doc, the local ticker, and this

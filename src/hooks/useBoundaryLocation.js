@@ -35,11 +35,22 @@ const ONE_SHOT_OPTIONS = { ...GEOLOCATION_OPTIONS, timeout: ONE_SHOT_TIMEOUT_MS 
  * permission state and the latest acquired position for the map to
  * render — not the server's evaluated status.
  *
- * @param {{roomID: string, boundaryRevision: number|null, boundaryEnabled: boolean, isGameActive: boolean}} args
+ * @param {{roomID: string, boundaryRevision: number|null, boundaryEnabled: boolean, isGameActive: boolean, isAlive: boolean}} args
  *   boundaryRevision/boundaryEnabled false-ish when there is no
- *   published boundary yet — tracking simply does not start.
+ *   published boundary yet — tracking simply does not start. isAlive
+ *   false (the player was eliminated) stops/prevents tracking the same
+ *   way — an eliminated player has no reason to keep reporting their
+ *   location, and the watch effect below tears down its active watch
+ *   the moment this flips, the same as any other isTrackingActive
+ *   transition.
  */
-const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGameActive }) => {
+const useBoundaryLocation = ({
+    roomID,
+    boundaryRevision,
+    boundaryEnabled,
+    isGameActive,
+    isAlive,
+}) => {
     const [permissionState, setPermissionState] = useState('unknown');
     const [enabled, setEnabled] = useState(false);
     const [lastResult, setLastResult] = useState(null);
@@ -75,7 +86,8 @@ const useBoundaryLocation = ({ roomID, boundaryRevision, boundaryEnabled, isGame
     // is meant to surface — piling up concurrent calls without bound.
     const oneShotInFlightRef = useRef(false);
 
-    const isTrackingActive = enabled && boundaryEnabled && isGameActive && Boolean(roomID);
+    const isTrackingActive =
+        enabled && boundaryEnabled && isGameActive && isAlive && Boolean(roomID);
 
     const sendReport = useCallback((payload) => {
         const current = contextRef.current;

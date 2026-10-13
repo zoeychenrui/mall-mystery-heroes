@@ -1,5 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { FieldValue } = require('firebase-admin/firestore');
 // Vendored copies, not '../../src/game/...' — Cloud Functions deploy
 // uploads only the functions/ directory in isolation, so a require()
 // reaching outside it cannot resolve in the deployed bundle even though it
@@ -99,6 +100,20 @@ exports.killPlayer = functions.https.onCall(async (data, context) => {
         const targetData = targetDoc.data();
 
         captureSnapshot(target, targetData);
+
+        // The target's own boundary-status doc, read now (before any of this
+        // transaction's writes, per the read-then-write rule above) so the
+        // write phase can clear it the instant they die — an eliminated
+        // player must stop appearing exposed on the live map, and
+        // useBoundaryLocation.js (client) only stops reporting for them on
+        // its own next render, which could lag behind this kill landing.
+        // Single-document version of clearExposureForRoom
+        // (clearBoundaryExposure.js) — that helper clears every exposed
+        // document in a whole ROOM (boundary disabled, game ended); killing
+        // one player only ever needs to touch that one player's own
+        // document, so it is inlined here rather than reused.
+        const targetStatusRef = roomRef.collection('boundaryStatuses').doc(targetDoc.id);
+        const targetStatusSnapshot = await transaction.get(targetStatusRef);
 
         const targetKey = normalizePlayerName(target);
 
@@ -250,6 +265,27 @@ exports.killPlayer = functions.https.onCall(async (data, context) => {
 
         for (const { ref, fields } of pendingUpdates.values()) {
             transaction.update(ref, fields);
+        }
+
+        // Clear the target's own exposure the instant they die — a separate
+        // document (boundaryStatuses, not players), so it can never collide
+        // with the pendingUpdates writes above.
+        if (targetStatusSnapshot.exists) {
+            const targetStatus = targetStatusSnapshot.data();
+            if (targetStatus.status === 'outside' || targetStatus.status === 'near') {
+                transaction.update(targetStatusRef, {
+                    status: 'unavailable',
+                    reason: 'eliminated',
+                    lat: null,
+                    lng: null,
+                    accuracyMeters: null,
+                    outsideSince: null,
+                    lastOutsideSampleAt: null,
+                    outsideSampleCount: 0,
+                    outsideConfirmedAt: null,
+                    statusChangedAt: FieldValue.serverTimestamp(),
+                });
+            }
         }
 
         return {
