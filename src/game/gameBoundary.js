@@ -361,12 +361,17 @@ const nextBoundaryState = (prev, classification, times) => {
         });
     }
     if (classification.kind === 'near') {
-        const status = prev.outsideConfirmedAt !== null ? 'outside' : 'near';
+        // Near the edge ends exposure. Keeping status 'outside' through the
+        // edge buffer left returning players visible to everyone (and their
+        // coordinates readable under the outside-only Firestore rule) until
+        // a clearly-inside fix arrived — often a long wait with phone GPS.
+        // Only a later clearly-outside run can expose them again.
         return Object.assign({}, usable, {
-            status,
+            status: 'near',
             reason: null,
             outsideSinceMs: null,
             outsideSampleCount: 0,
+            outsideConfirmedAt: null,
         });
     }
 
@@ -396,6 +401,47 @@ const nextBoundaryState = (prev, classification, times) => {
         lastOutsideSampleMs: t,
         outsideSampleCount,
     });
+};
+
+// Previous state to feed `nextBoundaryState` after the GM publishes a new
+// boundary revision. A stored run was measured against the old ring, so it
+// is not carried forward — except when the player is already confirmed
+// outside and this fix is still outside the new ring. That player keeps
+// the exposure clock they already have (`outsideSinceMs`,
+// `outsideConfirmedAt`). Anyone who is only now outside starts clean, and
+// `nextBoundaryState` opens a new cooldown for them. `lastSampleMs` always
+// survives so an out-of-order sample is still rejected across the change.
+const stateAfterBoundaryRevision = (prev, classification) => {
+    const alreadyExposed = prev.outsideConfirmedAt !== null;
+    const stillOutside = classification.kind === 'outside';
+    if (alreadyExposed && stillOutside) return Object.assign({}, prev);
+    return Object.assign({}, initialBoundaryState(), {
+        lastSampleMs: prev.lastSampleMs,
+    });
+};
+
+// Whether `player` is clearly outside `ring`. One predicate for both roles
+// in `canSee`: a viewer and a target are classified by this same call, so
+// the answer cannot depend on which argument was passed first.
+const isOutsideBounds = (player, ring) => {
+    if (!player || !isFiniteNumber(player.lat) || !isFiniteNumber(player.lng)) return false;
+    const accuracyM = isFiniteNumber(player.accuracyM) ? player.accuracyM : 0;
+    return classifyFix(ring, { lat: player.lat, lng: player.lng, accuracyM }).kind === 'outside';
+};
+
+// Whether `viewer` can see `target`'s live location. A target is visible
+// exactly when their current position is clearly outside `ring` — the same
+// `isOutsideBounds` check for every caller, so two outside players always
+// agree (`canSee(A,B) === canSee(B,A)`), and a player who has walked back
+// to the edge or inside is hidden from peers even if a stale status doc
+// still says 'outside'. With no ring, fall back to confirmed exposure.
+const canSee = (viewer, target, ring) => {
+    if (!viewer || !target) return false;
+    if (viewer.id != null && target.id != null && viewer.id === target.id) return false;
+    if (Array.isArray(ring) && ring.length >= 4) {
+        return isOutsideBounds(target, ring);
+    }
+    return target.status === 'outside';
 };
 
 // `current` is optional. When both currentRevision and currentUid are given, a
@@ -456,6 +502,9 @@ module.exports = {
     classifyFix,
     initialBoundaryState,
     nextBoundaryState,
+    stateAfterBoundaryRevision,
+    isOutsideBounds,
+    canSee,
     deriveFreshStatus,
     isPositionFresh,
 };

@@ -298,7 +298,7 @@ describe('reportPlayerLocation', () => {
         expect(types).not.toContain('returnedInside');
     });
 
-    it('after the room revision changes, a stored outside run does not carry over: one outside fix is not outside and writes no event; two more 20 s apart confirm again', async () => {
+    it('after the room revision changes, a player who is still outside stays exposed and keeps their cooldown', async () => {
         const alice = await newIdentity();
         await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
         const call = reportAs(alice);
@@ -311,23 +311,39 @@ describe('reportPlayerLocation', () => {
         });
         await call(fix(OUTSIDE, T0 + 20000));
         expect(await readEvents()).toHaveLength(1);
+        const before = await readStatus('alice');
 
-        // The GM republishes the area: the room moves to revision 2.
+        // The GM republishes the area. The player is still outside it.
         await updateDoc(doc(bypass, 'rooms', ROOM), { 'gameBoundary.revision': 2 });
 
-        const first = await call(fix(OUTSIDE, T0 + 24000, { boundaryRevision: 2 }));
-        expect(first.data.status).not.toBe('outside');
-        expect((await readStatus('alice')).status).not.toBe('outside');
+        const next = await call(fix(OUTSIDE, T0 + 24000, { boundaryRevision: 2 }));
+        const after = await readStatus('alice');
+
+        expect(next.data.status).toBe('outside');
+        expect(after.status).toBe('outside');
+        expect(after.boundaryRevision).toBe(2);
+        expect(after.outsideSince.toMillis()).toBe(before.outsideSince.toMillis());
+        expect(after.outsideConfirmedAt.toMillis()).toBe(before.outsideConfirmedAt.toMillis());
         expect((await readEvents()).filter((e) => e.type === 'outside')).toHaveLength(1);
+    });
 
-        // Two more usable outside fixes at revision 2, 20 s apart on the server clock.
-        const again = Timestamp.fromMillis(Date.now() - 20000);
-        await updateDoc(statusRef('alice'), { outsideSince: again, lastOutsideSampleAt: again });
-        const confirmed = await call(fix(OUTSIDE, T0 + 24500, { boundaryRevision: 2 }));
+    it('after the room revision changes, a player who was inside and is now outside starts a new cooldown', async () => {
+        const alice = await newIdentity();
+        await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
+        const call = reportAs(alice);
+        const T0 = Date.now() - 5000;
+        await call(fix(INSIDE, T0));
 
-        expect(confirmed.data.status).toBe('outside');
-        expect((await readStatus('alice')).status).toBe('outside');
-        expect((await readEvents()).filter((e) => e.type === 'outside')).toHaveLength(2);
+        await updateDoc(doc(bypass, 'rooms', ROOM), { 'gameBoundary.revision': 2 });
+
+        const next = await call(fix(OUTSIDE, T0 + 1000, { boundaryRevision: 2 }));
+        const status = await readStatus('alice');
+
+        expect(next.data.status).toBe('near');
+        expect(status.status).toBe('near');
+        expect(status.outsideConfirmedAt).toBeNull();
+        expect(status.outsideSince).toBeInstanceOf(Timestamp);
+        expect(await readEvents()).toEqual([]);
     });
 
     it('an error report older than the last stored sample is rejected as out-of-order and leaves the status unchanged', async () => {
@@ -397,6 +413,31 @@ describe('reportPlayerLocation', () => {
             playerId: 'alice',
             playerName: 'alice',
         });
+    });
+
+    it('a near-edge fix after a confirmed outside ends exposure and writes returnedInside', async () => {
+        const alice = await newIdentity();
+        await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
+        const call = reportAs(alice);
+        const T0 = Date.now() - 25000;
+        await call(fix(OUTSIDE, T0));
+        const twentySecondsAgo = Timestamp.fromMillis(Date.now() - 20000);
+        await updateDoc(statusRef('alice'), {
+            outsideSince: twentySecondsAgo,
+            lastOutsideSampleAt: twentySecondsAgo,
+        });
+        await call(fix(OUTSIDE, T0 + 20000));
+        expect((await readStatus('alice')).status).toBe('outside');
+
+        // Just outside the ring, within the 15 m edge tolerance → near.
+        const nearEdge = { lat: 40.00105, lng: -75.0 };
+        await call(fix(nearEdge, T0 + 23500));
+
+        const status = await readStatus('alice');
+        expect(status.status).toBe('near');
+        expect(status.outsideConfirmedAt).toBeNull();
+        const events = await readEvents();
+        expect(events.map((event) => event.type).sort()).toEqual(['outside', 'returnedInside']);
     });
 
     it('a player with a disabled boundary is rejected with "Game area is not active." and nothing is written', async () => {
