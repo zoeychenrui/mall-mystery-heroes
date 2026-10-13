@@ -80,6 +80,30 @@ const MessageBubble = ({ message, playerName }) => {
                         </Text>
                     )}
                 </Box>
+            ) : message.type === 'powerUpPing' ? (
+                // A global ping bought from the power-ups shop
+                // (functions/callableFunctions/purchasePowerUp.js). Names who
+                // was pinged, not who bought it. The location snapshot will
+                // render here once GPS lands — `message.location` is null
+                // until then.
+                <Box
+                    bg="orange.900"
+                    border="1px solid"
+                    borderColor="orange.400"
+                    borderRadius="md"
+                    p={2}
+                    display="inline-block"
+                >
+                    <Text as="span" fontWeight="bold" color="orange.300">
+                        Ping
+                    </Text>{' '}
+                    <Text as="span">{message.text}</Text>
+                    {time && (
+                        <Text as="span" fontSize="xs" color="gray.400" ml={2}>
+                            {time}
+                        </Text>
+                    )}
+                </Box>
             ) : message.type === 'whisper' || message.type === 'broadcast' ? (
                 <Box
                     bg={message.type === 'whisper' ? 'whiteAlpha.100' : 'purple.900'}

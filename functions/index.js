@@ -49,5 +49,8 @@ exports.reportPlayerLocation = reportPlayerLocation
 const { endGame } = require('./callableFunctions/endGame')
 exports.endGame = endGame
 
+const { purchasePowerUp } = require('./callableFunctions/purchasePowerUp')
+exports.purchasePowerUp = purchasePowerUp
+
 const { cleanupEndedRooms } = require("./scheduledFunctions/cleanupEndedRooms")
 exports.cleanupEndedRooms = cleanupEndedRooms

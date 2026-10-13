@@ -416,6 +416,19 @@ Gaps that remain, per [improvements.md](./improvements.md):
   player doc's `rateLimits` field. `src/components/submitKillPhoto.js` is
   its thin `httpsCallable` wrapper, called from `MessageComposer.js` after
   the Storage upload.
+- `purchasePowerUp` (`functions/callableFunctions/purchasePowerUp.js`) —
+  the player power-ups shop (POWER_UPS_SPEC.md). Derives the buyer from
+  `context.auth.uid`, then in one transaction re-checks the same
+  `purchaseBlockReason` rule the shop UI uses (`src/game/powerUps.js`,
+  vendored), validates a picked target is another alive player, deducts
+  the price from `score`, and stores the cooldown end in the player doc's
+  `powerUpCooldowns`. Requires `gameStarted && isGameActive` and an alive
+  buyer. Logs every purchase to `logs` (`orange.300`); a global ping also
+  posts a `'powerUpPing'` `playerMessages` entry naming who was pinged
+  (random pings pick among other alive players server-side). Other item
+  effects, and the ping's location snapshot, are not implemented yet.
+  `src/components/purchasePowerUp.js` is its thin
+  `httpsCallable` wrapper, called from `PowerUpShopModal.js`.
 - `submitChatMessage` (`functions/callableFunctions/submitChatMessage.js`)
   — the same treatment for player group chat: derives `sender` from
   `context.auth.uid`, replacing `dbCalls.addChatMessageForRoom` and the

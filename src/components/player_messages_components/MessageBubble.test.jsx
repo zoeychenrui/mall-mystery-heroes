@@ -80,6 +80,24 @@ describe('MessageBubble', () => {
         ).toBeInTheDocument();
     });
 
+    it('renders a power-up ping as a Ping card naming who was pinged', () => {
+        mountBubble({
+            type: 'powerUpPing',
+            recipient: null,
+            text: '📍 bob has been pinged!',
+            pingedPlayer: 'bob',
+            location: null,
+            standings: null,
+            mission: null,
+            sender: null,
+        });
+
+        expect(screen.getByText('Ping')).toBeInTheDocument();
+        expect(screen.getByText('📍 bob has been pinged!')).toBeInTheDocument();
+        // Not mislabeled as a GM message.
+        expect(screen.queryByText('GM:')).not.toBeInTheDocument();
+    });
+
     it('shows a chat message with its sender', () => {
         mountBubble({
             type: 'chat',

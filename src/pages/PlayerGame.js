@@ -40,6 +40,7 @@ import MessageFeed from '../components/player_messages_components/MessageFeed';
 import MessageComposer from '../components/player_messages_components/MessageComposer';
 import PlayerTaskListModal from '../components/task_components/PlayerTaskListModal';
 import LeaderboardModal from '../components/game_end_components/LeaderboardModal';
+import PowerUpShopModal from '../components/shop_components/PowerUpShopModal';
 import { buildLeaderboardStandings } from '../game/leaderboard';
 import { formatMessageTime } from '../utils/formatMessageTime';
 import { normalizePlayerName, resolvePlayerDisplayName } from '../game/playerNames';
@@ -118,6 +119,7 @@ const PlayerGame = () => {
         onOpen: onLeaderboardOpen,
         onClose: onLeaderboardClose,
     } = useDisclosure();
+    const { isOpen: isShopOpen, onOpen: onShopOpen, onClose: onShopClose } = useDisclosure();
     const {
         isOpen: isGameEndedOpen,
         onOpen: onGameEndedOpen,
@@ -125,6 +127,9 @@ const PlayerGame = () => {
     } = useDisclosure();
     const cancelRef = useRef();
     const createAlert = CreateAlert();
+    // purchasePowerUp enforces the same rules server-side; this only hides
+    // the button. `=== true` keeps it hidden until the player doc loads.
+    const canShop = gameStarted && isGameActive && playerData?.isAlive === true;
 
     useEffect(() => {
         setPendingMessages([]);
@@ -480,9 +485,18 @@ const PlayerGame = () => {
             bg={!isGameActive ? 'red.900' : undefined}
         >
             <Flex justifyContent="space-between" alignItems="center" wrap="wrap" gap={2} mb={2}>
-                <Heading size="md">
-                    {playerName || 'You'} joined {roomID}
-                </Heading>
+                <HStack spacing={2}>
+                    {/* Top-left per POWER_UPS_SPEC.md — only while there's a
+                        game to spend points in, and only for the living. */}
+                    {canShop && (
+                        <Button size="sm" colorScheme="yellow" onClick={onShopOpen}>
+                            Shop
+                        </Button>
+                    )}
+                    <Heading size="md">
+                        {playerName || 'You'} joined {roomID}
+                    </Heading>
+                </HStack>
                 <HStack spacing={2}>
                     <Button
                         size="sm"
@@ -532,6 +546,17 @@ const PlayerGame = () => {
                 isOpen={isLeaderboardOpen}
                 onClose={onLeaderboardClose}
                 standings={buildLeaderboardStandings(players)}
+            />
+            <PowerUpShopModal
+                // && canShop: an open shop closes itself if the player is
+                // eliminated (or the game ends) while browsing it.
+                isOpen={isShopOpen && canShop}
+                onClose={onShopClose}
+                roomID={roomID}
+                score={playerData?.score}
+                cooldowns={playerData?.powerUpCooldowns}
+                players={players}
+                playerName={playerName}
             />
             {/* Once the game has ended, the target/status text no longer
                 applies — the "please head back" and final-standings

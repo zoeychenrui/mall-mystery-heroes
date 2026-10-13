@@ -92,6 +92,19 @@ jest.mock(
             </div>
         ) : null
 );
+// Stubbed — has its own test file (PowerUpShopModal.test.jsx). This file
+// only checks the Shop button's visibility and that it opens the shop with
+// this player's score.
+jest.mock(
+    '../components/shop_components/PowerUpShopModal',
+    () => (props) =>
+        props.isOpen ? (
+            <div>
+                shop-modal-stub roomID={props.roomID} score={String(props.score)}
+                <button onClick={props.onClose}>close-shop-modal</button>
+            </div>
+        ) : null
+);
 // Stubbed — each has its own thorough test file (MessageFeed.test.jsx,
 // MessageComposer.test.jsx). This file stays focused on PlayerGame's own
 // status-line logic and on wiring MessageFeed's props, not re-testing
@@ -357,6 +370,61 @@ describe('PlayerGame', () => {
         await userEvent.click(screen.getByRole('button', { name: 'close-missions-modal' }));
 
         expect(screen.queryByText(/player-task-list-modal-stub/)).not.toBeInTheDocument();
+    });
+
+    describe('power-ups shop button', () => {
+        const mockRoom = (roomData, playerData = { isAlive: true, score: 12 }) =>
+            onSnapshot.mockImplementation((ref, callback) => {
+                if (ref === 'room-ref') {
+                    callback({ exists: () => true, data: () => roomData });
+                }
+                if (ref === 'player-ref') {
+                    callback({ exists: () => true, data: () => playerData });
+                }
+                return () => {};
+            });
+
+        it('is hidden while waiting for the host to start', () => {
+            writePlayerSession('Fluffy42317', 'Alice');
+            mockRoom({ gameStarted: false, isGameActive: true });
+
+            renderWaiting();
+
+            expect(screen.queryByRole('button', { name: 'Shop' })).not.toBeInTheDocument();
+        });
+
+        it('is hidden once the game has ended', () => {
+            writePlayerSession('Fluffy42317', 'Alice');
+            mockRoom({ gameStarted: true, isGameActive: false });
+
+            renderWaiting();
+
+            expect(screen.queryByRole('button', { name: 'Shop' })).not.toBeInTheDocument();
+        });
+
+        it('is hidden from an eliminated player', () => {
+            writePlayerSession('Fluffy42317', 'Alice');
+            mockRoom({ gameStarted: true, isGameActive: true }, { isAlive: false, score: 12 });
+
+            renderWaiting();
+
+            expect(screen.queryByRole('button', { name: 'Shop' })).not.toBeInTheDocument();
+        });
+
+        it("appears once the game starts and opens the shop with the player's score", async () => {
+            writePlayerSession('Fluffy42317', 'Alice');
+            mockRoom({ gameStarted: true, isGameActive: true });
+
+            renderWaiting();
+            await userEvent.click(screen.getByRole('button', { name: 'Shop' }));
+
+            expect(
+                screen.getByText('shop-modal-stub roomID=Fluffy42317 score=12')
+            ).toBeInTheDocument();
+
+            await userEvent.click(screen.getByRole('button', { name: 'close-shop-modal' }));
+            expect(screen.queryByText(/shop-modal-stub/)).not.toBeInTheDocument();
+        });
     });
 
     it('opens the leaderboard modal when Leaderboard is clicked, showing the live standings', async () => {

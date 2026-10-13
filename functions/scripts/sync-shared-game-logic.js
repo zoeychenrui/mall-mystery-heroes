@@ -26,6 +26,7 @@ const FILES = [
     'killPhotoUrl.js',
     'missionCompletion.js',
     'gameBoundary.js',
+    'powerUps.js',
 ];
 
 fs.mkdirSync(DEST_DIR, { recursive: true });
