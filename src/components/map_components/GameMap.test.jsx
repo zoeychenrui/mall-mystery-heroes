@@ -126,6 +126,39 @@ describe('GameMap', () => {
         );
     });
 
+    it("jumps to the moderator's own location when there is no boundary and no fitTo", () => {
+        const getCurrentPosition = jest.fn((onSuccess) => {
+            onSuccess({ coords: { latitude: 9, longitude: 8 } });
+        });
+        Object.defineProperty(global.navigator, 'geolocation', {
+            value: { getCurrentPosition },
+            configurable: true,
+        });
+        renderMap({ boundaryVertices: null, fitTo: null });
+        expect(mockMapInstance.jumpTo).toHaveBeenCalledWith(
+            expect.objectContaining({ center: [8, 9], zoom: 15 })
+        );
+        delete global.navigator.geolocation;
+    });
+
+    it('stays at the fallback view when geolocation is denied, unavailable, or times out', () => {
+        const getCurrentPosition = jest.fn((_onSuccess, onError) => {
+            onError(new Error('denied'));
+        });
+        Object.defineProperty(global.navigator, 'geolocation', {
+            value: { getCurrentPosition },
+            configurable: true,
+        });
+        renderMap({ boundaryVertices: null, fitTo: null });
+        expect(mockMapInstance.jumpTo).not.toHaveBeenCalled();
+        delete global.navigator.geolocation;
+    });
+
+    it('does not attempt to locate the moderator when the browser has no geolocation API at all', () => {
+        renderMap({ boundaryVertices: null, fitTo: null });
+        expect(mockMapInstance.jumpTo).not.toHaveBeenCalled();
+    });
+
     it('calls onMapLoad with the underlying map instance', () => {
         const onMapLoad = jest.fn();
         renderMap({ onMapLoad });

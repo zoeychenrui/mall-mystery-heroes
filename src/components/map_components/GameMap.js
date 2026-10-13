@@ -110,6 +110,30 @@ const GameMap = ({
                 // shape and stays that way.
                 map.jumpTo({ center: [fitTo.lng, fitTo.lat], zoom: 15 });
                 hasFitRef.current = true;
+            } else if (!hasFitRef.current) {
+                // Nothing to fit yet (e.g. drawing a brand-new boundary) —
+                // try a one-time "locate me" instead of leaving the
+                // moderator stuck at the world-view fallback. Set the
+                // guard immediately, before the async result comes back,
+                // so a denial/timeout doesn't leave this branch able to
+                // fire again on a later load event.
+                hasFitRef.current = true;
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            map.jumpTo({
+                                center: [position.coords.longitude, position.coords.latitude],
+                                zoom: 15,
+                            });
+                        },
+                        () => {
+                            // Denied, unavailable, or timed out — stay at
+                            // FALLBACK_VIEW_STATE. This is a convenience,
+                            // not a requirement, so no error UI here.
+                        },
+                        { timeout: 10000 }
+                    );
+                }
             }
             if (onMapLoad) onMapLoad(map);
         },
