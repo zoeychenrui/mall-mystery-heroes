@@ -34,6 +34,21 @@ const STANDARD_STYLE = 'mapbox://styles/mapbox/streets-v11';
 // always pan/zoom manually from here (spec, "Moderator experience").
 const FALLBACK_VIEW_STATE = { longitude: 0, latitude: 20, zoom: 1.5 };
 
+// The one visual for a player's position dot, shared by the own-position
+// marker and the other-players' markers so they cannot drift apart.
+// `title` is optional: `undefined` omits the attribute entirely (an empty
+// string would still render a title attribute).
+const PositionDot = ({ title }) => (
+    <Box
+        title={title}
+        w="14px"
+        h="14px"
+        borderRadius="full"
+        bg="#4299E1"
+        border="2px solid white"
+    />
+);
+
 const toGeoJson = (vertices) => ({
     type: 'Feature',
     geometry: {
@@ -60,6 +75,7 @@ const GameMap = ({
     fitTo,
     dragPan = true,
     ownPosition,
+    otherPositions = [],
     onMapLoad,
     onMapError,
     children,
@@ -232,15 +248,19 @@ const GameMap = ({
                 )}
                 {ownPosition && (
                     <Marker longitude={ownPosition.lng} latitude={ownPosition.lat}>
-                        <Box
-                            w="14px"
-                            h="14px"
-                            borderRadius="full"
-                            bg="#4299E1"
-                            border="2px solid white"
-                        />
+                        <PositionDot />
                     </Marker>
                 )}
+                {otherPositions.map((position) => (
+                    <Marker
+                        key={position.id}
+                        data-testid="other-position-marker"
+                        longitude={position.lng}
+                        latitude={position.lat}
+                    >
+                        <PositionDot title={position.label || undefined} />
+                    </Marker>
+                ))}
                 {children}
             </Map>
             <Button

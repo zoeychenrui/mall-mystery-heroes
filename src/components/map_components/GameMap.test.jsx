@@ -7,7 +7,7 @@
  * mock Map/Source/Layer, never a real map.
  */
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { ChakraProvider } from '@chakra-ui/react';
 import GameMap from './GameMap';
 
@@ -54,8 +54,8 @@ jest.mock('react-map-gl', () => {
                 {children}
             </div>
         ),
-        Marker: ({ longitude, latitude, children }) => (
-            <div data-testid="mock-marker" data-lng={longitude} data-lat={latitude}>
+        Marker: ({ longitude, latitude, children, 'data-testid': testId }) => (
+            <div data-testid={testId ?? 'mock-marker'} data-lng={longitude} data-lat={latitude}>
                 {children}
             </div>
         ),
@@ -258,5 +258,39 @@ describe('GameMap — own position', () => {
         renderMap({ ownPosition: { lat: 10, lng: 20, accuracyM: 0 } });
         expect(screen.getByTestId('mock-marker')).toBeInTheDocument();
         expect(screen.queryByTestId('own-position-accuracy-source')).not.toBeInTheDocument();
+    });
+});
+
+describe("GameMap — other players' positions", () => {
+    it('renders no markers when otherPositions is empty or omitted', () => {
+        renderMap({ otherPositions: [] });
+        expect(screen.queryAllByTestId('other-position-marker')).toHaveLength(0);
+    });
+
+    it('renders one marker per entry in otherPositions, at the right coordinates', () => {
+        renderMap({
+            otherPositions: [
+                { id: 'alice', lat: 10, lng: 20 },
+                { id: 'bob', lat: 30, lng: 40 },
+            ],
+        });
+        const markers = screen.getAllByTestId('other-position-marker');
+        expect(markers).toHaveLength(2);
+        expect(markers[0]).toHaveAttribute('data-lng', '20');
+        expect(markers[0]).toHaveAttribute('data-lat', '10');
+        expect(markers[1]).toHaveAttribute('data-lng', '40');
+        expect(markers[1]).toHaveAttribute('data-lat', '30');
+    });
+
+    it("shows a player's name on hover when a label is given, and no title attribute when it is not", () => {
+        renderMap({
+            otherPositions: [
+                { id: 'alice', lat: 10, lng: 20, label: 'Alice' },
+                { id: 'bob', lat: 30, lng: 40 },
+            ],
+        });
+        const markers = screen.getAllByTestId('other-position-marker');
+        expect(within(markers[0]).getByTitle('Alice')).toBeInTheDocument();
+        expect(within(markers[1]).queryByTitle(/.*/)).not.toBeInTheDocument();
     });
 });
