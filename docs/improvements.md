@@ -636,12 +636,17 @@ adjacent to what item 29 catalogued, not itself scoped there, so not
 claimed as part of that item.
 
 Regression tests (second pass): `updateIsCompleteToTrueForTaskByIndex`
-rejecting for a nonexistent task index, and `endGame` rejecting for a
-nonexistent room, both added to the same `dbCalls.integration.test.js`
-describe block as the first pass's five, each verified to fail against the
-pre-fix swallow-and-return-`undefined` behavior before confirming green
-against the fix. `Endgamebutton.test.jsx` is new — two tests, confirmed red
-against the pre-fix fire-and-forget `onYesEnd` before confirming green.
+rejecting for a nonexistent task index, and (at the time) `endGame`
+rejecting for a nonexistent room, both added to the same
+`dbCalls.integration.test.js` describe block as the first pass's five,
+each verified to fail against the pre-fix swallow-and-return-`undefined`
+behavior before confirming green against the fix. `Endgamebutton.test.jsx`
+is new — two tests, confirmed red against the pre-fix fire-and-forget
+`onYesEnd` before confirming green. (`endGame` later moved out of
+`dbCalls.js` entirely into its own Cloud Function — see the exposure-
+lifecycle plan and `functions/callableFunctions/endGame.integration.test.js`,
+whose own not-found case now covers what the nonexistent-room test above
+used to.)
 The rest of the fifteen had no new test: either the removed `try/catch`
 never protected against a producible failure (the three sync query
 builders), or the only meaningful change was letting an existing Firestore

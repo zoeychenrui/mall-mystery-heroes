@@ -98,8 +98,12 @@ service cloud.firestore {
       // Functions (Admin SDK, bypasses these rules), so the client may not
       // change it. Split from delete on purpose: the old single clause
       // granted both, and delete must stay host-only with no field restriction.
+      // isGameActive/endedAt are likewise written only by the endGame Cloud
+      // Function now (functions/callableFunctions/endGame.js) — it also
+      // clears exposure in the same transaction, which a direct client write
+      // to either field could never do, so neither may be changed here.
       allow update: if isHostOfExistingRoom(roomId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gameBoundary']);
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gameBoundary', 'isGameActive', 'endedAt']);
       allow delete: if isHostOfExistingRoom(roomId);
 
       match /players/{playerId} {
@@ -108,12 +112,15 @@ service cloud.firestore {
       }
 
       // Game boundary status and events are written only by the Cloud
-      // Functions (Admin SDK). A player reads only their own status doc, and
-      // there is no list grant for players, so the roster of statuses stays
-      // host-only.
+      // Functions (Admin SDK). A player reads their own status doc, or any
+      // other player's once it reads 'outside' (live location visibility,
+      // docs/superpowers/specs/2026-10-12-live-location-visibility-design.md)
+      // — there is still no list grant broad enough to enumerate every
+      // status, so an unfiltered roster stays host-only.
       match /boundaryStatuses/{playerId} {
         allow read: if isHostOfExistingRoom(roomId) ||
-          (isSignedIn() && isOwnBoundaryStatus(roomId, playerId));
+          (isSignedIn() && isOwnBoundaryStatus(roomId, playerId)) ||
+          (isSignedIn() && isPlayerOfRoom(roomId) && resource.data.status == 'outside');
         allow write: if false;
       }
 

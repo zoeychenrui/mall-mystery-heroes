@@ -37,6 +37,11 @@ const GameMasterView = () => {
     const [isGameActive, setIsGameActive] = useState(true);
     const [gameBoundary, setGameBoundary] = useState(undefined);
     const aliveNames = players.filter((player) => player.isAlive).map((player) => player.name);
+    // Every player's name, alive or not — HeaderExecution threads this to
+    // LivePlayerMapButton (unlike aliveNames, which the live map must NOT
+    // use: an eliminated player's status doc needs its real name resolved
+    // too, not a fallback to the raw normalized id).
+    const allPlayerNames = players.map((player) => player.name);
     const logsBoxRef = useRef(null);
 
     // Players and logs are both live subscriptions now, not fetched once and
@@ -267,6 +272,7 @@ const GameMasterView = () => {
                     <HeaderExecution
                         addLog={addLog}
                         arrayOfAlivePlayers={aliveNames}
+                        allPlayerNames={allPlayerNames}
                         gameBoundary={gameBoundary}
                     />
                 </Box>

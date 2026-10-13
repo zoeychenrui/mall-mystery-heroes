@@ -11,7 +11,7 @@ import {
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import CreateAlert from '../CreateAlert';
-import { endGame } from '../firebase_calls/dbCalls';
+import { endGame } from '../endGame';
 
 // Abandons a room that hasn't started yet — the only way to leave a
 // Lobby-phase room used to be Start Game then End Game, since

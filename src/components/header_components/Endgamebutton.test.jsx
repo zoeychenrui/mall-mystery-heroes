@@ -12,18 +12,17 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Endgamebutton from './Endgamebutton';
 import { gameContext } from '../Contexts';
-import {
-    endGame,
-    fetchAllPlayersDataForRoom,
-    addPlayerMessageForRoom,
-} from '../firebase_calls/dbCalls';
+import { fetchAllPlayersDataForRoom, addPlayerMessageForRoom } from '../firebase_calls/dbCalls';
+import { endGame } from '../endGame';
 
 const mockNavigate = jest.fn();
 
 jest.mock('../firebase_calls/dbCalls', () => ({
-    endGame: jest.fn(),
     fetchAllPlayersDataForRoom: jest.fn(),
     addPlayerMessageForRoom: jest.fn(),
+}));
+jest.mock('../endGame', () => ({
+    endGame: jest.fn(),
 }));
 jest.mock('react-router-dom', () => ({
     useNavigate: () => mockNavigate,

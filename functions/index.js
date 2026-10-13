@@ -46,5 +46,8 @@ exports.disableGameBoundary = disableGameBoundary
 const { reportPlayerLocation } = require('./callableFunctions/reportPlayerLocation')
 exports.reportPlayerLocation = reportPlayerLocation
 
+const { endGame } = require('./callableFunctions/endGame')
+exports.endGame = endGame
+
 const { cleanupEndedRooms } = require("./scheduledFunctions/cleanupEndedRooms")
 exports.cleanupEndedRooms = cleanupEndedRooms

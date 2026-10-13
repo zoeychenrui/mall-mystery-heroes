@@ -7,7 +7,7 @@
  * mock Map/Source/Layer, never a real map.
  */
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { ChakraProvider } from '@chakra-ui/react';
 import GameMap from './GameMap';
 
@@ -44,8 +44,18 @@ jest.mock('react-map-gl', () => {
                 </div>
             );
         },
-        Source: ({ children, data }) => (
-            <div data-testid="mock-source" data-geojson={JSON.stringify(data)}>
+        Source: ({ children, data, id }) => (
+            <div
+                data-testid={
+                    id === 'own-position-accuracy' ? 'own-position-accuracy-source' : 'mock-source'
+                }
+                data-geojson={JSON.stringify(data)}
+            >
+                {children}
+            </div>
+        ),
+        Marker: ({ longitude, latitude, children, 'data-testid': testId }) => (
+            <div data-testid={testId ?? 'mock-marker'} data-lng={longitude} data-lat={latitude}>
                 {children}
             </div>
         ),
@@ -116,6 +126,39 @@ describe('GameMap', () => {
         );
     });
 
+    it("jumps to the moderator's own location when there is no boundary and no fitTo", () => {
+        const getCurrentPosition = jest.fn((onSuccess) => {
+            onSuccess({ coords: { latitude: 9, longitude: 8 } });
+        });
+        Object.defineProperty(global.navigator, 'geolocation', {
+            value: { getCurrentPosition },
+            configurable: true,
+        });
+        renderMap({ boundaryVertices: null, fitTo: null });
+        expect(mockMapInstance.jumpTo).toHaveBeenCalledWith(
+            expect.objectContaining({ center: [8, 9], zoom: 15 })
+        );
+        delete global.navigator.geolocation;
+    });
+
+    it('stays at the fallback view when geolocation is denied, unavailable, or times out', () => {
+        const getCurrentPosition = jest.fn((_onSuccess, onError) => {
+            onError(new Error('denied'));
+        });
+        Object.defineProperty(global.navigator, 'geolocation', {
+            value: { getCurrentPosition },
+            configurable: true,
+        });
+        renderMap({ boundaryVertices: null, fitTo: null });
+        expect(mockMapInstance.jumpTo).not.toHaveBeenCalled();
+        delete global.navigator.geolocation;
+    });
+
+    it('does not attempt to locate the moderator when the browser has no geolocation API at all', () => {
+        renderMap({ boundaryVertices: null, fitTo: null });
+        expect(mockMapInstance.jumpTo).not.toHaveBeenCalled();
+    });
+
     it('calls onMapLoad with the underlying map instance', () => {
         const onMapLoad = jest.fn();
         renderMap({ onMapLoad });
@@ -180,5 +223,98 @@ describe('GameMap', () => {
     it('renders children inside the map, alongside the boundary overlay', () => {
         renderMap({ children: <div data-testid="child-marker" /> });
         expect(screen.getByTestId('child-marker')).toBeInTheDocument();
+    });
+});
+
+describe('GameMap — own position', () => {
+    it('renders no marker and no accuracy source when ownPosition is null', () => {
+        renderMap({ ownPosition: null });
+        expect(screen.queryByTestId('mock-marker')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('own-position-accuracy-source')).not.toBeInTheDocument();
+    });
+
+    it('renders a marker at the given position', () => {
+        renderMap({ ownPosition: { lat: 10, lng: 20, accuracyM: 15 } });
+        const marker = screen.getByTestId('mock-marker');
+        expect(marker).toHaveAttribute('data-lng', '20');
+        expect(marker).toHaveAttribute('data-lat', '10');
+    });
+
+    it('renders the accuracy circle as a sampled polygon centered on the position', () => {
+        renderMap({ ownPosition: { lat: 10, lng: 20, accuracyM: 15 } });
+        const source = screen.getByTestId('own-position-accuracy-source');
+        const geojson = JSON.parse(source.getAttribute('data-geojson'));
+        const ring = geojson.geometry.coordinates[0];
+        // A circle's own center is the average of its ring's points —
+        // close enough to 20/10 to confirm this used the position, not
+        // some other default.
+        const avgLng = ring.reduce((sum, [lng]) => sum + lng, 0) / ring.length;
+        const avgLat = ring.reduce((sum, [, lat]) => sum + lat, 0) / ring.length;
+        expect(avgLng).toBeCloseTo(20, 3);
+        expect(avgLat).toBeCloseTo(10, 3);
+    });
+
+    it('renders the marker but no accuracy circle when accuracyM is zero or invalid', () => {
+        renderMap({ ownPosition: { lat: 10, lng: 20, accuracyM: 0 } });
+        expect(screen.getByTestId('mock-marker')).toBeInTheDocument();
+        expect(screen.queryByTestId('own-position-accuracy-source')).not.toBeInTheDocument();
+    });
+});
+
+describe("GameMap — other players' positions", () => {
+    it('renders no markers when otherPositions is empty or omitted', () => {
+        renderMap({ otherPositions: [] });
+        expect(screen.queryAllByTestId('other-position-marker')).toHaveLength(0);
+    });
+
+    it('renders one marker per entry in otherPositions, at the right coordinates', () => {
+        renderMap({
+            otherPositions: [
+                { id: 'alice', lat: 10, lng: 20 },
+                { id: 'bob', lat: 30, lng: 40 },
+            ],
+        });
+        const markers = screen.getAllByTestId('other-position-marker');
+        expect(markers).toHaveLength(2);
+        expect(markers[0]).toHaveAttribute('data-lng', '20');
+        expect(markers[0]).toHaveAttribute('data-lat', '10');
+        expect(markers[1]).toHaveAttribute('data-lng', '40');
+        expect(markers[1]).toHaveAttribute('data-lat', '30');
+    });
+
+    it('shows a hover tooltip (not a native title attribute) for a position with a label and no alwaysShowLabel', () => {
+        renderMap({
+            otherPositions: [{ id: 'alice', lat: 10, lng: 20, label: 'Alice' }],
+        });
+        const marker = screen.getByTestId('other-position-marker');
+        // No native title attribute at all — the tooltip is a separate
+        // rendered element now, not an HTML attribute. Queried via
+        // Testing Library's own getByTitle/queryByTitle (not direct DOM
+        // access) to satisfy this repo's testing-library/no-node-access
+        // lint rule, same as the within(...).queryByTitle usage this
+        // file's own now-superseded hover test used to rely on.
+        expect(within(marker).queryByTitle(/./)).not.toBeInTheDocument();
+        // The strengthened half of this test: not just "no native title",
+        // but the always-visible label truly never renders without
+        // alwaysShowLabel — this would still have passed the assertion
+        // above even if the always-visible label rendered unconditionally.
+        expect(screen.queryByTestId('always-visible-label')).not.toBeInTheDocument();
+        expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+    });
+
+    it('always renders a visible label (no hover needed) when alwaysShowLabel is true', () => {
+        renderMap({
+            otherPositions: [
+                { id: 'alice', lat: 10, lng: 20, label: 'Alice', alwaysShowLabel: true },
+            ],
+        });
+        expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+
+    it('does not render a visible label at all for a position with no label', () => {
+        renderMap({ otherPositions: [{ id: 'alice', lat: 10, lng: 20 }] });
+        expect(
+            screen.queryByText(/./, { selector: '[data-testid="always-visible-label"]' })
+        ).not.toBeInTheDocument();
     });
 });

@@ -10,14 +10,34 @@
  * See functions/callableFunctions/killPlayer.js for what this replaced:
  * ~9-15 separate, unbatched client writes (docs/improvements.md item 4).
  */
+import { doc, getDoc, setDoc, terminate } from 'firebase/firestore';
 import { executeKill } from './executeKill';
 import { fetchPlayerForRoom, setOpenSznOfPlayerToValueForRoom } from './firebase_calls/dbCalls';
-import { callableAsNonHost, clearFirestore, seedRoom, shutdown } from '../../test/emulatorHelpers';
+import {
+    callableAsNonHost,
+    clearFirestore,
+    createRulesBypassDb,
+    seedRoom,
+    shutdown,
+} from '../../test/emulatorHelpers';
 
 const ROOM = 'test-room';
 
+// boundaryStatuses is written only by Cloud Functions, so firestore.rules
+// does not open it to clients — seeding/reading it directly here needs the
+// rules-bypass instance, same convention reportPlayerLocation.integration.
+// test.js uses for the same collection.
+let bypass;
+const boundaryStatusRef = (playerKey) => doc(bypass, 'rooms', ROOM, 'boundaryStatuses', playerKey);
+
+beforeAll(() => {
+    bypass = createRulesBypassDb();
+});
 beforeEach(clearFirestore);
-afterAll(shutdown);
+afterAll(async () => {
+    await terminate(bypass);
+    await shutdown();
+});
 
 describe('executeKill', () => {
     it("rejects a kill when the target is not on the assassin's list and open season is off", async () => {
@@ -130,5 +150,75 @@ describe('executeKill', () => {
             killAsNonHost({ target: 'bob', assassin: 'alice', roomId: ROOM })
         ).rejects.toThrow(/permission-denied|host/i);
         expect((await fetchPlayerForRoom('bob', ROOM)).data().isAlive).toBe(true);
+    });
+
+    it("clears the target's boundary status if they were confirmed outside at the moment of the kill", async () => {
+        await seedRoom(ROOM, [
+            { name: 'alice', targets: ['bob'] },
+            { name: 'bob', score: 5 },
+        ]);
+        await setDoc(boundaryStatusRef('bob'), {
+            status: 'outside',
+            reason: null,
+            lat: 40.01,
+            lng: -75.0,
+            accuracyMeters: 5,
+            outsideSince: null,
+            lastOutsideSampleAt: null,
+            outsideSampleCount: 2,
+            outsideConfirmedAt: null,
+            boundaryRevision: 1,
+            uid: 'bob-uid',
+        });
+
+        await executeKill('bob', 'alice', ROOM);
+
+        const status = (await getDoc(boundaryStatusRef('bob'))).data();
+        expect(status.status).toBe('unavailable');
+        expect(status.reason).toBe('eliminated');
+        expect(status.lat).toBeNull();
+        expect(status.lng).toBeNull();
+    });
+
+    it("also clears the target's boundary status when they were only 'near' (not yet confirmed outside) at the moment of the kill", async () => {
+        // The other half of the guard condition
+        // (`status === 'outside' || status === 'near'`) — the 'outside'
+        // test above alone would miss a regression that narrowed the
+        // check to 'outside' only.
+        await seedRoom(ROOM, [
+            { name: 'alice', targets: ['bob'] },
+            { name: 'bob', score: 5 },
+        ]);
+        await setDoc(boundaryStatusRef('bob'), {
+            status: 'near',
+            reason: null,
+            lat: 40.01,
+            lng: -75.0,
+            accuracyMeters: 5,
+            outsideSince: null,
+            lastOutsideSampleAt: null,
+            outsideSampleCount: 1,
+            outsideConfirmedAt: null,
+            boundaryRevision: 1,
+            uid: 'bob-uid',
+        });
+
+        await executeKill('bob', 'alice', ROOM);
+
+        const status = (await getDoc(boundaryStatusRef('bob'))).data();
+        expect(status.status).toBe('unavailable');
+        expect(status.reason).toBe('eliminated');
+        expect(status.lat).toBeNull();
+        expect(status.lng).toBeNull();
+    });
+
+    it('does not throw when killing a target with no boundaryStatuses document at all', async () => {
+        await seedRoom(ROOM, [
+            { name: 'alice', targets: ['bob'] },
+            { name: 'bob', score: 5 },
+        ]);
+
+        await expect(executeKill('bob', 'alice', ROOM)).resolves.toBeDefined();
+        expect((await fetchPlayerForRoom('bob', ROOM)).data().isAlive).toBe(false);
     });
 });

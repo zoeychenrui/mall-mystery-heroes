@@ -44,6 +44,13 @@ jest.mock('../utils/firebase', () => ({ auth: {} }));
 // GameBoundaryButton.test.jsx's own stub of this module.
 jest.mock('../components/map_components/BoundaryEditorModal', () => () => null);
 
+// Lobby renders AbandonRoomButton, which now imports endGame from its own
+// module (src/components/endGame.js) rather than dbCalls.js — that module
+// calls httpsCallable from 'firebase/functions' at import time, which
+// touches `fetch` (undefined in jsdom), same class of problem as the
+// BoundaryEditorModal mock above.
+jest.mock('../components/endGame', () => ({ endGame: jest.fn() }));
+
 jest.mock('../components/firebase_calls/dbCalls', () => ({
     fetchAllPlayersQueryForRoom: jest.fn(() => 'players-query'),
     fetchRoomReferenceForRoom: jest.fn(() => 'room-ref'),
@@ -52,7 +59,6 @@ jest.mock('../components/firebase_calls/dbCalls', () => ({
     markGameAsStarted: jest.fn(),
     updateAssassinsForPlayer: jest.fn(),
     updateTargetsForPlayer: jest.fn(),
-    endGame: jest.fn(),
 }));
 
 const asPlayerDocs = (names) => names.map((name) => ({ data: () => ({ name }) }));

@@ -8,6 +8,7 @@ const {
     validateBoundaryShape,
     projectToMeters,
 } = require('../vendor/game/gameBoundary');
+const { clearExposureForRoom } = require('./clearBoundaryExposure');
 
 if (admin.apps.length === 0) {
     admin.initializeApp();
@@ -150,6 +151,12 @@ exports.disableGameBoundary = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('failed-precondition', 'revision_conflict');
         }
         const nextRevision = revision + 1;
+        // Must run before the transaction.update below: this function's own
+        // internal transaction.get (reading boundaryStatuses) has to happen
+        // before any write on this transaction, including the room update
+        // that follows — Firestore transactions require all reads before
+        // any writes.
+        await clearExposureForRoom(transaction, roomRef, 'boundary_disabled');
         transaction.update(roomRef, {
             'gameBoundary.enabled': false,
             'gameBoundary.revision': nextRevision,

@@ -363,12 +363,6 @@ export const fetchAllPlayersDataForRoom = async (roomID) => {
     });
 };
 
-//ends the game
-export const endGame = async (roomID) => {
-    const roomRef = doc(db, 'rooms', roomID);
-    await updateDoc(roomRef, { isGameActive: false, endedAt: serverTimestamp() });
-};
-
 // Persists the most recent /mission done completion's reversal snapshot on
 // the room itself, so /mission undo has something to act on — the
 // command-path counterpart to approvePhotoAsMissionForRoom's
@@ -412,6 +406,33 @@ export const fetchRoomReferenceForRoom = (roomID) => {
 // live player-doc subscription.
 export const fetchPlayerReferenceForRoom = (playerName, roomID) => {
     return doc(db, 'rooms', roomID, 'players', normalizePlayerName(playerName));
+};
+
+// A player's own boundary-status document — read-only from the client,
+// and only the player's own (firestore.rules checks the uid on their
+// player doc), same normalized ID scheme as fetchPlayerReferenceForRoom
+// above (docs/data-model.md's boundaryStatuses section).
+export const fetchBoundaryStatusReferenceForPlayer = (playerName, roomID) => {
+    return doc(db, 'rooms', roomID, 'boundaryStatuses', normalizePlayerName(playerName));
+};
+
+// Every boundary status in the room, unfiltered — only the host's read
+// grant makes this succeed (firestore.rules); a non-host player's
+// equivalent call is denied outright, by design, since Firestore cannot
+// prove an unfiltered query safe under a rule only some documents satisfy
+// (docs/superpowers/specs/2026-10-12-live-location-visibility-design.md).
+export const fetchBoundaryStatusesQueryForRoom = (roomID) => {
+    return collection(db, 'rooms', roomID, 'boundaryStatuses');
+};
+
+// Only the currently-outside statuses — the one query shape Firestore can
+// prove safe for a non-host player under the widened boundaryStatuses read
+// rule, since the rule's own condition matches this exact filter.
+export const fetchOutsideBoundaryStatusesQueryForRoom = (roomID) => {
+    return query(
+        collection(db, 'rooms', roomID, 'boundaryStatuses'),
+        where('status', '==', 'outside')
+    );
 };
 
 // A reference to a specific reconnect request, for onSnapshot — lets

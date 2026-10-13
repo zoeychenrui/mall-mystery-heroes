@@ -1,7 +1,10 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Box, Button, Text } from '@chakra-ui/react';
-import { Map, Source, Layer } from 'react-map-gl';
+import { Box, Button, Text, Tooltip } from '@chakra-ui/react';
+import { Map, Source, Layer, Marker } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+// require(), not a named import — gameBoundary.js is CommonJS by design
+// (see BoundaryEditorModal.js for the same pattern and why).
+const { shapeToPolygon } = require('../../game/gameBoundary');
 
 // One provider, kept behind this component (docs/superpowers/specs/
 // 2026-09-30-game-boundaries-design.md, "Open implementation choice").
@@ -31,6 +34,54 @@ const STANDARD_STYLE = 'mapbox://styles/mapbox/streets-v11';
 // always pan/zoom manually from here (spec, "Moderator experience").
 const FALLBACK_VIEW_STATE = { longitude: 0, latitude: 20, zoom: 1.5 };
 
+// The one visual for a player's position dot, shared by the own-position
+// marker and every other-players' marker so they cannot drift apart.
+// `label` with no `alwaysShowLabel` shows on hover via a real rendered
+// Tooltip (replacing the old native `title` attribute, which cannot be
+// sped up or resized) — a short openDelay and a larger font, per the
+// moderator's own request. `label` WITH `alwaysShowLabel` skips the
+// tooltip entirely and renders the name permanently next to the dot,
+// used only by a player's own view of other currently-exposed players
+// (the spec's "few players are ever exposed at once" reasoning — no
+// hover needed there).
+const Dot = () => (
+    <Box w="14px" h="14px" borderRadius="full" bg="#4299E1" border="2px solid white" />
+);
+
+const PositionDot = ({ label, alwaysShowLabel }) => {
+    if (!label) return <Dot />;
+    if (alwaysShowLabel) {
+        return (
+            <Box position="relative">
+                <Dot />
+                <Text
+                    data-testid="always-visible-label"
+                    position="absolute"
+                    top="-20px"
+                    left="50%"
+                    transform="translateX(-50%)"
+                    whiteSpace="nowrap"
+                    fontSize="sm"
+                    fontWeight="bold"
+                    color="white"
+                    bg="blackAlpha.700"
+                    px="4px"
+                    borderRadius="sm"
+                >
+                    {label}
+                </Text>
+            </Box>
+        );
+    }
+    return (
+        <Tooltip label={label} openDelay={150} fontSize="md" hasArrow>
+            <Box>
+                <Dot />
+            </Box>
+        </Tooltip>
+    );
+};
+
 const toGeoJson = (vertices) => ({
     type: 'Feature',
     geometry: {
@@ -52,8 +103,30 @@ const toGeoJson = (vertices) => ({
  * (editing handles, a position marker) on top of the boundary overlay
  * without this component needing to know what they are.
  */
-const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapError, children }) => {
+const GameMap = ({
+    boundaryVertices,
+    fitTo,
+    dragPan = true,
+    ownPosition,
+    otherPositions = [],
+    onMapLoad,
+    onMapError,
+    children,
+}) => {
     const mapboxToken = getMapboxToken();
+
+    let ownAccuracyGeoJson = null;
+    if (ownPosition && Number.isFinite(ownPosition.accuracyM) && ownPosition.accuracyM > 0) {
+        try {
+            const ring = shapeToPolygon('circle', {
+                center: { lat: ownPosition.lat, lng: ownPosition.lng },
+                radiusMeters: ownPosition.accuracyM,
+            });
+            ownAccuracyGeoJson = toGeoJson(ring);
+        } catch {
+            ownAccuracyGeoJson = null;
+        }
+    }
     const [styleMode, setStyleMode] = useState('satellite');
     const [hasError, setHasError] = useState(false);
     const hasFitRef = useRef(false);
@@ -86,6 +159,30 @@ const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapErro
                 // shape and stays that way.
                 map.jumpTo({ center: [fitTo.lng, fitTo.lat], zoom: 15 });
                 hasFitRef.current = true;
+            } else if (!hasFitRef.current) {
+                // Nothing to fit yet (e.g. drawing a brand-new boundary) —
+                // try a one-time "locate me" instead of leaving the
+                // moderator stuck at the world-view fallback. Set the
+                // guard immediately, before the async result comes back,
+                // so a denial/timeout doesn't leave this branch able to
+                // fire again on a later load event.
+                hasFitRef.current = true;
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            map.jumpTo({
+                                center: [position.coords.longitude, position.coords.latitude],
+                                zoom: 15,
+                            });
+                        },
+                        () => {
+                            // Denied, unavailable, or timed out — stay at
+                            // FALLBACK_VIEW_STATE. This is a convenience,
+                            // not a requirement, so no error UI here.
+                        },
+                        { timeout: 10000 }
+                    );
+                }
             }
             if (onMapLoad) onMapLoad(map);
         },
@@ -173,6 +270,33 @@ const GameMap = ({ boundaryVertices, fitTo, dragPan = true, onMapLoad, onMapErro
                         />
                     </Source>
                 )}
+                {ownAccuracyGeoJson && (
+                    <Source id="own-position-accuracy" type="geojson" data={ownAccuracyGeoJson}>
+                        <Layer
+                            id="own-position-accuracy-fill"
+                            type="fill"
+                            paint={{ 'fill-color': '#4299E1', 'fill-opacity': 0.15 }}
+                        />
+                    </Source>
+                )}
+                {ownPosition && (
+                    <Marker longitude={ownPosition.lng} latitude={ownPosition.lat}>
+                        <PositionDot />
+                    </Marker>
+                )}
+                {otherPositions.map((position) => (
+                    <Marker
+                        key={position.id}
+                        data-testid="other-position-marker"
+                        longitude={position.lng}
+                        latitude={position.lat}
+                    >
+                        <PositionDot
+                            label={position.label}
+                            alwaysShowLabel={position.alwaysShowLabel}
+                        />
+                    </Marker>
+                ))}
                 {children}
             </Map>
             <Button

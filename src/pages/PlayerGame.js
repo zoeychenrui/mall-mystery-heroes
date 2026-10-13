@@ -30,6 +30,8 @@ import {
     fetchPlayerReferenceForRoom,
     fetchPlayersQueryByDescendPointsThenIsAliveForRoom,
     fetchTasksQueryForRoom,
+    fetchBoundaryStatusReferenceForPlayer,
+    fetchOutsideBoundaryStatusesQueryForRoom,
 } from '../components/firebase_calls/dbCalls';
 import { leaveGame } from '../components/leaveGame';
 import CreateAlert from '../components/CreateAlert';
@@ -39,6 +41,48 @@ import MessageComposer from '../components/player_messages_components/MessageCom
 import PlayerTaskListModal from '../components/task_components/PlayerTaskListModal';
 import LeaderboardModal from '../components/game_end_components/LeaderboardModal';
 import { buildLeaderboardStandings } from '../game/leaderboard';
+import { formatMessageTime } from '../utils/formatMessageTime';
+import { normalizePlayerName, resolvePlayerDisplayName } from '../game/playerNames';
+import useBoundaryLocation from '../hooks/useBoundaryLocation';
+import PlayerMapModal from '../components/map_components/PlayerMapModal';
+// require(), not a named `import` — gameBoundary.js is CommonJS
+// (module.exports) by design (see its own header comment), and a named ES
+// `import` of it is not statically analyzable the way CRA's production
+// webpack build requires, even though Jest's CommonJS-based test runner
+// never notices. Same wall BoundaryEditorModal.js and GameMap.js already
+// hit; see boundaryDraft.js's header comment for the full story.
+const {
+    deriveFreshStatus,
+    GAME_BOUNDARY_CONFIG,
+    isPositionFresh,
+} = require('../game/gameBoundary');
+
+// Plain-language text for every reason deriveFreshStatus/gameBoundary.js
+// and the reportPlayerLocation callable can actually produce for an
+// `unavailable` status, so players see an explanation instead of a raw
+// internal code. wrong_revision/wrong_uid are internal consistency
+// reasons, not anything a player can act on, so both fold into the same
+// generic "still checking" message. invalid_fix/poor_accuracy are the
+// two classifyFix reasons (src/game/gameBoundary.js) that can land here
+// via the server-stored status doc's own `reason` field.
+const UNAVAILABLE_REASON_TEXT = {
+    stale: 'No recent location reading.',
+    no_fix: 'No location reading yet.',
+    wrong_revision: 'Still checking against the updated game area.',
+    wrong_uid: 'Still checking against the updated game area.',
+    permission_denied: 'Location permission was denied.',
+    timeout: 'Could not get a location fix in time.',
+    unavailable: 'Location services are unavailable on this device.',
+    invalid_fix: 'Location services are unavailable on this device.',
+    poor_accuracy: 'Location accuracy is too low right now.',
+    clock_skew: "This device's clock looks out of sync — check it and retry.",
+};
+const DEFAULT_UNAVAILABLE_TEXT = 'Checking your location status.';
+// Reasons worth offering Retry for here, alongside the stored message —
+// the ones a fresh attempt could plausibly fix. permission_denied already
+// gets its own Retry via the permissionState === 'denied' box above, so
+// it is deliberately left out here to avoid a second, redundant button.
+const UNAVAILABLE_RETRY_REASONS = new Set(['timeout', 'unavailable']);
 
 const PlayerGame = () => {
     const { roomID } = useParams();
@@ -55,9 +99,15 @@ const PlayerGame = () => {
     // since MessageFeed (which renders them) and MessageComposer (which
     // adds them) are siblings with no other shared state.
     const [pendingMessages, setPendingMessages] = useState([]);
+    const [gameBoundary, setGameBoundary] = useState(undefined);
+    const [boundaryStatusDoc, setBoundaryStatusDoc] = useState(null);
+    const [otherOutsidePositions, setOtherOutsidePositions] = useState([]);
+    const [nowMs, setNowMs] = useState(Date.now());
+    const previousRevisionRef = useRef(undefined);
     const session = readPlayerSession();
     const playerName = session && session.roomID === roomID ? session.playerName : '';
     const { isOpen, onOpen, onClose } = useDisclosure();
+    const { isOpen: isMapOpen, onOpen: onMapOpen, onClose: onMapClose } = useDisclosure();
     const {
         isOpen: isMissionsOpen,
         onOpen: onMissionsOpen,
@@ -123,10 +173,30 @@ const PlayerGame = () => {
                 }
                 setGameStarted(snapshot.data()?.gameStarted ?? false);
                 setIsGameActive(snapshot.data()?.isGameActive ?? true);
+
+                // Side effects (toast, ref mutation) live here as plain
+                // statements, not inside setGameBoundary's updater — React
+                // can invoke a functional setState updater more than once
+                // for the same update under some scheduling paths, which
+                // would risk a duplicate toast or a double-mutated ref.
+                const nextGameBoundary = snapshot.data()?.gameBoundary;
+                const previousRevision = previousRevisionRef.current;
+                if (nextGameBoundary?.enabled && previousRevision === undefined) {
+                    createAlert('info', 'Game area is ready', '', 2500);
+                } else if (
+                    nextGameBoundary?.enabled &&
+                    previousRevision !== undefined &&
+                    nextGameBoundary.revision !== previousRevision
+                ) {
+                    createAlert('info', 'Game area updated', '', 2500);
+                }
+                previousRevisionRef.current = nextGameBoundary?.revision;
+                setGameBoundary(nextGameBoundary);
             },
             handleSubscriptionError
         );
         return () => unsubscribe();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [roomID, navigate, handleSubscriptionError]);
 
     // Fires once per mount/transition to inactive — not on every re-render,
@@ -183,6 +253,198 @@ const PlayerGame = () => {
         });
         return () => unsubscribe();
     }, [roomID, gameStarted]);
+
+    // A local ticker, so freshness re-evaluates even with no new Firestore
+    // snapshot — a stale fix must stop showing as "inside"/"outside" on its
+    // own, purely from time passing.
+    useEffect(() => {
+        const intervalId = setInterval(() => setNowMs(Date.now()), 1000);
+        return () => clearInterval(intervalId);
+    }, []);
+
+    // This player's own boundary-status doc, only once the boundary is
+    // enabled and the player's name is known. The error callback here does
+    // NOT call handleSubscriptionError — a missing or not-yet-permitted
+    // status doc (e.g. before this player's first report) is expected and
+    // routine, not a sign this session no longer belongs here.
+    useEffect(() => {
+        if (!roomID || !gameBoundary?.enabled || !playerName) {
+            setBoundaryStatusDoc(null);
+            return undefined;
+        }
+        const statusRef = fetchBoundaryStatusReferenceForPlayer(playerName, roomID);
+        const unsubscribe = onSnapshot(
+            statusRef,
+            (snapshot) => setBoundaryStatusDoc(snapshot.exists() ? snapshot.data() : null),
+            () => setBoundaryStatusDoc(null)
+        );
+        return () => unsubscribe();
+    }, [roomID, gameBoundary?.enabled, playerName]);
+
+    // Every other currently-exposed ("outside") player, for this player's
+    // own map — mounted unconditionally once the boundary is enabled, same
+    // gating and same reasoning as the own-status subscription above: it
+    // must not depend on whether the map modal happens to be open
+    // (docs/superpowers/specs/2026-10-12-live-location-visibility-design.md).
+    // The query itself is already filtered to status == 'outside'
+    // (fetchOutsideBoundaryStatusesQueryForRoom), which is what Firestore
+    // can prove safe under the widened read rule; the viewer's own id is
+    // still excluded here as a defensive belt-and-suspenders measure in
+    // case that query ever included it.
+    //
+    // Stored RAW (unfiltered by freshness) — a disconnected player's status
+    // doc can stay at 'outside' forever with no new snapshot ever arriving,
+    // so filtering once here and freezing the result in state would leave a
+    // stale dot on the map indefinitely. The freshness check instead runs at
+    // render time, below, against the existing `nowMs` ticker, so a dot
+    // disappears on its own once freshnessMs passes with no update — the
+    // same "stop showing on its own, purely from time passing" treatment
+    // deriveFreshStatus already gives this player's own status.
+    useEffect(() => {
+        if (!roomID || !gameBoundary?.enabled) {
+            setOtherOutsidePositions([]);
+            return undefined;
+        }
+        const outsideQuery = fetchOutsideBoundaryStatusesQueryForRoom(roomID);
+        const unsubscribe = onSnapshot(
+            outsideQuery,
+            (snapshot) => {
+                const next = [];
+                snapshot.docs.forEach((doc) => {
+                    if (doc.id === normalizePlayerName(playerName)) return; // never show yourself
+                    const data = doc.data();
+                    next.push({
+                        id: doc.id,
+                        lat: data.lat,
+                        lng: data.lng,
+                        lastUsableMs: data.lastUsableReceivedAt?.toMillis?.() ?? null,
+                    });
+                });
+                setOtherOutsidePositions(next);
+            },
+            () => setOtherOutsidePositions([])
+        );
+        return () => unsubscribe();
+    }, [roomID, gameBoundary?.enabled, playerName]);
+
+    // Derived at render time from the raw snapshot data above and the
+    // existing `nowMs` ticker — not stored state of its own — so a position
+    // goes stale and disappears purely from time passing, even with no new
+    // Firestore snapshot (Finding 1). Also guards against a legacy/malformed
+    // doc whose lat/lng are missing or not finite numbers.
+    const freshOtherOutsidePositions = otherOutsidePositions
+        .filter(
+            (position) =>
+                isPositionFresh(position.lastUsableMs, nowMs) &&
+                Number.isFinite(position.lat) &&
+                Number.isFinite(position.lng)
+        )
+        .map((position) => ({
+            id: position.id,
+            lat: position.lat,
+            lng: position.lng,
+            label: resolvePlayerDisplayName(position.id, players),
+            alwaysShowLabel: true,
+        }));
+
+    // Mounted always, regardless of whether the map modal is open —
+    // closing PlayerMapModal must not stop location reporting.
+    const { permissionState, ownPosition, requestPermission } = useBoundaryLocation({
+        roomID,
+        boundaryRevision: gameBoundary?.revision ?? null,
+        boundaryEnabled: gameBoundary?.enabled ?? false,
+        isGameActive,
+        // Defaults to true (not eliminated) before playerData has loaded at
+        // all — e.g. the waiting room, before gameStarted gates the player-doc
+        // subscription above — matching this hook's own prior behavior of not
+        // gating on aliveness before this change existed.
+        isAlive: playerData?.isAlive ?? true,
+    });
+
+    // Derived from the subscribed status doc, the local ticker, and this
+    // device's own identity/revision — not stored state of its own.
+    const liveBoundaryStatus = boundaryStatusDoc
+        ? deriveFreshStatus(
+              {
+                  status: boundaryStatusDoc.status,
+                  reason: boundaryStatusDoc.reason,
+                  lastUsableMs: boundaryStatusDoc.lastUsableReceivedAt?.toMillis() ?? null,
+                  boundaryRevision: boundaryStatusDoc.boundaryRevision,
+                  uid: boundaryStatusDoc.uid,
+              },
+              nowMs,
+              { currentRevision: gameBoundary?.revision, currentUid: auth.currentUser?.uid }
+          )
+        : { status: 'unavailable', reason: 'no_fix' };
+
+    // The countdown to exposure, derived each render from fields already on
+    // the player's own status doc — no new Firestore field, per the spec.
+    // `near` is the "not yet confirmed outside" status: deriveFreshStatus
+    // returns it verbatim (see above), and outsideSince is the server
+    // receipt time of the first outside fix in the current outside run
+    // (docs/data-model.md). Once confirmMinSpanMs elapses without a
+    // qualifying inside fix, the server confirms `outside` and this
+    // countdown is replaced by the exposure notice below.
+    const outsideSinceMs = boundaryStatusDoc?.outsideSince?.toMillis?.() ?? null;
+    const isApproachingExposure = liveBoundaryStatus.status === 'near' && outsideSinceMs !== null;
+    const secondsUntilExposed = isApproachingExposure
+        ? Math.max(
+              0,
+              Math.ceil((GAME_BOUNDARY_CONFIG.confirmMinSpanMs - (nowMs - outsideSinceMs)) / 1000)
+          )
+        : null;
+
+    // Spec: the "Location unavailable" explanation shows the last
+    // successful check time "if any" — null (not just an empty string)
+    // when there has never been one yet, e.g. before this player's very
+    // first report lands, so the render below can tell "no time to show"
+    // apart from "time formatted as empty". formatMessageTime already
+    // handles a null/undefined Timestamp the same way, for the same
+    // reason (a still-pending serverTimestamp()). Only computed for the
+    // unavailable status, the only branch that renders it.
+    const lastCheckTime =
+        liveBoundaryStatus.status === 'unavailable'
+            ? formatMessageTime(boundaryStatusDoc?.lastUsableReceivedAt ?? null)
+            : null;
+
+    const statusText = {
+        inside: 'In game area.',
+        near: 'You are near the edge of the game area; check the map.',
+        outside:
+            'You are outside the game area — your location is visible to everyone until you return.',
+        unavailable: null, // handled separately below — needs its own explanation/Retry
+    }[liveBoundaryStatus.status];
+
+    // deriveFreshStatus checks staleness FIRST, against lastUsableMs — so a
+    // player who has never had a usable fix in the last freshnessMs always
+    // gets reason 'stale', even when the stored status doc itself carries a
+    // more specific reason (e.g. a real permission_denied/timeout/unavailable
+    // from an error report). An error report never updates lastUsableMs (only
+    // an in-tolerance/inside/outside/near fix does), so that specific, truer
+    // reason would otherwise be masked by the generic staleness fallback.
+    // boundaryStatusDoc.reason is never itself 'stale' — nothing server-side
+    // ever writes that value — so preferring it here can't loop back on
+    // itself.
+    const unavailableReason =
+        liveBoundaryStatus.status === 'unavailable'
+            ? liveBoundaryStatus.reason === 'stale' && boundaryStatusDoc?.reason
+                ? boundaryStatusDoc.reason
+                : (liveBoundaryStatus.reason ?? 'no_fix')
+            : null;
+    const unavailableText = unavailableReason
+        ? (UNAVAILABLE_REASON_TEXT[unavailableReason] ?? DEFAULT_UNAVAILABLE_TEXT)
+        : null;
+    const showUnavailableRetry = UNAVAILABLE_RETRY_REASONS.has(unavailableReason);
+
+    // The same words whether the player is looking at the page or has the
+    // map open — PlayerMapModal gets this via its own `statusText` prop
+    // (spec: status is visible "on the player page as well as inside the
+    // map"), independent of whether the page itself is currently showing it
+    // (e.g. suppressed below while permissionState is still 'unknown').
+    const mapStatusText =
+        liveBoundaryStatus.status === 'unavailable'
+            ? `Location unavailable: ${unavailableText}`
+            : statusText;
 
     const handleLeaveClick = () => {
         onOpen();
@@ -294,6 +556,111 @@ const PlayerGame = () => {
                             <Text mb={4}>
                                 You may be revived if the host assigns you a revival mission.
                             </Text>
+                        </>
+                    )}
+                    {gameBoundary?.enabled && (playerData?.isAlive ?? true) && (
+                        <>
+                            {permissionState === 'unknown' && (
+                                <Box bg="blue.900" color="white" borderRadius="md" p={3} mb={2}>
+                                    <Text mb={2}>
+                                        Turn on location so we can check that you are inside the
+                                        game area. The moderator sees your boundary status. Other
+                                        players cannot see your location unless you leave the game
+                                        area. Keep the game open for location updates.
+                                    </Text>
+                                    <Button size="sm" onClick={requestPermission}>
+                                        Enable Location
+                                    </Button>
+                                </Box>
+                            )}
+                            {permissionState === 'denied' && (
+                                <Box bg="orange.800" color="white" borderRadius="md" p={3} mb={2}>
+                                    <Text mb={2}>
+                                        Location permission was denied. Enable it in your browser or
+                                        device settings, then retry.
+                                    </Text>
+                                    <Button size="sm" onClick={requestPermission}>
+                                        Retry
+                                    </Button>
+                                </Box>
+                            )}
+                            {permissionState === 'unavailable' && (
+                                <Box bg="orange.800" color="white" borderRadius="md" p={3} mb={2}>
+                                    <Text>{UNAVAILABLE_REASON_TEXT.unavailable}</Text>
+                                </Box>
+                            )}
+                            {isApproachingExposure && (
+                                <Box
+                                    bg="orange.700"
+                                    color="white"
+                                    borderRadius="md"
+                                    p={2}
+                                    mb={2}
+                                    textAlign="center"
+                                >
+                                    <Text fontWeight="bold">
+                                        Return to the game area — your location will be revealed to
+                                        everyone in {secondsUntilExposed}s.
+                                    </Text>
+                                </Box>
+                            )}
+                            {liveBoundaryStatus.status === 'outside' && (
+                                <Box
+                                    bg="red.900"
+                                    color="white"
+                                    borderRadius="md"
+                                    p={2}
+                                    mb={2}
+                                    textAlign="center"
+                                >
+                                    <Text fontWeight="bold">{statusText}</Text>
+                                </Box>
+                            )}
+                            {liveBoundaryStatus.status !== 'outside' &&
+                                liveBoundaryStatus.status !== 'unavailable' && (
+                                    <Text mb={2}>{statusText}</Text>
+                                )}
+                            {/* Suppressed while permissionState is still 'unknown' — the
+                                pre-permission box above already explains why there is
+                                nothing to show yet; stacking both is confusing. */}
+                            {permissionState !== 'unknown' &&
+                                liveBoundaryStatus.status === 'unavailable' && (
+                                    <Box
+                                        bg="orange.800"
+                                        color="white"
+                                        borderRadius="md"
+                                        p={3}
+                                        mb={2}
+                                    >
+                                        <Text mb={showUnavailableRetry ? 2 : 0}>
+                                            Location unavailable: {unavailableText}
+                                            {lastCheckTime &&
+                                                ` Last confirmed at ${lastCheckTime}.`}
+                                        </Text>
+                                        {showUnavailableRetry && (
+                                            <Button size="sm" onClick={requestPermission}>
+                                                Retry
+                                            </Button>
+                                        )}
+                                    </Box>
+                                )}
+                            <Button size="sm" mb={2} onClick={onMapOpen}>
+                                View Game Map
+                            </Button>
+                            <PlayerMapModal
+                                isOpen={isMapOpen}
+                                onClose={onMapClose}
+                                boundaryVertices={gameBoundary.vertices}
+                                otherPositions={freshOtherOutsidePositions}
+                                ownPosition={
+                                    ownPosition &&
+                                    nowMs - ownPosition.acquiredAtMs <=
+                                        GAME_BOUNDARY_CONFIG.freshnessMs
+                                        ? ownPosition
+                                        : null
+                                }
+                                statusText={mapStatusText}
+                            />
                         </>
                     )}
                 </>

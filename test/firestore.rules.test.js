@@ -143,19 +143,24 @@ describe('rooms/{roomId}', () => {
         await assertFails(getDocs(roomsQuery));
     });
 
+    // isGameActive used to be the example payload for these three generic
+    // tests, but it's now one of the fields the endGame Cloud Function
+    // exclusively owns (see the `game boundary` describe block below) — an
+    // ordinary field (taskIndex) keeps these three testing what they're
+    // meant to test (who may update at all), not the field exclusion.
     it('allows the host to update their own room', async () => {
         const db = testEnv.authenticatedContext(HOST_UID).firestore();
-        await assertSucceeds(updateDoc(doc(db, 'rooms', 'room-a'), { isGameActive: false }));
+        await assertSucceeds(updateDoc(doc(db, 'rooms', 'room-a'), { taskIndex: 2 }));
     });
 
     it('denies a non-host update to another room', async () => {
         const db = testEnv.authenticatedContext(OTHER_UID).firestore();
-        await assertFails(updateDoc(doc(db, 'rooms', 'room-a'), { isGameActive: false }));
+        await assertFails(updateDoc(doc(db, 'rooms', 'room-a'), { taskIndex: 2 }));
     });
 
     it('denies a joined player from updating a room they did not host', async () => {
         const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
-        await assertFails(updateDoc(doc(db, 'rooms', 'room-a'), { isGameActive: false }));
+        await assertFails(updateDoc(doc(db, 'rooms', 'room-a'), { taskIndex: 2 }));
     });
 
     it('allows a signed-in user to create a room they claim as their own', async () => {
@@ -567,7 +572,49 @@ describe('game boundary: rooms/{roomId}/boundaryStatuses and boundaryEvents, and
         await assertSucceeds(getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'bob')));
     });
 
-    it("denies a player reading another player's boundaryStatuses doc", async () => {
+    it('allows a player to read their own boundaryStatuses doc while it is NOT outside (isOwnBoundaryStatus in isolation)', async () => {
+        // The existing "allows a player to read their own boundaryStatuses
+        // doc" test above reads bob's doc while it is seeded 'outside' in
+        // this block's beforeEach — since the outside-status clause also
+        // grants that read to ANY player, that test no longer isolates the
+        // isOwnBoundaryStatus clause; it would still pass even if that
+        // clause were deleted entirely. This test flips bob's own doc to a
+        // non-outside status first, so only the own-doc clause can be the
+        // one making it succeed.
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+            await setDoc(doc(context.firestore(), 'rooms', 'room-a', 'boundaryStatuses', 'bob'), {
+                status: 'inside',
+            });
+        });
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        await assertSucceeds(getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'bob')));
+    });
+
+    it("denies a player reading another player's boundaryStatuses doc while it is inside", async () => {
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        await expectPermissionDenied(
+            getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'alice'))
+        );
+    });
+
+    it("denies a player reading another player's boundaryStatuses doc while it is near", async () => {
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+            await setDoc(doc(context.firestore(), 'rooms', 'room-a', 'boundaryStatuses', 'alice'), {
+                status: 'near',
+            });
+        });
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        await expectPermissionDenied(
+            getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'alice'))
+        );
+    });
+
+    it("denies a player reading another player's boundaryStatuses doc while it is unavailable", async () => {
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+            await setDoc(doc(context.firestore(), 'rooms', 'room-a', 'boundaryStatuses', 'alice'), {
+                status: 'unavailable',
+            });
+        });
         const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
         await expectPermissionDenied(
             getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'alice'))
@@ -575,6 +622,53 @@ describe('game boundary: rooms/{roomId}/boundaryStatuses and boundaryEvents, and
     });
 
     it('denies a player listing boundaryStatuses', async () => {
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        await expectPermissionDenied(
+            getDocs(collection(db, 'rooms', 'room-a', 'boundaryStatuses'))
+        );
+    });
+
+    it("allows a player to read ANOTHER player's boundaryStatuses doc once it reads outside", async () => {
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        // PLAYER_UID owns bob's player doc (see this block's beforeEach/seed),
+        // so reading bob's own status is the "own doc" case already covered
+        // elsewhere — this test is specifically about a DIFFERENT player
+        // (alice) whose status is NOT outside, confirming the new clause does
+        // not open her door, then flips it to outside and confirms it does.
+        await expectPermissionDenied(
+            getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'alice'))
+        );
+
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+            await setDoc(doc(context.firestore(), 'rooms', 'room-a', 'boundaryStatuses', 'alice'), {
+                status: 'outside',
+            });
+        });
+
+        await assertSucceeds(getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'alice')));
+    });
+
+    it('returns only the currently-outside players from a status-filtered list query, for a non-host player', async () => {
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        const outsideQuery = query(
+            collection(db, 'rooms', 'room-a', 'boundaryStatuses'),
+            where('status', '==', 'outside')
+        );
+        const snapshot = await assertSucceeds(getDocs(outsideQuery));
+        // bob is seeded as 'outside' in this block's beforeEach; alice is
+        // 'inside' and must not appear even though the query ran successfully.
+        expect(snapshot.docs.map((d) => d.id)).toEqual(['bob']);
+    });
+
+    it('still denies an unfiltered list of boundaryStatuses for a non-host player, even though some documents in the room are outside', async () => {
+        // The new rule clause makes SOME documents in this room readable to
+        // this player (bob's, since it's outside) but not ALL of them
+        // (alice's, which is inside) — Firestore cannot prove an unfiltered
+        // list query safe under a rule that only some candidate documents
+        // satisfy, so the whole query must still be denied, exactly as the
+        // pre-existing 'denies a player listing boundaryStatuses' test already
+        // asserts for the pre-change rule. This test exists specifically to
+        // confirm that invariant survives this rule change.
         const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
         await expectPermissionDenied(
             getDocs(collection(db, 'rooms', 'room-a', 'boundaryStatuses'))
@@ -650,6 +744,35 @@ describe('game boundary: rooms/{roomId}/boundaryStatuses and boundaryEvents, and
     it('allows a host updating an ordinary room field (taskIndex)', async () => {
         const db = testEnv.authenticatedContext(HOST_UID).firestore();
         await assertSucceeds(updateDoc(doc(db, 'rooms', 'room-a'), { taskIndex: 2 }));
+    });
+
+    // isGameActive/endedAt are now written only by the endGame Cloud
+    // Function (functions/callableFunctions/endGame.js), which also clears
+    // exposure in the same transaction — a direct client write to either
+    // field would skip that entirely, so both are excluded the same way
+    // gameBoundary is above.
+    it('denies a host updating isGameActive directly', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        await expectPermissionDenied(
+            updateDoc(doc(db, 'rooms', 'room-a'), { isGameActive: false })
+        );
+    });
+
+    it('denies a host updating endedAt directly', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        await expectPermissionDenied(
+            updateDoc(doc(db, 'rooms', 'room-a'), { endedAt: new Date() })
+        );
+    });
+
+    it('denies a host mixing an isGameActive change into an ordinary room update', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        await expectPermissionDenied(
+            updateDoc(doc(db, 'rooms', 'room-a'), {
+                taskIndex: 2,
+                isGameActive: false,
+            })
+        );
     });
 
     it('allows the host to delete their own room (delete is not restricted by the gameBoundary rule)', async () => {

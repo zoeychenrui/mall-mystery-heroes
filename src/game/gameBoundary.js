@@ -421,6 +421,17 @@ const deriveFreshStatus = (state, nowMs, current = {}) => {
     return { status: state.status, reason };
 };
 
+// Whether a stored position is recent enough to render as a live marker on
+// someone else's map — simpler than deriveFreshStatus, which also carries
+// revision/uid mismatch logic for driving the OWNER's own tracking loop.
+// This is used only to decide whether a marker showing SOMEONE ELSE's
+// position (the GM's live map, or another player's "who's exposed near
+// me" view) should render as live, dim, or be hidden.
+const isPositionFresh = (lastUsableMs, nowMs) => {
+    if (lastUsableMs === null || lastUsableMs === undefined) return false;
+    return nowMs - lastUsableMs <= GAME_BOUNDARY_CONFIG.freshnessMs;
+};
+
 // Object.assign, not `{ ...spread }`, throughout this file: object-spread
 // syntax makes Babel inject an `import` for its `_objectSpread2` runtime
 // helper, which flips webpack's view of this file to "ES module" even
@@ -446,4 +457,5 @@ module.exports = {
     initialBoundaryState,
     nextBoundaryState,
     deriveFreshStatus,
+    isPositionFresh,
 };

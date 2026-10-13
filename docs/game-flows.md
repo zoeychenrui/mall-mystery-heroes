@@ -16,6 +16,7 @@ sequenceDiagram
     participant DB as DashBoard
     participant Lobby
     participant TG as TargetGenerator
+    participant EG as endGame (Cloud Function)
     participant FS as Firestore
 
     GM->>DB: sign in
@@ -42,7 +43,10 @@ sequenceDiagram
 
     opt abandon instead of starting
         GM->>Lobby: "Abandon Room"
-        Lobby->>FS: endGame(roomID) — isGameActive: false, endedAt
+        Lobby->>EG: httpsCallable('endGame', {roomId})
+        Note over EG: one transaction: host check, isGameActive<br/>check, clearExposureForRoom (clears any<br/>exposed boundaryStatuses), then isGameActive:<br/>false, endedAt: serverTimestamp()
+        EG->>FS: transaction.update(room), transaction.update(boundaryStatuses...)
+        EG-->>Lobby: (void)
         Lobby->>DB: navigate(/dashboard)
         Note over DB: re-runs fetchActiveRoomForHost, finds none now, generates a fresh room
     end
@@ -71,10 +75,11 @@ Two things to note:
 - Before `AbandonRoomButton`, the only way to leave a Lobby-phase room was
   Start Game then End Game — `Endgamebutton.js` (the latter) only renders
   once `GameMasterView` is reached, since it lives in `HeaderExecution.js`.
-  `AbandonRoomButton` calls the exact same `endGame` write, just without
-  `Endgamebutton.js`'s player-facing "please head back"/leaderboard
-  announcements, which would be nonsensical for a room nobody has actually
-  played in yet.
+  `AbandonRoomButton` calls the exact same `endGame` Cloud Function (via
+  `src/components/endGame.js`, not a direct Firestore write — see
+  [data-model.md](./data-model.md)), just without `Endgamebutton.js`'s
+  player-facing "please head back"/leaderboard announcements, which would
+  be nonsensical for a room nobody has actually played in yet.
 
 ### The target assignment algorithm
 
@@ -556,6 +561,47 @@ reload) and, eventually, every player's device via
 boundary status yet). Disable follows the identical path through
 `disableGameBoundary`.
 
+## 8. Tracking a player inside the game area
+
+Once a boundary is published and this player's own `PlayerGame.js` picks
+it up off its existing room-doc `onSnapshot` (the same subscription flow
+7 above describes), the player sees a "Game area is ready" toast and a
+pre-permission explanation with an Enable Location button. Tapping it
+calls `useBoundaryLocation`'s `requestPermission`, which starts one
+geolocation watch for the session; each fix (or error) goes through the
+`reportPlayerLocation` callable, the same server-side evaluation Phase 1
+already documented under [Cloud Functions](./architecture.md#cloud-functions).
+The server's verdict lands back on this player's own `boundaryStatuses`
+doc, which `PlayerGame.js` subscribes to live and renders as a status
+line (In/near/outside the game area, or "Location unavailable" once the
+reading goes stale, with the last successful check time shown alongside
+it when there has been one) — independent of whether `PlayerMapModal` is open,
+which shows the boundary and the player's own position on a map at any
+time without affecting tracking either way. A later boundary revision
+restarts the watch with fresh readings and surfaces a "Game area updated"
+notice through the same room-doc subscription.
+
+## 9. Becoming visible to other players (live location visibility)
+
+A player who drifts past the boundary edge is first evaluated as `near`
+(within the edge tolerance, not yet confirmed outside); while `near` with
+an `outsideSince` already set, `PlayerGame.js` shows a countdown box
+("your location will be revealed to everyone in `N`s"), ticking down
+against `GAME_BOUNDARY_CONFIG.confirmMinSpanMs` on the same local 1-second
+ticker the status line already uses. If the player returns inside before
+that span elapses, the countdown simply disappears with the next status
+snapshot — nothing was ever exposed. If instead `reportPlayerLocation`
+confirms `outside` first (flow 8 above), the countdown box is replaced
+in-place by a notice that the player's location is now visible to
+everyone, and from that instant every other player's `PlayerMapModal` and
+the GM's `LivePlayerMapButton` map — both subscribed live, the GM to the
+whole `boundaryStatuses` subcollection, every other player to the
+`where('status', '==', 'outside')` subset of it — pick up that player's
+position as a marker. The moment the player returns inside and the status
+flips off `'outside'`, the next snapshot of that same query simply omits
+their document, and the marker disappears from every other screen
+immediately — no explicit "hide" step, just the query no longer matching.
+
 ---
 
 ## Where each flow updates the screen
@@ -563,14 +609,15 @@ boundary status yet). Disable follows the identical path through
 Because [state lives in three places](./architecture.md#state-management), each
 flow updates the UI differently:
 
-| Surface                                        | Mechanism                                                                       | Stale after reload?    |
-| ---------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------- |
-| Player list with scores and targets            | `onSnapshot`                                                                    | No — always live       |
-| Photo queue                                    | `onSnapshot`                                                                    | No — always live       |
-| Reconnect request queue (GM console)           | `onSnapshot`                                                                    | No — always live       |
-| Reconnect status (requester's own screen)      | `onSnapshot` on the single request doc                                          | No — always live       |
-| Log panel                                      | `onSnapshot` (`docs/improvements.md` item 22)                                   | No — always live       |
-| `Players (n)` header count                     | derived from the same live `onSnapshot` roster (item 13)                        | No — always live       |
-| Alive/dead arrays driving `/revive` validation | refetched via `fetchPlayersByStatusForRoom` on every command                    | No — always current    |
-| Photo undo history                             | persisted on the photo doc itself (`preKillSnapshot`), not React state (item 6) | No — survives a reload |
-| Game Area button label (Lobby/GameMasterView)  | `onSnapshot` on the room doc's `gameBoundary` field                             | No — always live       |
+| Surface                                        | Mechanism                                                                           | Stale after reload?       |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------- |
+| Player list with scores and targets            | `onSnapshot`                                                                        | No — always live          |
+| Photo queue                                    | `onSnapshot`                                                                        | No — always live          |
+| Reconnect request queue (GM console)           | `onSnapshot`                                                                        | No — always live          |
+| Reconnect status (requester's own screen)      | `onSnapshot` on the single request doc                                              | No — always live          |
+| Log panel                                      | `onSnapshot` (`docs/improvements.md` item 22)                                       | No — always live          |
+| `Players (n)` header count                     | derived from the same live `onSnapshot` roster (item 13)                            | No — always live          |
+| Alive/dead arrays driving `/revive` validation | refetched via `fetchPlayersByStatusForRoom` on every command                        | No — always current       |
+| Photo undo history                             | persisted on the photo doc itself (`preKillSnapshot`), not React state (item 6)     | No — survives a reload    |
+| Game Area button label (Lobby/GameMasterView)  | `onSnapshot` on the room doc's `gameBoundary` field                                 | No — always live          |
+| Player's own boundary status (`PlayerGame`)    | `onSnapshot` on `boundaryStatuses/{playerId}`, plus a local 1s ticker for freshness | No — resubscribes on load |
