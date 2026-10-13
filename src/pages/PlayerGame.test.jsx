@@ -1149,6 +1149,33 @@ describe('PlayerGame', () => {
         expect(lastCallArgs.isAlive).toBe(false);
     });
 
+    it('defaults isAlive to true for useBoundaryLocation before the player doc has loaded at all', () => {
+        // Before gameStarted flips true, the player-doc subscription never
+        // even mounts (see "does not subscribe to the player doc while
+        // still waiting for the host" above), so playerData stays null —
+        // this must not be mistaken for "eliminated" and block tracking
+        // in the waiting room, where a boundary can already be published.
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        const lastCallArgs =
+            useBoundaryLocation.mock.calls[useBoundaryLocation.mock.calls.length - 1][0];
+        expect(lastCallArgs.isAlive).toBe(true);
+    });
+
     it('passes the current status text through to PlayerMapModal so it is visible inside the map too', () => {
         writePlayerSession('Fluffy42317', 'Alice');
         onSnapshot.mockImplementation((ref, callback) => {

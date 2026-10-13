@@ -180,6 +180,38 @@ describe('executeKill', () => {
         expect(status.lng).toBeNull();
     });
 
+    it("also clears the target's boundary status when they were only 'near' (not yet confirmed outside) at the moment of the kill", async () => {
+        // The other half of the guard condition
+        // (`status === 'outside' || status === 'near'`) — the 'outside'
+        // test above alone would miss a regression that narrowed the
+        // check to 'outside' only.
+        await seedRoom(ROOM, [
+            { name: 'alice', targets: ['bob'] },
+            { name: 'bob', score: 5 },
+        ]);
+        await setDoc(boundaryStatusRef('bob'), {
+            status: 'near',
+            reason: null,
+            lat: 40.01,
+            lng: -75.0,
+            accuracyMeters: 5,
+            outsideSince: null,
+            lastOutsideSampleAt: null,
+            outsideSampleCount: 1,
+            outsideConfirmedAt: null,
+            boundaryRevision: 1,
+            uid: 'bob-uid',
+        });
+
+        await executeKill('bob', 'alice', ROOM);
+
+        const status = (await getDoc(boundaryStatusRef('bob'))).data();
+        expect(status.status).toBe('unavailable');
+        expect(status.reason).toBe('eliminated');
+        expect(status.lat).toBeNull();
+        expect(status.lng).toBeNull();
+    });
+
     it('does not throw when killing a target with no boundaryStatuses document at all', async () => {
         await seedRoom(ROOM, [
             { name: 'alice', targets: ['bob'] },
