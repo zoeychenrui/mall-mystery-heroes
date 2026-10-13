@@ -109,15 +109,15 @@ describe('reportPlayerLocation', () => {
         expect(await readEvents()).toEqual([]);
     });
 
-    it('the stored status doc contains no lat or lng fields', async () => {
+    it('a valid fix writes lat and lng onto the status doc', async () => {
         const alice = await newIdentity();
         await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
 
         await reportAs(alice)(fix(INSIDE, Date.now() - 5000));
 
         const status = await readStatus('alice');
-        expect(status).not.toHaveProperty('lat');
-        expect(status).not.toHaveProperty('lng');
+        expect(status.lat).toBe(INSIDE.lat);
+        expect(status.lng).toBe(INSIDE.lng);
     });
 
     it('rejects a caller whose uid matches no player with not-found and writes nothing', async () => {
@@ -397,7 +397,7 @@ describe('reportPlayerLocation', () => {
         expect(await readEvents()).toEqual([]);
     });
 
-    it('an error report writes status unavailable with the reason, carries no coordinates, and writes no outside event', async () => {
+    it('an error report with no prior fix writes status unavailable with the reason and null coordinates', async () => {
         const alice = await newIdentity();
         await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
 
@@ -411,9 +411,27 @@ describe('reportPlayerLocation', () => {
         expect(result.data).toEqual({ status: 'unavailable', reason: 'permission_denied' });
         const status = await readStatus('alice');
         expect(status).toMatchObject({ status: 'unavailable', reason: 'permission_denied' });
-        expect(status).not.toHaveProperty('lat');
-        expect(status).not.toHaveProperty('lng');
+        expect(status.lat).toBeNull();
+        expect(status.lng).toBeNull();
         expect(await readEvents()).toEqual([]);
+    });
+
+    it('an error report after a known fix carries the previous lat and lng forward unchanged', async () => {
+        const alice = await newIdentity();
+        await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], { gameBoundary: BOUNDARY });
+
+        await reportAs(alice)(fix(INSIDE, Date.now() - 10000));
+        await reportAs(alice)({
+            roomId: ROOM,
+            boundaryRevision: 1,
+            sampleMs: Date.now() - 5000,
+            error: 'timeout',
+        });
+
+        const status = await readStatus('alice');
+        expect(status).toMatchObject({ status: 'unavailable', reason: 'timeout' });
+        expect(status.lat).toBe(INSIDE.lat);
+        expect(status.lng).toBe(INSIDE.lng);
     });
 
     it('rate-limits a player to 20 reports per minute: the 21st gets resource-exhausted', async () => {

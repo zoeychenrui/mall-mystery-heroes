@@ -41,9 +41,12 @@ const stateFromDoc = (data) => ({
 
 /**
  * Accepts one location report from a player and records their boundary
- * status. Coordinates are evaluated here and never stored. A boundaryEvents
- * doc fires only on the confirmation edge: outsideConfirmedAt moving from
- * null to set, or from set to cleared by an inside status.
+ * status. lat/lng are written to the status doc on every report (carried
+ * forward unchanged on an error report) — see
+ * docs/superpowers/specs/2026-10-12-live-location-visibility-design.md for
+ * why, and firestore.rules for how read access is controlled instead. A
+ * boundaryEvents doc fires only on the confirmation edge: outsideConfirmedAt
+ * moving from null to set, or from set to cleared by an inside status.
  *
  * Fix report: { roomId, boundaryRevision, sampleMs, lat, lng, accuracyM }.
  * Error report: { roomId, boundaryRevision, sampleMs, error } with no
@@ -142,6 +145,12 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
                 : storedData.boundaryRevision !== boundary.revision
                   ? { ...initialBoundaryState(), lastSampleMs: toMs(storedData.lastSampleAt) }
                   : stateFromDoc(storedData);
+        // A revision mismatch does NOT reset these — unlike the
+        // boundary-confirmation state, a player's last known position is
+        // still their last known position regardless of which boundary
+        // revision it was measured against; only the boundary math changes.
+        const prevLat = storedData === null ? null : (storedData.lat ?? null);
+        const prevLng = storedData === null ? null : (storedData.lng ?? null);
 
         // --- decide phase ---
 
@@ -184,6 +193,8 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
 
         let next;
         let accuracyMeters = null;
+        let nextLat = prevLat;
+        let nextLng = prevLng;
         if (isErrorReport) {
             // An error report is an unusable fix: same transition, reason is the error code.
             next = nextBoundaryState(
@@ -197,6 +208,8 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
             }
             const classification = classifyFix(boundary.vertices, { lat, lng, accuracyM });
             next = nextBoundaryState(prev, classification, { sampleMs, receivedMs });
+            nextLat = lat;
+            nextLng = lng;
         }
 
         // --- write phase ---
@@ -219,6 +232,8 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
         transaction.set(statusRef, {
             status: next.status,
             reason: next.reason,
+            lat: nextLat,
+            lng: nextLng,
             boundaryRevision,
             uid: context.auth.uid,
             accuracyMeters,
