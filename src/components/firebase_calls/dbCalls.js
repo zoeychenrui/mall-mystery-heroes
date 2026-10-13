@@ -422,6 +422,25 @@ export const fetchBoundaryStatusReferenceForPlayer = (playerName, roomID) => {
     return doc(db, 'rooms', roomID, 'boundaryStatuses', normalizePlayerName(playerName));
 };
 
+// Every boundary status in the room, unfiltered — only the host's read
+// grant makes this succeed (firestore.rules); a non-host player's
+// equivalent call is denied outright, by design, since Firestore cannot
+// prove an unfiltered query safe under a rule only some documents satisfy
+// (docs/superpowers/specs/2026-10-12-live-location-visibility-design.md).
+export const fetchBoundaryStatusesQueryForRoom = (roomID) => {
+    return collection(db, 'rooms', roomID, 'boundaryStatuses');
+};
+
+// Only the currently-outside statuses — the one query shape Firestore can
+// prove safe for a non-host player under the widened boundaryStatuses read
+// rule, since the rule's own condition matches this exact filter.
+export const fetchOutsideBoundaryStatusesQueryForRoom = (roomID) => {
+    return query(
+        collection(db, 'rooms', roomID, 'boundaryStatuses'),
+        where('status', '==', 'outside')
+    );
+};
+
 // A reference to a specific reconnect request, for onSnapshot — lets
 // ReconnectPending.js watch its own request's status live
 // (docs/superpowers/specs/2026-08-30-player-reconnect-design.md).
