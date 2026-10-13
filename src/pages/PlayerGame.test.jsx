@@ -1301,14 +1301,34 @@ describe('PlayerGame', () => {
     it("shows another player's position on the map once their status reads outside, excluding the viewer's own id", () => {
         writePlayerSession('Fluffy42317', 'Alice');
         const lastUsableMs = Date.now();
+        // gameStarted: true and a seeded roster (doc.id 'bob' is the
+        // normalized key; the roster's real-cased 'Bob' is what
+        // resolvePlayerDisplayName should resolve to) — needed so the
+        // label assertion below can actually distinguish the resolved
+        // display name from the raw normalized id.
+        fetchPlayersQueryByDescendPointsThenIsAliveForRoom.mockReturnValue('players-query');
         onSnapshot.mockImplementation((ref, callback) => {
             if (ref === 'room-ref') {
                 callback({
                     exists: () => true,
                     data: () => ({
-                        gameStarted: false,
+                        gameStarted: true,
                         gameBoundary: { enabled: true, revision: 1, vertices: [] },
                     }),
+                });
+            } else if (ref === 'players-query') {
+                callback({
+                    docs: [
+                        {
+                            data: () => ({
+                                name: 'Bob',
+                                score: 0,
+                                targets: [],
+                                openSeason: false,
+                                isAlive: true,
+                            }),
+                        },
+                    ],
                 });
             } else if (ref === 'outside-statuses-query') {
                 callback({
@@ -1344,7 +1364,7 @@ describe('PlayerGame', () => {
         fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
 
         expect(mockLastPlayerMapModalProps.otherPositions).toEqual([
-            { id: 'bob', lat: 11, lng: 21 },
+            { id: 'bob', lat: 11, lng: 21, label: 'Bob', alwaysShowLabel: true },
         ]);
     });
 
@@ -1556,7 +1576,7 @@ describe('PlayerGame', () => {
             fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
 
             expect(mockLastPlayerMapModalProps.otherPositions).toEqual([
-                { id: 'bob', lat: 11, lng: 21 },
+                { id: 'bob', lat: 11, lng: 21, label: 'bob', alwaysShowLabel: true },
             ]);
 
             act(() => {
@@ -1641,7 +1661,7 @@ describe('PlayerGame', () => {
         fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
 
         expect(mockLastPlayerMapModalProps.otherPositions).toEqual([
-            { id: 'bob', lat: 11, lng: 21 },
+            { id: 'bob', lat: 11, lng: 21, label: 'bob', alwaysShowLabel: true },
         ]);
 
         act(() => {

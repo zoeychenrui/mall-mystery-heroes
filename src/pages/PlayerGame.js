@@ -42,7 +42,7 @@ import PlayerTaskListModal from '../components/task_components/PlayerTaskListMod
 import LeaderboardModal from '../components/game_end_components/LeaderboardModal';
 import { buildLeaderboardStandings } from '../game/leaderboard';
 import { formatMessageTime } from '../utils/formatMessageTime';
-import { normalizePlayerName } from '../game/playerNames';
+import { normalizePlayerName, resolvePlayerDisplayName } from '../game/playerNames';
 import useBoundaryLocation from '../hooks/useBoundaryLocation';
 import PlayerMapModal from '../components/map_components/PlayerMapModal';
 // require(), not a named `import` — gameBoundary.js is CommonJS
@@ -339,7 +339,13 @@ const PlayerGame = () => {
                 Number.isFinite(position.lat) &&
                 Number.isFinite(position.lng)
         )
-        .map((position) => ({ id: position.id, lat: position.lat, lng: position.lng }));
+        .map((position) => ({
+            id: position.id,
+            lat: position.lat,
+            lng: position.lng,
+            label: resolvePlayerDisplayName(position.id, players),
+            alwaysShowLabel: true,
+        }));
 
     // Mounted always, regardless of whether the map modal is open —
     // closing PlayerMapModal must not stop location reporting.

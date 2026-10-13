@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Box, Button, Text } from '@chakra-ui/react';
+import { Box, Button, Text, Tooltip } from '@chakra-ui/react';
 import { Map, Source, Layer, Marker } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 // require(), not a named import — gameBoundary.js is CommonJS by design
@@ -35,19 +35,52 @@ const STANDARD_STYLE = 'mapbox://styles/mapbox/streets-v11';
 const FALLBACK_VIEW_STATE = { longitude: 0, latitude: 20, zoom: 1.5 };
 
 // The one visual for a player's position dot, shared by the own-position
-// marker and the other-players' markers so they cannot drift apart.
-// `title` is optional: `undefined` omits the attribute entirely (an empty
-// string would still render a title attribute).
-const PositionDot = ({ title }) => (
-    <Box
-        title={title}
-        w="14px"
-        h="14px"
-        borderRadius="full"
-        bg="#4299E1"
-        border="2px solid white"
-    />
+// marker and every other-players' marker so they cannot drift apart.
+// `label` with no `alwaysShowLabel` shows on hover via a real rendered
+// Tooltip (replacing the old native `title` attribute, which cannot be
+// sped up or resized) — a short openDelay and a larger font, per the
+// moderator's own request. `label` WITH `alwaysShowLabel` skips the
+// tooltip entirely and renders the name permanently next to the dot,
+// used only by a player's own view of other currently-exposed players
+// (the spec's "few players are ever exposed at once" reasoning — no
+// hover needed there).
+const Dot = () => (
+    <Box w="14px" h="14px" borderRadius="full" bg="#4299E1" border="2px solid white" />
 );
+
+const PositionDot = ({ label, alwaysShowLabel }) => {
+    if (!label) return <Dot />;
+    if (alwaysShowLabel) {
+        return (
+            <Box position="relative">
+                <Dot />
+                <Text
+                    data-testid="always-visible-label"
+                    position="absolute"
+                    top="-20px"
+                    left="50%"
+                    transform="translateX(-50%)"
+                    whiteSpace="nowrap"
+                    fontSize="sm"
+                    fontWeight="bold"
+                    color="white"
+                    bg="blackAlpha.700"
+                    px="4px"
+                    borderRadius="sm"
+                >
+                    {label}
+                </Text>
+            </Box>
+        );
+    }
+    return (
+        <Tooltip label={label} openDelay={150} fontSize="md" hasArrow>
+            <Box>
+                <Dot />
+            </Box>
+        </Tooltip>
+    );
+};
 
 const toGeoJson = (vertices) => ({
     type: 'Feature',
@@ -258,7 +291,10 @@ const GameMap = ({
                         longitude={position.lng}
                         latitude={position.lat}
                     >
-                        <PositionDot title={position.label || undefined} />
+                        <PositionDot
+                            label={position.label}
+                            alwaysShowLabel={position.alwaysShowLabel}
+                        />
                     </Marker>
                 ))}
                 {children}

@@ -282,15 +282,33 @@ describe("GameMap — other players' positions", () => {
         expect(markers[1]).toHaveAttribute('data-lat', '30');
     });
 
-    it("shows a player's name on hover when a label is given, and no title attribute when it is not", () => {
+    it('shows a hover tooltip (not a native title attribute) for a position with a label and no alwaysShowLabel', () => {
+        renderMap({
+            otherPositions: [{ id: 'alice', lat: 10, lng: 20, label: 'Alice' }],
+        });
+        const marker = screen.getByTestId('other-position-marker');
+        // No native title attribute at all — the tooltip is a separate
+        // rendered element now, not an HTML attribute. Queried via
+        // Testing Library's own getByTitle/queryByTitle (not direct DOM
+        // access) to satisfy this repo's testing-library/no-node-access
+        // lint rule, same as the within(...).queryByTitle usage this
+        // file's own now-superseded hover test used to rely on.
+        expect(within(marker).queryByTitle(/./)).not.toBeInTheDocument();
+    });
+
+    it('always renders a visible label (no hover needed) when alwaysShowLabel is true', () => {
         renderMap({
             otherPositions: [
-                { id: 'alice', lat: 10, lng: 20, label: 'Alice' },
-                { id: 'bob', lat: 30, lng: 40 },
+                { id: 'alice', lat: 10, lng: 20, label: 'Alice', alwaysShowLabel: true },
             ],
         });
-        const markers = screen.getAllByTestId('other-position-marker');
-        expect(within(markers[0]).getByTitle('Alice')).toBeInTheDocument();
-        expect(within(markers[1]).queryByTitle(/.*/)).not.toBeInTheDocument();
+        expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+
+    it('does not render a visible label at all for a position with no label', () => {
+        renderMap({ otherPositions: [{ id: 'alice', lat: 10, lng: 20 }] });
+        expect(
+            screen.queryByText(/./, { selector: '[data-testid="always-visible-label"]' })
+        ).not.toBeInTheDocument();
     });
 });
