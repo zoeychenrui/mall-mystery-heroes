@@ -17,7 +17,7 @@ The GM now wants two things that reverse those decisions:
    continuously updating, lasting exactly as long as they stay outside. The
    player being exposed gets a personal countdown warning first, giving them
    a chance to get back inside before anyone (including the GM, who already
-   sees everyone — this part only changes what *other players* see) can see
+   sees everyone — this part only changes what _other players_ see) can see
    where they are.
 
 ## Decisions
@@ -32,7 +32,7 @@ implementation plan:
   one.** `GAME_BOUNDARY_CONFIG.confirmMinSpanMs` (20 seconds) is the window
   the server already waits before confirming "outside" at all — built
   originally so GPS noise near the edge doesn't flicker the GM's status
-  display. The exposure countdown *is* that same window, visualized. No new
+  display. The exposure countdown _is_ that same window, visualized. No new
   timer, no new constant.
 - **Only the player who is about to be exposed sees the countdown.** Nobody
   else gets advance notice; other players (and the GM) simply see the dot
@@ -55,14 +55,14 @@ deliberately never stores them: `lat`/`lng` arrive in the callable's
 payload, get evaluated against the boundary polygon, and are discarded.
 Nothing in Firestore has ever held a raw coordinate for this feature.
 
-For the GM to see *every* player's location at *all times* — not just while
+For the GM to see _every_ player's location at _all times_ — not just while
 they're outside — that can no longer hold. The server must now write
 `lat`/`lng` to Firestore on every report, for every player, continuously,
 for the entire time they're in the game. **Visibility is controlled by who
-can *read* that field, not by whether it exists.** The GM could already read
+can _read_ that field, not by whether it exists.** The GM could already read
 every player's status document in full (see Architecture); this change adds
 coordinates to what's in it. A player's document also becomes readable by
-*other* players, but only for the span of time their own status reads
+_other_ players, but only for the span of time their own status reads
 confirmed-outside.
 
 This is the one real, structural reversal of the original design's privacy
@@ -93,11 +93,11 @@ returns the documents that individually satisfy the rule. That means:
 No other schema shape was seriously considered:
 
 - A separate "live locations" collection, written only while a player is
-  outside, would still need the *same* always-on write for the GM's benefit
+  outside, would still need the _same_ always-on write for the GM's benefit
   — it would just duplicate data instead of reusing one document.
 - Storing position on the existing `players/{playerId}` document was
-  rejected outright: that document's read rule already grants *any* player
-  in the room read access to *any other* player's document, with no
+  rejected outright: that document's read rule already grants _any_ player
+  in the room read access to _any other_ player's document, with no
   status-gating possible without weakening a rule used for several other
   unrelated features. It would expose everyone's location to everyone,
   always — the opposite of what was asked for.
@@ -108,21 +108,21 @@ No other schema shape was seriously considered:
 fields and one widened read rule. Everything else about this document is
 unchanged.
 
-| Field | Type | Notes |
-| --- | --- | --- |
+| Field | Type             | Notes                                                                                                                                                                                                                                                                                                                                |
+| ----- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `lat` | `number \| null` | The reporting device's last-written latitude. Written on every fix report. On an error report (no fresh coordinates available), the previous value is carried forward rather than cleared, so a dot does not simply vanish — staleness is signaled by `lastUsableReceivedAt`, already on this document, not by nulling the position. |
-| `lng` | `number \| null` | Same as `lat`. |
+| `lng` | `number \| null` | Same as `lat`.                                                                                                                                                                                                                                                                                                                       |
 
 `accuracyMeters` (already present on this document) continues to be written
 the same way and is reused as-is for the GM/other-player map markers'
 accuracy circle, exactly like `GameMap.js`'s existing own-position circle.
 
 **Updated privacy statement for this document** (replaces "No coordinates
-are stored..."): *Coordinates are stored on this document and read access
+are stored..."): _Coordinates are stored on this document and read access
 is role- and status-gated: the host can always read every player's
 position; a player can always read their own; any other player can read a
 given player's position only while that player's status reads
-`'outside'`.*
+`'outside'`._
 
 `firestore.rules`, `boundaryStatuses` match block — current:
 
@@ -202,7 +202,7 @@ helper.
 3. The GM's live map, subscribed to the whole subcollection, re-renders
    that player's marker on every snapshot — always, by virtue of the
    existing host-read grant.
-4. For every *other* player: nothing changes while status is `inside` or
+4. For every _other_ player: nothing changes while status is `inside` or
    `near` — the widened rule denies them read access, so their `outside`-
    filtered query simply never returns this player's document.
 5. The moment status is confirmed `outside` (the existing 20s/30s
@@ -238,7 +238,7 @@ helper.
   existing test assumed coordinates are never present on a status object
   passed through this module.
 - `firestore.test.js`-equivalent rules tests (this repo's `npm run
-  test:rules` suite) — new cases: a non-host, non-self player denied while
+test:rules` suite) — new cases: a non-host, non-self player denied while
   another player's status is `inside`/`near`/`unavailable`, allowed once
   it's `outside`; a host allowed regardless; a player always allowed to
   read their own regardless of status (unchanged, but worth a regression
@@ -262,7 +262,7 @@ helper.
   mechanic exactly.
 - A lingering "last seen outside" marker after a player returns inside —
   rejected; exposure ends immediately.
-- Hover-to-reveal names on markers a *player* (not the GM) sees for other
+- Hover-to-reveal names on markers a _player_ (not the GM) sees for other
   exposed players — not requested; only the GM's view gets this.
 - Any moderator roster-badge work (`PlayersList.js`) remains the
   still-separate, still-deferred plan noted by both prior phases.

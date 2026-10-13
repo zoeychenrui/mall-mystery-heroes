@@ -40,7 +40,7 @@
 
 - Produces: `isPositionFresh(lastUsableMs, nowMs)` — exported from `module.exports`, same file/module as `deriveFreshStatus`/`GAME_BOUNDARY_CONFIG`.
 
-This is a simpler, standalone check than `deriveFreshStatus`: it has no concept of revision or uid mismatch, because it is used to decide whether to render *someone else's* marker as live, not to drive that person's own tracking loop.
+This is a simpler, standalone check than `deriveFreshStatus`: it has no concept of revision or uid mismatch, because it is used to decide whether to render _someone else's_ marker as live, not to drive that person's own tracking loop.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -140,7 +140,7 @@ it('a valid fix writes lat and lng onto the status doc', async () => {
 });
 ```
 
-Second, find and **replace** the existing test named `'an error report writes status unavailable with the reason, carries no coordinates, and writes no outside event'` (its "carries no coordinates" assertion is also reversed — a *first-ever* report that happens to be an error report has nothing to carry forward, so it writes `null`, not an absent field):
+Second, find and **replace** the existing test named `'an error report writes status unavailable with the reason, carries no coordinates, and writes no outside event'` (its "carries no coordinates" assertion is also reversed — a _first-ever_ report that happens to be an error report has nothing to carry forward, so it writes `null`, not an absent field):
 
 ```javascript
 it('an error report with no prior fix writes status unavailable with the reason and null coordinates', async () => {
@@ -209,11 +209,7 @@ In the fix-report branch (the `else` of `if (isErrorReport)`, where `classifyFix
 let nextLat = prevLat;
 let nextLng = prevLng;
 if (isErrorReport) {
-    next = nextBoundaryState(
-        prev,
-        { kind: 'unusable', reason: error },
-        { sampleMs, receivedMs }
-    );
+    next = nextBoundaryState(prev, { kind: 'unusable', reason: error }, { sampleMs, receivedMs });
 } else {
     if (Number.isFinite(accuracyM)) {
         accuracyMeters = accuracyM;
@@ -402,7 +398,7 @@ it('renders one marker per entry in otherPositions, at the right coordinates', (
     expect(markers[1]).toHaveAttribute('data-lat', '30');
 });
 
-it('shows a player\'s name on hover when a label is given, and no title attribute when it is not', () => {
+it("shows a player's name on hover when a label is given, and no title attribute when it is not", () => {
     renderMap({
         otherPositions: [
             { id: 'alice', lat: 10, lng: 20, label: 'Alice' },
@@ -450,23 +446,25 @@ const GameMap = ({
 After the existing own-position `<Marker>` block inside the `<Map>` tree, add:
 
 ```jsx
-{otherPositions.map((position) => (
-    <Marker
-        key={position.id}
-        data-testid="other-position-marker"
-        longitude={position.lng}
-        latitude={position.lat}
-    >
-        <Box
-            title={position.label || undefined}
-            w="14px"
-            h="14px"
-            borderRadius="full"
-            bg="#4299E1"
-            border="2px solid white"
-        />
-    </Marker>
-))}
+{
+    otherPositions.map((position) => (
+        <Marker
+            key={position.id}
+            data-testid="other-position-marker"
+            longitude={position.lng}
+            latitude={position.lat}
+        >
+            <Box
+                title={position.label || undefined}
+                w="14px"
+                h="14px"
+                borderRadius="full"
+                bg="#4299E1"
+                border="2px solid white"
+            />
+        </Marker>
+    ));
+}
 ```
 
 (`title={position.label || undefined}` rather than `title={position.label}` — an explicit `title=""` on a DOM element is still a present `title` attribute with an empty string, which the test's `not.toBeInTheDocument()` check for "no title at all" would not catch; `undefined` genuinely omits the attribute.)
@@ -682,10 +680,7 @@ describe('LivePlayerMapButton', () => {
         act(() => {
             snapshotCallback(
                 makeSnapshot([
-                    [
-                        'alice',
-                        { lat: 10, lng: 20, lastUsableReceivedAt: { toMillis: () => NOW } },
-                    ],
+                    ['alice', { lat: 10, lng: 20, lastUsableReceivedAt: { toMillis: () => NOW } }],
                 ])
             );
         });
@@ -710,7 +705,15 @@ Create `src/components/map_components/LivePlayerMapButton.js`:
 
 ```jsx
 import React, { useEffect, useState } from 'react';
-import { Button, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay } from '@chakra-ui/react';
+import {
+    Button,
+    Modal,
+    ModalBody,
+    ModalCloseButton,
+    ModalContent,
+    ModalHeader,
+    ModalOverlay,
+} from '@chakra-ui/react';
 import { onSnapshot } from 'firebase/firestore';
 import GameMap from './GameMap';
 import { fetchBoundaryStatusesQueryForRoom } from '../firebase_calls/dbCalls';
@@ -755,10 +758,19 @@ const LivePlayerMapButton = ({ roomID, players, boundaryVertices = null }) => {
 
     return (
         <>
-            <Button colorScheme="teal" variant="outline" borderRadius="3xl" onClick={() => setIsOpen(true)}>
+            <Button
+                colorScheme="teal"
+                variant="outline"
+                borderRadius="3xl"
+                onClick={() => setIsOpen(true)}
+            >
                 Live Player Map
             </Button>
-            <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} size={{ base: 'full', md: '6xl' }}>
+            <Modal
+                isOpen={isOpen}
+                onClose={() => setIsOpen(false)}
+                size={{ base: 'full', md: '6xl' }}
+            >
                 <ModalOverlay />
                 <ModalContent bg="#202030" h={{ base: '100%', md: '85vh' }}>
                     <ModalHeader color="#ffffff">Live Player Map</ModalHeader>
@@ -893,7 +905,7 @@ Expected: all pass.
 Add to `src/pages/PlayerGame.test.jsx`. Extend this file's existing `jest.mock('../components/firebase_calls/dbCalls', ...)` factory with `fetchOutsideBoundaryStatusesQueryForRoom: jest.fn(() => 'outside-statuses-query')`, matching how `fetchBoundaryStatusReferenceForPlayer` is already mocked there. Extend this file's existing room-snapshot/status-doc mocking helpers (read them fresh — do not assume their exact shape) to also support a second live `onSnapshot` subscription (the new outside-players query) the same way the existing `boundaryStatuses` own-doc subscription is already mocked, since this file already has at least two concurrent `onSnapshot` mocks to juggle.
 
 ```javascript
-it('shows another player\'s position on the map once their status reads outside, excluding the viewer\'s own id', () => {
+it("shows another player's position on the map once their status reads outside, excluding the viewer's own id", () => {
     // Seed: gameBoundary enabled/revision 1; the room's player list includes
     // 'bob'; the new outside-statuses query snapshot includes bob's doc
     // with status 'outside', lat/lng, and a recent lastUsableReceivedAt.
@@ -904,9 +916,7 @@ it('shows another player\'s position on the map once their status reads outside,
     // including the viewer's own now-outside doc).
     mountPlayerGame();
     fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
-    expect(mockLastPlayerMapModalProps.otherPositions).toEqual([
-        { id: 'bob', lat: 11, lng: 21 },
-    ]);
+    expect(mockLastPlayerMapModalProps.otherPositions).toEqual([{ id: 'bob', lat: 11, lng: 21 }]);
 });
 
 it('excludes a stale outside position from the map', () => {
@@ -953,7 +963,7 @@ it('closing the map modal does not stop the outside-players subscription from up
     // was set up once, at PlayerGame's own mount, not tied to the modal.
 });
 
-it('removes a player\'s dot once their status is no longer outside, on the very next snapshot', () => {
+it("removes a player's dot once their status is no longer outside, on the very next snapshot", () => {
     // Mount with bob present and outside (same seed as the first test in
     // this block), confirm his dot is in otherPositions, then simulate a
     // LATER snapshot of the outside-statuses query that no longer includes
@@ -1049,22 +1059,26 @@ const secondsUntilExposed = isApproachingExposure
 Render, alongside the existing permission/status boxes inside the `{gameBoundary?.enabled && (...)}` block:
 
 ```jsx
-{isApproachingExposure && (
-    <Box bg="orange.700" color="white" borderRadius="md" p={2} mb={2} textAlign="center">
-        <Text fontWeight="bold">
-            Return to the game area — your location will be revealed to everyone in{' '}
-            {secondsUntilExposed}s.
-        </Text>
-    </Box>
-)}
-{liveBoundaryStatus.status === 'outside' && (
-    <Box bg="red.900" color="white" borderRadius="md" p={2} mb={2} textAlign="center">
-        <Text fontWeight="bold">
-            You are outside the game area — your location is visible to everyone until you
-            return.
-        </Text>
-    </Box>
-)}
+{
+    isApproachingExposure && (
+        <Box bg="orange.700" color="white" borderRadius="md" p={2} mb={2} textAlign="center">
+            <Text fontWeight="bold">
+                Return to the game area — your location will be revealed to everyone in{' '}
+                {secondsUntilExposed}s.
+            </Text>
+        </Box>
+    );
+}
+{
+    liveBoundaryStatus.status === 'outside' && (
+        <Box bg="red.900" color="white" borderRadius="md" p={2} mb={2} textAlign="center">
+            <Text fontWeight="bold">
+                You are outside the game area — your location is visible to everyone until you
+                return.
+            </Text>
+        </Box>
+    );
+}
 ```
 
 (This second box replaces the existing bare `outside` status box from Phase 3's wiring — read that existing block first, since this is a copy change to an already-shipped `{liveBoundaryStatus.status === 'outside' && (...)}` branch, not a new, separate conditional alongside it.)
