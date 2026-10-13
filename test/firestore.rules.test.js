@@ -143,19 +143,24 @@ describe('rooms/{roomId}', () => {
         await assertFails(getDocs(roomsQuery));
     });
 
+    // isGameActive used to be the example payload for these three generic
+    // tests, but it's now one of the fields the endGame Cloud Function
+    // exclusively owns (see the `game boundary` describe block below) — an
+    // ordinary field (taskIndex) keeps these three testing what they're
+    // meant to test (who may update at all), not the field exclusion.
     it('allows the host to update their own room', async () => {
         const db = testEnv.authenticatedContext(HOST_UID).firestore();
-        await assertSucceeds(updateDoc(doc(db, 'rooms', 'room-a'), { isGameActive: false }));
+        await assertSucceeds(updateDoc(doc(db, 'rooms', 'room-a'), { taskIndex: 2 }));
     });
 
     it('denies a non-host update to another room', async () => {
         const db = testEnv.authenticatedContext(OTHER_UID).firestore();
-        await assertFails(updateDoc(doc(db, 'rooms', 'room-a'), { isGameActive: false }));
+        await assertFails(updateDoc(doc(db, 'rooms', 'room-a'), { taskIndex: 2 }));
     });
 
     it('denies a joined player from updating a room they did not host', async () => {
         const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
-        await assertFails(updateDoc(doc(db, 'rooms', 'room-a'), { isGameActive: false }));
+        await assertFails(updateDoc(doc(db, 'rooms', 'room-a'), { taskIndex: 2 }));
     });
 
     it('allows a signed-in user to create a room they claim as their own', async () => {
@@ -739,6 +744,35 @@ describe('game boundary: rooms/{roomId}/boundaryStatuses and boundaryEvents, and
     it('allows a host updating an ordinary room field (taskIndex)', async () => {
         const db = testEnv.authenticatedContext(HOST_UID).firestore();
         await assertSucceeds(updateDoc(doc(db, 'rooms', 'room-a'), { taskIndex: 2 }));
+    });
+
+    // isGameActive/endedAt are now written only by the endGame Cloud
+    // Function (functions/callableFunctions/endGame.js), which also clears
+    // exposure in the same transaction — a direct client write to either
+    // field would skip that entirely, so both are excluded the same way
+    // gameBoundary is above.
+    it('denies a host updating isGameActive directly', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        await expectPermissionDenied(
+            updateDoc(doc(db, 'rooms', 'room-a'), { isGameActive: false })
+        );
+    });
+
+    it('denies a host updating endedAt directly', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        await expectPermissionDenied(
+            updateDoc(doc(db, 'rooms', 'room-a'), { endedAt: new Date() })
+        );
+    });
+
+    it('denies a host mixing an isGameActive change into an ordinary room update', async () => {
+        const db = testEnv.authenticatedContext(HOST_UID).firestore();
+        await expectPermissionDenied(
+            updateDoc(doc(db, 'rooms', 'room-a'), {
+                taskIndex: 2,
+                isGameActive: false,
+            })
+        );
     });
 
     it('allows the host to delete their own room (delete is not restricted by the gameBoundary rule)', async () => {

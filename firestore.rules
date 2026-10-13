@@ -98,8 +98,12 @@ service cloud.firestore {
       // Functions (Admin SDK, bypasses these rules), so the client may not
       // change it. Split from delete on purpose: the old single clause
       // granted both, and delete must stay host-only with no field restriction.
+      // isGameActive/endedAt are likewise written only by the endGame Cloud
+      // Function now (functions/callableFunctions/endGame.js) — it also
+      // clears exposure in the same transaction, which a direct client write
+      // to either field could never do, so neither may be changed here.
       allow update: if isHostOfExistingRoom(roomId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gameBoundary']);
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['gameBoundary', 'isGameActive', 'endedAt']);
       allow delete: if isHostOfExistingRoom(roomId);
 
       match /players/{playerId} {

@@ -16,6 +16,7 @@ sequenceDiagram
     participant DB as DashBoard
     participant Lobby
     participant TG as TargetGenerator
+    participant EG as endGame (Cloud Function)
     participant FS as Firestore
 
     GM->>DB: sign in
@@ -42,7 +43,10 @@ sequenceDiagram
 
     opt abandon instead of starting
         GM->>Lobby: "Abandon Room"
-        Lobby->>FS: endGame(roomID) — isGameActive: false, endedAt
+        Lobby->>EG: httpsCallable('endGame', {roomId})
+        Note over EG: one transaction: host check, isGameActive<br/>check, clearExposureForRoom (clears any<br/>exposed boundaryStatuses), then isGameActive:<br/>false, endedAt: serverTimestamp()
+        EG->>FS: transaction.update(room), transaction.update(boundaryStatuses...)
+        EG-->>Lobby: (void)
         Lobby->>DB: navigate(/dashboard)
         Note over DB: re-runs fetchActiveRoomForHost, finds none now, generates a fresh room
     end
@@ -71,10 +75,11 @@ Two things to note:
 - Before `AbandonRoomButton`, the only way to leave a Lobby-phase room was
   Start Game then End Game — `Endgamebutton.js` (the latter) only renders
   once `GameMasterView` is reached, since it lives in `HeaderExecution.js`.
-  `AbandonRoomButton` calls the exact same `endGame` write, just without
-  `Endgamebutton.js`'s player-facing "please head back"/leaderboard
-  announcements, which would be nonsensical for a room nobody has actually
-  played in yet.
+  `AbandonRoomButton` calls the exact same `endGame` Cloud Function (via
+  `src/components/endGame.js`, not a direct Firestore write — see
+  [data-model.md](./data-model.md)), just without `Endgamebutton.js`'s
+  player-facing "please head back"/leaderboard announcements, which would
+  be nonsensical for a room nobody has actually played in yet.
 
 ### The target assignment algorithm
 

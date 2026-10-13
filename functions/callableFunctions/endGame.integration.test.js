@@ -4,7 +4,8 @@
  * a real signed-in identity and asserts on the room doc and boundaryStatuses
  * that actually landed in Firestore, not only on whether the call threw.
  */
-const { httpsCallable } = require('firebase/functions');
+const { initializeApp } = require('firebase/app');
+const { connectFunctionsEmulator, getFunctions, httpsCallable } = require('firebase/functions');
 const { doc, getDoc, setDoc, terminate, Timestamp } = require('firebase/firestore');
 const { db, functions } = require('../../src/utils/firebase');
 const {
@@ -110,5 +111,25 @@ describe('endGame', () => {
         await expect(endGame()({ roomId: 'no-such-room' })).rejects.toMatchObject({
             code: 'functions/not-found',
         });
+    });
+
+    it('rejects a caller with no auth token as unauthenticated, and writes nothing', async () => {
+        await seedRoom(ROOM, [{ name: 'bob' }]);
+        const before = await readRoom();
+        // A fresh Functions instance that never signs in: the request carries
+        // no auth token, so context.auth is undefined on the server.
+        const anonymousApp = initializeApp(
+            { projectId: 'demo-mall-mystery-heroes', apiKey: 'emulator-key' },
+            `unauthenticated-${Date.now()}-${Math.random()}`
+        );
+        const anonymousFunctions = getFunctions(anonymousApp);
+        connectFunctionsEmulator(anonymousFunctions, 'localhost', 5001);
+        const call = httpsCallable(anonymousFunctions, 'endGame');
+
+        await expect(call({ roomId: ROOM })).rejects.toMatchObject({
+            code: 'functions/unauthenticated',
+        });
+
+        expect(await readRoom()).toEqual(before);
     });
 });
