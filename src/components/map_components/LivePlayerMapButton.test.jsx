@@ -17,9 +17,11 @@ jest.mock('./GameMap', () => (props) => {
 });
 
 let snapshotCallback;
+let snapshotErrorCallback;
 jest.mock('firebase/firestore', () => ({
-    onSnapshot: jest.fn((ref, callback) => {
+    onSnapshot: jest.fn((ref, callback, errorCallback) => {
         snapshotCallback = callback;
+        snapshotErrorCallback = errorCallback;
         return jest.fn();
     }),
 }));
@@ -49,6 +51,7 @@ beforeEach(() => {
     jest.useFakeTimers().setSystemTime(NOW);
     lastGameMapProps = undefined;
     snapshotCallback = undefined;
+    snapshotErrorCallback = undefined;
 });
 
 afterEach(() => jest.useRealTimers());
@@ -112,6 +115,94 @@ describe('LivePlayerMapButton', () => {
 
         act(() => {
             snapshotCallback(makeSnapshot([['alice', { lat: 10, lng: 20 }]]));
+        });
+
+        expect(lastGameMapProps.otherPositions).toEqual([]);
+    });
+
+    it('removes a position once it goes stale from time passing alone, with no new snapshot delivered', () => {
+        // Finding 1: a disconnected player's status doc can sit fresh
+        // forever with no new snapshot ever arriving. The fix stores the
+        // raw doc data and re-derives freshness at render time against a
+        // local ticker, so the position must disappear on its own once
+        // GAME_BOUNDARY_CONFIG.freshnessMs passes — without the mocked
+        // onSnapshot callback ever firing again.
+        renderButton();
+        fireEvent.click(screen.getByRole('button', { name: 'Live Player Map' }));
+
+        act(() => {
+            snapshotCallback(
+                makeSnapshot([
+                    [
+                        'alice',
+                        {
+                            lat: 10,
+                            lng: 20,
+                            lastUsableReceivedAt: { toMillis: () => NOW },
+                        },
+                    ],
+                ])
+            );
+        });
+
+        expect(lastGameMapProps.otherPositions).toEqual([
+            { id: 'alice', lat: 10, lng: 20, label: 'Alice' },
+        ]);
+
+        act(() => {
+            jest.advanceTimersByTime(31000);
+        });
+
+        expect(lastGameMapProps.otherPositions).toEqual([]);
+    });
+
+    it('excludes a position whose lat/lng are not finite numbers, even when otherwise fresh', () => {
+        renderButton();
+        fireEvent.click(screen.getByRole('button', { name: 'Live Player Map' }));
+
+        act(() => {
+            snapshotCallback(
+                makeSnapshot([
+                    [
+                        'alice',
+                        {
+                            lat: null,
+                            lng: undefined,
+                            lastUsableReceivedAt: { toMillis: () => NOW },
+                        },
+                    ],
+                ])
+            );
+        });
+
+        expect(lastGameMapProps.otherPositions).toEqual([]);
+    });
+
+    it('clears positions when the subscription reports an error', () => {
+        renderButton();
+        fireEvent.click(screen.getByRole('button', { name: 'Live Player Map' }));
+
+        act(() => {
+            snapshotCallback(
+                makeSnapshot([
+                    [
+                        'alice',
+                        {
+                            lat: 10,
+                            lng: 20,
+                            lastUsableReceivedAt: { toMillis: () => NOW },
+                        },
+                    ],
+                ])
+            );
+        });
+
+        expect(lastGameMapProps.otherPositions).toEqual([
+            { id: 'alice', lat: 10, lng: 20, label: 'Alice' },
+        ]);
+
+        act(() => {
+            snapshotErrorCallback({ code: 'permission-denied', message: 'nope' });
         });
 
         expect(lastGameMapProps.otherPositions).toEqual([]);

@@ -291,6 +291,15 @@ const PlayerGame = () => {
     // can prove safe under the widened read rule; the viewer's own id is
     // still excluded here as a defensive belt-and-suspenders measure in
     // case that query ever included it.
+    //
+    // Stored RAW (unfiltered by freshness) — a disconnected player's status
+    // doc can stay at 'outside' forever with no new snapshot ever arriving,
+    // so filtering once here and freezing the result in state would leave a
+    // stale dot on the map indefinitely. The freshness check instead runs at
+    // render time, below, against the existing `nowMs` ticker, so a dot
+    // disappears on its own once freshnessMs passes with no update — the
+    // same "stop showing on its own, purely from time passing" treatment
+    // deriveFreshStatus already gives this player's own status.
     useEffect(() => {
         if (!roomID || !gameBoundary?.enabled) {
             setOtherOutsidePositions([]);
@@ -300,14 +309,16 @@ const PlayerGame = () => {
         const unsubscribe = onSnapshot(
             outsideQuery,
             (snapshot) => {
-                const nowMsForFreshness = Date.now();
                 const next = [];
                 snapshot.docs.forEach((doc) => {
                     if (doc.id === normalizePlayerName(playerName)) return; // never show yourself
                     const data = doc.data();
-                    const lastUsableMs = data.lastUsableReceivedAt?.toMillis?.() ?? null;
-                    if (!isPositionFresh(lastUsableMs, nowMsForFreshness)) return;
-                    next.push({ id: doc.id, lat: data.lat, lng: data.lng });
+                    next.push({
+                        id: doc.id,
+                        lat: data.lat,
+                        lng: data.lng,
+                        lastUsableMs: data.lastUsableReceivedAt?.toMillis?.() ?? null,
+                    });
                 });
                 setOtherOutsidePositions(next);
             },
@@ -315,6 +326,20 @@ const PlayerGame = () => {
         );
         return () => unsubscribe();
     }, [roomID, gameBoundary?.enabled, playerName]);
+
+    // Derived at render time from the raw snapshot data above and the
+    // existing `nowMs` ticker — not stored state of its own — so a position
+    // goes stale and disappears purely from time passing, even with no new
+    // Firestore snapshot (Finding 1). Also guards against a legacy/malformed
+    // doc whose lat/lng are missing or not finite numbers.
+    const freshOtherOutsidePositions = otherOutsidePositions
+        .filter(
+            (position) =>
+                isPositionFresh(position.lastUsableMs, nowMs) &&
+                Number.isFinite(position.lat) &&
+                Number.isFinite(position.lng)
+        )
+        .map((position) => ({ id: position.id, lat: position.lat, lng: position.lng }));
 
     // Mounted always, regardless of whether the map modal is open —
     // closing PlayerMapModal must not stop location reporting.
@@ -615,7 +640,7 @@ const PlayerGame = () => {
                                 isOpen={isMapOpen}
                                 onClose={onMapClose}
                                 boundaryVertices={gameBoundary.vertices}
-                                otherPositions={otherOutsidePositions}
+                                otherPositions={freshOtherOutsidePositions}
                                 ownPosition={
                                     ownPosition &&
                                     nowMs - ownPosition.acquiredAtMs <=

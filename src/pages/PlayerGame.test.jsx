@@ -1463,6 +1463,97 @@ describe('PlayerGame', () => {
         expect(outsideQueryCallsAfterToggle.length).toBe(1);
     });
 
+    it('removes a player dot once it goes stale from time passing alone, with no new snapshot delivered', () => {
+        // Finding 1: a disconnected player's status doc can sit at
+        // 'outside' forever with no new snapshot ever arriving. The fix
+        // stores the raw doc data and re-derives freshness at render time
+        // against the existing nowMs ticker, so the dot must disappear on
+        // its own once GAME_BOUNDARY_CONFIG.freshnessMs passes — without
+        // the mocked onSnapshot callback ever firing again.
+        jest.useFakeTimers();
+        try {
+            writePlayerSession('Fluffy42317', 'Alice');
+            const lastUsableMs = Date.now();
+            onSnapshot.mockImplementation((ref, callback) => {
+                if (ref === 'room-ref') {
+                    callback({
+                        exists: () => true,
+                        data: () => ({
+                            gameStarted: false,
+                            gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                        }),
+                    });
+                } else if (ref === 'outside-statuses-query') {
+                    callback({
+                        docs: [
+                            {
+                                id: 'bob',
+                                data: () => ({
+                                    status: 'outside',
+                                    lat: 11,
+                                    lng: 21,
+                                    lastUsableReceivedAt: { toMillis: () => lastUsableMs },
+                                }),
+                            },
+                        ],
+                    });
+                }
+                return () => {};
+            });
+
+            renderWaiting();
+            fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
+
+            expect(mockLastPlayerMapModalProps.otherPositions).toEqual([
+                { id: 'bob', lat: 11, lng: 21 },
+            ]);
+
+            act(() => {
+                jest.advanceTimersByTime(GAME_BOUNDARY_CONFIG.freshnessMs + 1000);
+            });
+
+            expect(mockLastPlayerMapModalProps.otherPositions).toEqual([]);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it('excludes an outside position whose lat/lng are not finite numbers, even when otherwise fresh', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        const lastUsableMs = Date.now();
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            } else if (ref === 'outside-statuses-query') {
+                callback({
+                    docs: [
+                        {
+                            id: 'bob',
+                            data: () => ({
+                                status: 'outside',
+                                lat: null,
+                                lng: undefined,
+                                lastUsableReceivedAt: { toMillis: () => lastUsableMs },
+                            }),
+                        },
+                    ],
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+        fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
+
+        expect(mockLastPlayerMapModalProps.otherPositions).toEqual([]);
+    });
+
     it("removes a player's dot once their status is no longer outside, on the very next snapshot", () => {
         writePlayerSession('Fluffy42317', 'Alice');
         const lastUsableMs = Date.now();

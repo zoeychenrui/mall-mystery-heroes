@@ -182,8 +182,9 @@ presentational.
 Live location visibility (`docs/superpowers/specs/2026-10-12-live-location-visibility-design.md`)
 generalizes `GameMap.js`'s single `ownPosition` marker into a list,
 `otherPositions`, each with an optional hover label — the own-position
-marker is now a one-item case of the same rendering path, not a separate
-one. `src/components/map_components/LivePlayerMapButton.js` is the new
+marker shares its position-dot visual (`PositionDot`) with the new
+other-players markers, though the own-position marker remains its own
+rendering block. `src/components/map_components/LivePlayerMapButton.js` is the new
 GM-facing entry point (rendered alongside `GameBoundaryButton.js`): it
 owns its own open/closed state and, while open, subscribes to the whole
 `boundaryStatuses` subcollection unfiltered — the host's existing read

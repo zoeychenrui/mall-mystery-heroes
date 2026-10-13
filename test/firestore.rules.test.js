@@ -567,7 +567,49 @@ describe('game boundary: rooms/{roomId}/boundaryStatuses and boundaryEvents, and
         await assertSucceeds(getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'bob')));
     });
 
-    it("denies a player reading another player's boundaryStatuses doc", async () => {
+    it('allows a player to read their own boundaryStatuses doc while it is NOT outside (isOwnBoundaryStatus in isolation)', async () => {
+        // The existing "allows a player to read their own boundaryStatuses
+        // doc" test above reads bob's doc while it is seeded 'outside' in
+        // this block's beforeEach — since the outside-status clause also
+        // grants that read to ANY player, that test no longer isolates the
+        // isOwnBoundaryStatus clause; it would still pass even if that
+        // clause were deleted entirely. This test flips bob's own doc to a
+        // non-outside status first, so only the own-doc clause can be the
+        // one making it succeed.
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+            await setDoc(doc(context.firestore(), 'rooms', 'room-a', 'boundaryStatuses', 'bob'), {
+                status: 'inside',
+            });
+        });
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        await assertSucceeds(getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'bob')));
+    });
+
+    it("denies a player reading another player's boundaryStatuses doc while it is inside", async () => {
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        await expectPermissionDenied(
+            getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'alice'))
+        );
+    });
+
+    it("denies a player reading another player's boundaryStatuses doc while it is near", async () => {
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+            await setDoc(doc(context.firestore(), 'rooms', 'room-a', 'boundaryStatuses', 'alice'), {
+                status: 'near',
+            });
+        });
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        await expectPermissionDenied(
+            getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'alice'))
+        );
+    });
+
+    it("denies a player reading another player's boundaryStatuses doc while it is unavailable", async () => {
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+            await setDoc(doc(context.firestore(), 'rooms', 'room-a', 'boundaryStatuses', 'alice'), {
+                status: 'unavailable',
+            });
+        });
         const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
         await expectPermissionDenied(
             getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'alice'))

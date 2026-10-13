@@ -26,34 +26,70 @@ const { isPositionFresh } = require('../../game/gameBoundary');
  */
 const LivePlayerMapButton = ({ roomID, players, boundaryVertices = null }) => {
     const [isOpen, setIsOpen] = useState(false);
+    // Stored RAW (unfiltered by freshness) — a disconnected player's status
+    // doc can sit at whatever it last read forever, with no new snapshot
+    // ever arriving, so filtering once here and freezing the result in
+    // state would leave a stale dot on the map indefinitely (Finding 1).
+    // The freshness check instead runs at render time, below, against the
+    // `nowMs` ticker, so a dot disappears on its own once freshnessMs
+    // passes with no update.
     const [positions, setPositions] = useState([]);
+    const [nowMs, setNowMs] = useState(Date.now());
+
+    // A local ticker, matching PlayerGame.js's own existing one — this
+    // component has no other re-render source to re-evaluate freshness
+    // against once a document stops being updated.
+    useEffect(() => {
+        const intervalId = setInterval(() => setNowMs(Date.now()), 1000);
+        return () => clearInterval(intervalId);
+    }, []);
 
     useEffect(() => {
         if (!isOpen || !roomID) return undefined;
         const statusesQuery = fetchBoundaryStatusesQueryForRoom(roomID);
-        const unsubscribe = onSnapshot(statusesQuery, (snapshot) => {
-            const nowMs = Date.now();
-            const next = [];
-            snapshot.docs.forEach((doc) => {
-                const data = doc.data();
-                const lastUsableMs = data.lastUsableReceivedAt?.toMillis?.() ?? null;
-                if (!isPositionFresh(lastUsableMs, nowMs)) return;
-                next.push({
-                    id: doc.id,
-                    lat: data.lat,
-                    lng: data.lng,
-                    // doc.id is the normalized trimmedNameLowerCase key
-                    // (docs/data-model.md), not the display name — resolve
-                    // it back to the player's actual casing the same way
-                    // ChatInput/PhotosDisplay do. Falls back to the raw id
-                    // unchanged if no player matches.
-                    label: resolvePlayerDisplayName(doc.id, players),
+        const unsubscribe = onSnapshot(
+            statusesQuery,
+            (snapshot) => {
+                const next = snapshot.docs.map((doc) => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        lat: data.lat,
+                        lng: data.lng,
+                        lastUsableMs: data.lastUsableReceivedAt?.toMillis?.() ?? null,
+                        // doc.id is the normalized trimmedNameLowerCase key
+                        // (docs/data-model.md), not the display name —
+                        // resolve it back to the player's actual casing the
+                        // same way ChatInput/PhotosDisplay do. Falls back
+                        // to the raw id unchanged if no player matches.
+                        label: resolvePlayerDisplayName(doc.id, players),
+                    };
                 });
-            });
-            setPositions(next);
-        });
+                setPositions(next);
+            },
+            () => setPositions([])
+        );
         return () => unsubscribe();
     }, [isOpen, roomID, players]);
+
+    // Derived at render time from the raw snapshot data and the ticker
+    // above — not stored state of its own — so a position goes stale and
+    // disappears purely from time passing, even with no new Firestore
+    // snapshot. Also guards against a legacy/malformed doc whose lat/lng
+    // are missing or not finite numbers.
+    const freshPositions = positions
+        .filter(
+            (position) =>
+                isPositionFresh(position.lastUsableMs, nowMs) &&
+                Number.isFinite(position.lat) &&
+                Number.isFinite(position.lng)
+        )
+        .map((position) => ({
+            id: position.id,
+            lat: position.lat,
+            lng: position.lng,
+            label: position.label,
+        }));
 
     return (
         <>
@@ -78,7 +114,7 @@ const LivePlayerMapButton = ({ roomID, players, boundaryVertices = null }) => {
                         <GameMap
                             boundaryVertices={boundaryVertices}
                             fitTo={null}
-                            otherPositions={positions}
+                            otherPositions={freshPositions}
                             dragPan
                             onMapLoad={() => {}}
                             onMapError={() => {}}
