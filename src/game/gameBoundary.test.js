@@ -314,6 +314,7 @@ const {
     initialBoundaryState,
     nextBoundaryState,
     deriveFreshStatus,
+    isPositionFresh,
     offsetPoint,
 } = require('./gameBoundary');
 
@@ -516,6 +517,24 @@ describe('nextBoundaryState', () => {
         expect(b.status).toBe('outside');
         expect(b.outsideConfirmedAt).toBe(a.outsideConfirmedAt);
         expect(b.outsideConfirmedAt).toBe(20000);
+    });
+});
+
+describe('isPositionFresh', () => {
+    it('is false when there is no last-usable time at all', () => {
+        expect(isPositionFresh(null, 1000)).toBe(false);
+    });
+
+    it('is true exactly at the freshness boundary', () => {
+        expect(isPositionFresh(1000, 1000 + GAME_BOUNDARY_CONFIG.freshnessMs)).toBe(true);
+    });
+
+    it('is false just past the freshness boundary', () => {
+        expect(isPositionFresh(1000, 1000 + GAME_BOUNDARY_CONFIG.freshnessMs + 1)).toBe(false);
+    });
+
+    it('is true well within the freshness window', () => {
+        expect(isPositionFresh(1000, 1500)).toBe(true);
     });
 });
 
