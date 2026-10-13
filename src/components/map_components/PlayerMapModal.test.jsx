@@ -38,6 +38,7 @@ const renderModal = (props = {}) =>
                 onClose={jest.fn()}
                 boundaryVertices={RING}
                 ownPosition={null}
+                otherPositions={[]}
                 {...props}
             />
         </ChakraProvider>
@@ -51,6 +52,12 @@ describe('PlayerMapModal', () => {
         renderModal({ ownPosition });
         expect(mockLastProps.boundaryVertices).toEqual(RING);
         expect(mockLastProps.ownPosition).toEqual(ownPosition);
+    });
+
+    it('passes otherPositions straight through to GameMap', () => {
+        const otherPositions = [{ id: 'bob', lat: 11, lng: 21 }];
+        renderModal({ otherPositions });
+        expect(mockLastProps.otherPositions).toEqual(otherPositions);
     });
 
     it('Recenter on Me is disabled with no own position', () => {

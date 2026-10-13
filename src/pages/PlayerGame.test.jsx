@@ -50,6 +50,7 @@ jest.mock('../components/firebase_calls/dbCalls', () => ({
     fetchPlayersQueryByDescendPointsThenIsAliveForRoom: jest.fn(),
     fetchTasksQueryForRoom: jest.fn(),
     fetchBoundaryStatusReferenceForPlayer: jest.fn(() => 'status-ref'),
+    fetchOutsideBoundaryStatusesQueryForRoom: jest.fn(() => 'outside-statuses-query'),
 }));
 jest.mock('../components/leaveGame', () => ({ leaveGame: jest.fn() }));
 jest.mock('../components/reportPlayerLocation', () => ({ reportPlayerLocation: jest.fn() }));
@@ -767,9 +768,11 @@ describe('PlayerGame', () => {
 
         renderWaiting();
 
-        expect(
-            screen.getByText('You are outside the game area. Please return inside.')
-        ).toBeInTheDocument();
+        // This box's copy changed in Task 7 (live location visibility): a
+        // confirmed-outside player is now told their location is visible to
+        // everyone, since another player's/the GM's map now shows it —
+        // replacing the old bare "please return inside" wording.
+        expect(screen.getByText(/visible to everyone/i)).toBeInTheDocument();
     });
 
     it('shows Location unavailable once the stored status has gone stale, even though it was last Inside', () => {
@@ -1196,5 +1199,272 @@ describe('PlayerGame', () => {
         } finally {
             jest.useRealTimers();
         }
+    });
+
+    // --- Exposure feed and countdown warning (Task 7) -------------------
+
+    it("shows another player's position on the map once their status reads outside, excluding the viewer's own id", () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        const lastUsableMs = Date.now();
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            } else if (ref === 'outside-statuses-query') {
+                callback({
+                    docs: [
+                        {
+                            id: 'bob',
+                            data: () => ({
+                                status: 'outside',
+                                lat: 11,
+                                lng: 21,
+                                lastUsableReceivedAt: { toMillis: () => lastUsableMs },
+                            }),
+                        },
+                        // Seeded present, defensively excluded even though the
+                        // real query (status == 'outside') should never
+                        // actually include the viewer's own doc here.
+                        {
+                            id: 'alice',
+                            data: () => ({
+                                status: 'outside',
+                                lat: 99,
+                                lng: 99,
+                                lastUsableReceivedAt: { toMillis: () => lastUsableMs },
+                            }),
+                        },
+                    ],
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+        fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
+
+        expect(mockLastPlayerMapModalProps.otherPositions).toEqual([
+            { id: 'bob', lat: 11, lng: 21 },
+        ]);
+    });
+
+    it('excludes a stale outside position from the map', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        const staleUsableMs = Date.now() - (GAME_BOUNDARY_CONFIG.freshnessMs + 60000);
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            } else if (ref === 'outside-statuses-query') {
+                callback({
+                    docs: [
+                        {
+                            id: 'bob',
+                            data: () => ({
+                                status: 'outside',
+                                lat: 11,
+                                lng: 21,
+                                lastUsableReceivedAt: { toMillis: () => staleUsableMs },
+                            }),
+                        },
+                    ],
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+        fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
+
+        expect(mockLastPlayerMapModalProps.otherPositions).toEqual([]);
+    });
+
+    it('shows a countdown warning while near-confirming outside, naming the seconds remaining', () => {
+        const NOW = 1_700_000_000_000;
+        jest.useFakeTimers().setSystemTime(NOW);
+        try {
+            writePlayerSession('Fluffy42317', 'Alice');
+            onSnapshot.mockImplementation((ref, callback) => {
+                if (ref === 'room-ref') {
+                    callback({
+                        exists: () => true,
+                        data: () => ({
+                            gameStarted: false,
+                            gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                        }),
+                    });
+                } else if (ref === 'status-ref') {
+                    callback({
+                        exists: () => true,
+                        data: () => ({
+                            status: 'near',
+                            reason: null,
+                            lastUsableReceivedAt: { toMillis: () => NOW },
+                            outsideSince: { toMillis: () => NOW - 5000 },
+                            boundaryRevision: 1,
+                        }),
+                    });
+                }
+                return () => {};
+            });
+
+            renderWaiting();
+
+            // GAME_BOUNDARY_CONFIG.confirmMinSpanMs is 20000; outsideSince was
+            // 5000ms ago, so 15 remaining seconds is expected.
+            expect(screen.getByText(/15/)).toBeInTheDocument();
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it('replaces the countdown with an exposure notice the instant status is confirmed outside', () => {
+        const NOW = 1_700_000_000_000;
+        jest.useFakeTimers().setSystemTime(NOW);
+        try {
+            writePlayerSession('Fluffy42317', 'Alice');
+            let statusCallback;
+            onSnapshot.mockImplementation((ref, callback) => {
+                if (ref === 'room-ref') {
+                    callback({
+                        exists: () => true,
+                        data: () => ({
+                            gameStarted: false,
+                            gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                        }),
+                    });
+                } else if (ref === 'status-ref') {
+                    statusCallback = callback;
+                    callback({
+                        exists: () => true,
+                        data: () => ({
+                            status: 'near',
+                            reason: null,
+                            lastUsableReceivedAt: { toMillis: () => NOW },
+                            outsideSince: { toMillis: () => NOW - 5000 },
+                            boundaryRevision: 1,
+                        }),
+                    });
+                }
+                return () => {};
+            });
+
+            renderWaiting();
+            expect(screen.getByText(/15/)).toBeInTheDocument();
+
+            act(() => {
+                statusCallback({
+                    exists: () => true,
+                    data: () => ({
+                        status: 'outside',
+                        reason: null,
+                        lastUsableReceivedAt: { toMillis: () => NOW },
+                        outsideSince: { toMillis: () => NOW - 5000 },
+                        boundaryRevision: 1,
+                    }),
+                });
+            });
+
+            expect(screen.queryByText(/15/)).not.toBeInTheDocument();
+            expect(screen.getByText(/visible to everyone/i)).toBeInTheDocument();
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it('closing the map modal does not stop the outside-players subscription from updating', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        const outsideQueryCallsBeforeToggle = onSnapshot.mock.calls.filter(
+            (call) => call[0] === 'outside-statuses-query'
+        );
+        expect(outsideQueryCallsBeforeToggle.length).toBe(1);
+
+        fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
+        const mockModal = screen.getByTestId('mock-player-map-modal');
+        // Scoped to the mock modal itself — same ambiguity-avoidance reason
+        // as the useBoundaryLocation toggle test above (the "Game area is
+        // ready" toast's own Close button also matches /close/i).
+        fireEvent.click(within(mockModal).getByRole('button', { name: /close/i }));
+
+        const outsideQueryCallsAfterToggle = onSnapshot.mock.calls.filter(
+            (call) => call[0] === 'outside-statuses-query'
+        );
+        // Established once, at PlayerGame's own mount — not tied to the
+        // modal's own open/closed state.
+        expect(outsideQueryCallsAfterToggle.length).toBe(1);
+    });
+
+    it("removes a player's dot once their status is no longer outside, on the very next snapshot", () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        const lastUsableMs = Date.now();
+        let outsideStatusesCallback;
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: false,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            } else if (ref === 'outside-statuses-query') {
+                outsideStatusesCallback = callback;
+                callback({
+                    docs: [
+                        {
+                            id: 'bob',
+                            data: () => ({
+                                status: 'outside',
+                                lat: 11,
+                                lng: 21,
+                                lastUsableReceivedAt: { toMillis: () => lastUsableMs },
+                            }),
+                        },
+                    ],
+                });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+        fireEvent.click(screen.getByRole('button', { name: 'View Game Map' }));
+
+        expect(mockLastPlayerMapModalProps.otherPositions).toEqual([
+            { id: 'bob', lat: 11, lng: 21 },
+        ]);
+
+        act(() => {
+            // Exactly what Firestore delivers once a document stops matching
+            // a live query's filter: a later snapshot whose docs array omits
+            // it entirely, not a doc with a changed status.
+            outsideStatusesCallback({ docs: [] });
+        });
+
+        expect(mockLastPlayerMapModalProps.otherPositions).toEqual([]);
     });
 });

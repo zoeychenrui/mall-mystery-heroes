@@ -31,6 +31,7 @@ import {
     fetchPlayersQueryByDescendPointsThenIsAliveForRoom,
     fetchTasksQueryForRoom,
     fetchBoundaryStatusReferenceForPlayer,
+    fetchOutsideBoundaryStatusesQueryForRoom,
 } from '../components/firebase_calls/dbCalls';
 import { leaveGame } from '../components/leaveGame';
 import CreateAlert from '../components/CreateAlert';
@@ -41,6 +42,7 @@ import PlayerTaskListModal from '../components/task_components/PlayerTaskListMod
 import LeaderboardModal from '../components/game_end_components/LeaderboardModal';
 import { buildLeaderboardStandings } from '../game/leaderboard';
 import { formatMessageTime } from '../utils/formatMessageTime';
+import { normalizePlayerName } from '../game/playerNames';
 import useBoundaryLocation from '../hooks/useBoundaryLocation';
 import PlayerMapModal from '../components/map_components/PlayerMapModal';
 // require(), not a named `import` — gameBoundary.js is CommonJS
@@ -49,7 +51,11 @@ import PlayerMapModal from '../components/map_components/PlayerMapModal';
 // webpack build requires, even though Jest's CommonJS-based test runner
 // never notices. Same wall BoundaryEditorModal.js and GameMap.js already
 // hit; see boundaryDraft.js's header comment for the full story.
-const { deriveFreshStatus, GAME_BOUNDARY_CONFIG } = require('../game/gameBoundary');
+const {
+    deriveFreshStatus,
+    GAME_BOUNDARY_CONFIG,
+    isPositionFresh,
+} = require('../game/gameBoundary');
 
 // Plain-language text for every reason deriveFreshStatus/gameBoundary.js
 // and the reportPlayerLocation callable can actually produce for an
@@ -95,6 +101,7 @@ const PlayerGame = () => {
     const [pendingMessages, setPendingMessages] = useState([]);
     const [gameBoundary, setGameBoundary] = useState(undefined);
     const [boundaryStatusDoc, setBoundaryStatusDoc] = useState(null);
+    const [otherOutsidePositions, setOtherOutsidePositions] = useState([]);
     const [nowMs, setNowMs] = useState(Date.now());
     const previousRevisionRef = useRef(undefined);
     const session = readPlayerSession();
@@ -274,6 +281,41 @@ const PlayerGame = () => {
         return () => unsubscribe();
     }, [roomID, gameBoundary?.enabled, playerName]);
 
+    // Every other currently-exposed ("outside") player, for this player's
+    // own map — mounted unconditionally once the boundary is enabled, same
+    // gating and same reasoning as the own-status subscription above: it
+    // must not depend on whether the map modal happens to be open
+    // (docs/superpowers/specs/2026-10-12-live-location-visibility-design.md).
+    // The query itself is already filtered to status == 'outside'
+    // (fetchOutsideBoundaryStatusesQueryForRoom), which is what Firestore
+    // can prove safe under the widened read rule; the viewer's own id is
+    // still excluded here as a defensive belt-and-suspenders measure in
+    // case that query ever included it.
+    useEffect(() => {
+        if (!roomID || !gameBoundary?.enabled) {
+            setOtherOutsidePositions([]);
+            return undefined;
+        }
+        const outsideQuery = fetchOutsideBoundaryStatusesQueryForRoom(roomID);
+        const unsubscribe = onSnapshot(
+            outsideQuery,
+            (snapshot) => {
+                const nowMsForFreshness = Date.now();
+                const next = [];
+                snapshot.docs.forEach((doc) => {
+                    if (doc.id === normalizePlayerName(playerName)) return; // never show yourself
+                    const data = doc.data();
+                    const lastUsableMs = data.lastUsableReceivedAt?.toMillis?.() ?? null;
+                    if (!isPositionFresh(lastUsableMs, nowMsForFreshness)) return;
+                    next.push({ id: doc.id, lat: data.lat, lng: data.lng });
+                });
+                setOtherOutsidePositions(next);
+            },
+            () => setOtherOutsidePositions([])
+        );
+        return () => unsubscribe();
+    }, [roomID, gameBoundary?.enabled, playerName]);
+
     // Mounted always, regardless of whether the map modal is open —
     // closing PlayerMapModal must not stop location reporting.
     const { permissionState, ownPosition, requestPermission } = useBoundaryLocation({
@@ -298,6 +340,23 @@ const PlayerGame = () => {
               { currentRevision: gameBoundary?.revision, currentUid: auth.currentUser?.uid }
           )
         : { status: 'unavailable', reason: 'no_fix' };
+
+    // The countdown to exposure, derived each render from fields already on
+    // the player's own status doc — no new Firestore field, per the spec.
+    // `near` is the "not yet confirmed outside" status: deriveFreshStatus
+    // returns it verbatim (see above), and outsideSince is the server
+    // receipt time of the first outside fix in the current outside run
+    // (docs/data-model.md). Once confirmMinSpanMs elapses without a
+    // qualifying inside fix, the server confirms `outside` and this
+    // countdown is replaced by the exposure notice below.
+    const outsideSinceMs = boundaryStatusDoc?.outsideSince?.toMillis?.() ?? null;
+    const isApproachingExposure = liveBoundaryStatus.status === 'near' && outsideSinceMs !== null;
+    const secondsUntilExposed = isApproachingExposure
+        ? Math.max(
+              0,
+              Math.ceil((GAME_BOUNDARY_CONFIG.confirmMinSpanMs - (nowMs - outsideSinceMs)) / 1000)
+          )
+        : null;
 
     // Spec: the "Location unavailable" explanation shows the last
     // successful check time "if any" — null (not just an empty string)
@@ -469,8 +528,8 @@ const PlayerGame = () => {
                                     <Text mb={2}>
                                         Turn on location so we can check that you are inside the
                                         game area. The moderator sees your boundary status. Other
-                                        players cannot see your location. Keep the game open for
-                                        location updates.
+                                        players cannot see your location unless you leave the game
+                                        area. Keep the game open for location updates.
                                     </Text>
                                     <Button size="sm" onClick={requestPermission}>
                                         Enable Location
@@ -493,16 +552,34 @@ const PlayerGame = () => {
                                     <Text>{UNAVAILABLE_REASON_TEXT.unavailable}</Text>
                                 </Box>
                             )}
-                            {liveBoundaryStatus.status === 'outside' && (
+                            {isApproachingExposure && (
                                 <Box
-                                    bg="red.700"
+                                    bg="orange.700"
                                     color="white"
                                     borderRadius="md"
                                     p={2}
                                     mb={2}
                                     textAlign="center"
                                 >
-                                    <Text fontWeight="bold">{statusText}</Text>
+                                    <Text fontWeight="bold">
+                                        Return to the game area — your location will be revealed to
+                                        everyone in {secondsUntilExposed}s.
+                                    </Text>
+                                </Box>
+                            )}
+                            {liveBoundaryStatus.status === 'outside' && (
+                                <Box
+                                    bg="red.900"
+                                    color="white"
+                                    borderRadius="md"
+                                    p={2}
+                                    mb={2}
+                                    textAlign="center"
+                                >
+                                    <Text fontWeight="bold">
+                                        You are outside the game area — your location is visible to
+                                        everyone until you return.
+                                    </Text>
                                 </Box>
                             )}
                             {liveBoundaryStatus.status !== 'outside' &&
@@ -540,6 +617,7 @@ const PlayerGame = () => {
                                 isOpen={isMapOpen}
                                 onClose={onMapClose}
                                 boundaryVertices={gameBoundary.vertices}
+                                otherPositions={otherOutsidePositions}
                                 ownPosition={
                                     ownPosition &&
                                     nowMs - ownPosition.acquiredAtMs <=

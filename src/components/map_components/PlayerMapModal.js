@@ -24,8 +24,21 @@ import GameMap from './GameMap';
  * modal is full-screen on phones, which would otherwise hide the page's
  * status line entirely for as long as the map stays open (spec: "Display
  * the boundary status on the player page as well as inside the map").
+ *
+ * `otherPositions` is PlayerGame.js's live feed of other currently-exposed
+ * ("outside") players, passed straight through to GameMap unmodified —
+ * freshness filtering and excluding the viewer's own id both happen in
+ * PlayerGame.js before this prop ever arrives here (docs/superpowers/specs/
+ * 2026-10-12-live-location-visibility-design.md).
  */
-const PlayerMapModal = ({ isOpen, onClose, boundaryVertices, ownPosition, statusText }) => {
+const PlayerMapModal = ({
+    isOpen,
+    onClose,
+    boundaryVertices,
+    ownPosition,
+    otherPositions = [],
+    statusText,
+}) => {
     const mapRef = useRef(null);
 
     const handleMapLoad = (map) => {
@@ -62,6 +75,7 @@ const PlayerMapModal = ({ isOpen, onClose, boundaryVertices, ownPosition, status
                         boundaryVertices={boundaryVertices}
                         fitTo={null}
                         ownPosition={ownPosition}
+                        otherPositions={otherPositions}
                         dragPan
                         onMapLoad={handleMapLoad}
                         onMapError={() => {}}
