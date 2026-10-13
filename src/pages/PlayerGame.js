@@ -558,7 +558,7 @@ const PlayerGame = () => {
                             </Text>
                         </>
                     )}
-                    {gameBoundary?.enabled && (
+                    {gameBoundary?.enabled && (playerData?.isAlive ?? true) && (
                         <>
                             {permissionState === 'unknown' && (
                                 <Box bg="blue.900" color="white" borderRadius="md" p={3} mb={2}>

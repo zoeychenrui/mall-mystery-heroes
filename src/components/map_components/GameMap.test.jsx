@@ -294,6 +294,12 @@ describe("GameMap — other players' positions", () => {
         // lint rule, same as the within(...).queryByTitle usage this
         // file's own now-superseded hover test used to rely on.
         expect(within(marker).queryByTitle(/./)).not.toBeInTheDocument();
+        // The strengthened half of this test: not just "no native title",
+        // but the always-visible label truly never renders without
+        // alwaysShowLabel — this would still have passed the assertion
+        // above even if the always-visible label rendered unconditionally.
+        expect(screen.queryByTestId('always-visible-label')).not.toBeInTheDocument();
+        expect(screen.queryByText('Alice')).not.toBeInTheDocument();
     });
 
     it('always renders a visible label (no hover needed) when alwaysShowLabel is true', () => {

@@ -711,6 +711,31 @@ describe('PlayerGame', () => {
         expect(screen.getByRole('button', { name: 'Enable Location' })).toBeInTheDocument();
     });
 
+    it('hides the whole location panel for an eliminated player, even with a boundary published', () => {
+        writePlayerSession('Fluffy42317', 'Alice');
+        onSnapshot.mockImplementation((ref, callback) => {
+            if (ref === 'room-ref') {
+                callback({
+                    exists: () => true,
+                    data: () => ({
+                        gameStarted: true,
+                        gameBoundary: { enabled: true, revision: 1, vertices: [] },
+                    }),
+                });
+            } else if (ref === 'player-ref') {
+                callback({ exists: () => true, data: () => ({ isAlive: false, targets: [] }) });
+            }
+            return () => {};
+        });
+
+        renderWaiting();
+
+        expect(screen.queryByText('Enable Location')).not.toBeInTheDocument();
+        expect(
+            screen.queryByText(/Turn on location so we can check that you are inside the game area/)
+        ).not.toBeInTheDocument();
+    });
+
     it('shows "In game area." when the live-derived status is inside', () => {
         writePlayerSession('Fluffy42317', 'Alice');
         onSnapshot.mockImplementation((ref, callback) => {

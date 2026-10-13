@@ -109,6 +109,13 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
         const playerDoc = playerSnapshot.docs[0];
         const playerData = playerDoc.data();
 
+        if (playerData.isAlive === false) {
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                'Eliminated players cannot report their location.'
+            );
+        }
+
         const boundary = room.gameBoundary;
         if (!boundary || boundary.enabled !== true) {
             throw new functions.https.HttpsError('failed-precondition', 'Game area is not active.');

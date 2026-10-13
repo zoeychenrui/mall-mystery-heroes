@@ -23,6 +23,7 @@ const {
     Timestamp,
     updateDoc,
 } = require('firebase/firestore');
+const { functions: hostFunctions } = require('../../src/utils/firebase');
 const {
     clearFirestore,
     createIndependentIdentity,
@@ -63,6 +64,10 @@ const fix = (point, sampleMs, extra = {}) => ({
 });
 
 const reportAs = (identity) => httpsCallable(identity.functions, 'reportPlayerLocation');
+// killPlayer is host-only; the shared singleton from src/utils/firebase is
+// signed in as the host (seedRoom's hostUid(), same pattern
+// gameBoundary.integration.test.js uses to call host-only callables).
+const killPlayer = httpsCallable(hostFunctions, 'killPlayer');
 
 const identities = [];
 const newIdentity = async () => {
@@ -481,5 +486,35 @@ describe('reportPlayerLocation', () => {
         expect(aliceStatus).toMatchObject({ status: 'inside', uid: alice.uid });
         expect(bobStatus).toMatchObject({ status: 'near', uid: bob.uid });
         expect(await readStatusDocs()).toHaveLength(2);
+    });
+
+    it('rejects a location report from a player killed after their last report, and leaves the kill-cleared status doc untouched', async () => {
+        const alice = await newIdentity();
+        await seedRoom(
+            ROOM,
+            [
+                { name: 'alice', uid: alice.uid, targets: [] },
+                { name: 'bob', targets: ['alice'] },
+            ],
+            { gameBoundary: BOUNDARY }
+        );
+        // A near/outside fix so killPlayer's exposure-clear guard
+        // (status === 'outside' || 'near') actually fires — see
+        // killPlayer.js — leaving the status doc in the cleared/eliminated
+        // state this test needs to confirm stays untouched.
+        await reportAs(alice)(fix(OUTSIDE, Date.now() - 10000));
+        expect((await readStatus('alice')).status).toBe('near');
+
+        await killPlayer({ target: 'alice', assassin: 'bob', roomId: ROOM });
+        const clearedStatus = await readStatus('alice');
+        expect(clearedStatus).toMatchObject({ status: 'unavailable', reason: 'eliminated' });
+        expect(clearedStatus.lat).toBeNull();
+        expect(clearedStatus.lng).toBeNull();
+
+        await expect(reportAs(alice)(fix(INSIDE, Date.now() - 5000))).rejects.toMatchObject({
+            code: 'functions/failed-precondition',
+        });
+
+        expect(await readStatus('alice')).toEqual(clearedStatus);
     });
 });
