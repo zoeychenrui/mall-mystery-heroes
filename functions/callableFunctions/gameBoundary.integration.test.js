@@ -7,12 +7,13 @@
  */
 const { initializeApp } = require('firebase/app');
 const { connectFunctionsEmulator, getFunctions, httpsCallable } = require('firebase/functions');
-const { doc, getDoc, Timestamp } = require('firebase/firestore');
+const { doc, getDoc, setDoc, terminate, Timestamp } = require('firebase/firestore');
 const { db, functions } = require('../../src/utils/firebase');
 const { shapeToPolygon } = require('../vendor/game/gameBoundary');
 const {
     callableAsNonHost,
     clearFirestore,
+    createRulesBypassDb,
     seedRoom,
     shutdown,
 } = require('../../test/emulatorHelpers');
@@ -48,14 +49,37 @@ const BOW_TIE_VERTICES = [
     { lat: 0.001, lng: 0.001 },
 ];
 
+// An already-enabled boundary at revision 1, for tests that disable it.
+const ENABLED_BOUNDARY = {
+    enabled: true,
+    revision: 1,
+    shapeType: 'rectangle',
+    vertices: RECTANGLE_VERTICES,
+    shapeParameters: { corners: RECTANGLE_CORNERS },
+};
+
 const readRoom = async () => (await getDoc(doc(db, 'rooms', ROOM))).data();
 
 // The client SDK surfaces HttpsError codes with a 'functions/' prefix.
 const publish = () => httpsCallable(functions, 'publishGameBoundary');
 const disable = () => httpsCallable(functions, 'disableGameBoundary');
 
+// boundaryStatuses is written only by Cloud Functions, so firestore.rules
+// does not open it to clients. Tests read/seed it through createRulesBypassDb
+// (test/emulatorHelpers.js), the same pattern as
+// reportPlayerLocation.integration.test.js.
+let bypass;
+const statusRef = (playerKey) => doc(bypass, 'rooms', ROOM, 'boundaryStatuses', playerKey);
+const readStatus = async (playerKey) => (await getDoc(statusRef(playerKey))).data();
+
+beforeAll(() => {
+    bypass = createRulesBypassDb();
+});
 beforeEach(clearFirestore);
-afterAll(shutdown);
+afterAll(async () => {
+    await terminate(bypass);
+    await shutdown();
+});
 
 describe('publishGameBoundary', () => {
     it('host publishes a valid rectangle: room gets gameBoundary at revision 1 with the vertices and shapeType', async () => {
@@ -326,5 +350,55 @@ describe('disableGameBoundary', () => {
         });
 
         expect(await readRoom()).toEqual(before);
+    });
+
+    it("clears every exposed player's boundary status when the boundary is disabled", async () => {
+        await seedRoom(ROOM, [{ name: 'alice' }, { name: 'bob' }], {
+            gameBoundary: ENABLED_BOUNDARY,
+        });
+        await setDoc(statusRef('alice'), {
+            status: 'outside',
+            lat: 1,
+            lng: 2,
+            outsideSince: Timestamp.now(),
+            outsideConfirmedAt: Timestamp.now(),
+        });
+        await setDoc(statusRef('bob'), {
+            status: 'near',
+            lat: 3,
+            lng: 4,
+            outsideSince: Timestamp.now(),
+        });
+
+        await disable()({ roomId: ROOM, expectedRevision: 1 });
+
+        expect(await readStatus('alice')).toMatchObject({
+            status: 'unavailable',
+            reason: 'boundary_disabled',
+            lat: null,
+            lng: null,
+            outsideConfirmedAt: null,
+        });
+        expect(await readStatus('bob')).toMatchObject({
+            status: 'unavailable',
+            reason: 'boundary_disabled',
+            outsideSince: null,
+        });
+    });
+
+    it('does not throw when disabling a boundary for a player with no boundaryStatuses document at all', async () => {
+        await seedRoom(ROOM, [{ name: 'alice' }], { gameBoundary: ENABLED_BOUNDARY });
+        // No boundaryStatuses document seeded for alice at all.
+
+        await expect(disable()({ roomId: ROOM, expectedRevision: 1 })).resolves.toBeDefined();
+    });
+
+    it("leaves an already-inside player's boundary status untouched when the boundary is disabled", async () => {
+        await seedRoom(ROOM, [{ name: 'alice' }], { gameBoundary: ENABLED_BOUNDARY });
+        await setDoc(statusRef('alice'), { status: 'inside' });
+
+        await disable()({ roomId: ROOM, expectedRevision: 1 });
+
+        expect(await readStatus('alice')).toEqual({ status: 'inside' });
     });
 });
