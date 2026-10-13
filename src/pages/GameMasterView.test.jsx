@@ -57,6 +57,13 @@ jest.mock('../components/map_components/BoundaryEditorModal', () => () => null);
 // stub in this file.
 jest.mock('../components/map_components/LivePlayerMapButton', () => () => null);
 
+// HeaderExecution renders Endgamebutton, which now imports endGame from its
+// own module (src/components/endGame.js) rather than dbCalls.js — that
+// module calls httpsCallable from 'firebase/functions' at import time, which
+// touches `fetch` (undefined in jsdom), same class of problem as the
+// BoundaryEditorModal/LivePlayerMapButton mocks above.
+jest.mock('../components/endGame', () => ({ endGame: jest.fn() }));
+
 // Explicit factory, not auto-mock — see ChatInput.test.jsx for why.
 jest.mock('../components/firebase_calls/dbCalls', () => ({
     fetchPlayersQueryByDescendPointsThenIsAliveForRoom: jest.fn(() => 'players-query'),
@@ -65,7 +72,6 @@ jest.mock('../components/firebase_calls/dbCalls', () => ({
     addLogForRoom: jest.fn(),
     addPlayerMessageForRoom: jest.fn(),
     updateIsAliveForPlayer: jest.fn(),
-    endGame: jest.fn(),
 }));
 
 // Reads gameContext itself, unlike the other stubs — needed to verify

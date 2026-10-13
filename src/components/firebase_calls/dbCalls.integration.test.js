@@ -11,7 +11,6 @@ import {
     addPlayerMessageForRoom,
     addTaskForRoom,
     deleteTaskForRoom,
-    endGame,
     fetchAliveRosterForRoom,
     fetchActiveRoomForHost,
     fetchAllPlayersForRoom,
@@ -445,10 +444,6 @@ describe('errors propagate instead of being swallowed (improvements item 10)', (
         await expect(updateIsCompleteToTrueForTaskByIndex(999, ROOM)).rejects.toThrow(
             'Task not found'
         );
-    });
-
-    it('endGame rejects for a nonexistent room', async () => {
-        await expect(endGame('nonexistent-room')).rejects.toThrow();
     });
 });
 

@@ -363,12 +363,6 @@ export const fetchAllPlayersDataForRoom = async (roomID) => {
     });
 };
 
-//ends the game
-export const endGame = async (roomID) => {
-    const roomRef = doc(db, 'rooms', roomID);
-    await updateDoc(roomRef, { isGameActive: false, endedAt: serverTimestamp() });
-};
-
 // Persists the most recent /mission done completion's reversal snapshot on
 // the room itself, so /mission undo has something to act on — the
 // command-path counterpart to approvePhotoAsMissionForRoom's

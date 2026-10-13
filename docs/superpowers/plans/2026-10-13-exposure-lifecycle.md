@@ -120,14 +120,21 @@ Read `functions/callableFunctions/gameBoundary.js`'s current `exports.disableGam
 Add to `functions/callableFunctions/gameBoundary.integration.test.js`, in whatever `describe` block already covers `disableGameBoundary` (read the file to find its exact name and seeding helpers):
 
 ```javascript
-it('clears every exposed player\'s boundary status when the boundary is disabled', async () => {
+it("clears every exposed player's boundary status when the boundary is disabled", async () => {
     const host = await newIdentity();
     const alice = await newIdentity();
     const bob = await newIdentity();
-    await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }, { name: 'bob', uid: bob.uid }], {
-        hostId: host.uid,
-        gameBoundary: BOUNDARY, // whatever this file's existing enabled-boundary fixture is named
-    });
+    await seedRoom(
+        ROOM,
+        [
+            { name: 'alice', uid: alice.uid },
+            { name: 'bob', uid: bob.uid },
+        ],
+        {
+            hostId: host.uid,
+            gameBoundary: BOUNDARY, // whatever this file's existing enabled-boundary fixture is named
+        }
+    );
     await withSecurityRulesDisabled(async (context) => {
         const db = context.firestore();
         await setDoc(doc(db, 'rooms', ROOM, 'boundaryStatuses', 'alice'), {
@@ -147,10 +154,22 @@ it('clears every exposed player\'s boundary status when the boundary is disabled
 
     await disableAs(host)({ roomId: ROOM, expectedRevision: 1 }); // this file's existing disableGameBoundary caller helper, adjust the expected-revision value to match BOUNDARY's actual seeded revision
 
-    const aliceStatus = (await getDoc(doc(bypass, 'rooms', ROOM, 'boundaryStatuses', 'alice'))).data();
+    const aliceStatus = (
+        await getDoc(doc(bypass, 'rooms', ROOM, 'boundaryStatuses', 'alice'))
+    ).data();
     const bobStatus = (await getDoc(doc(bypass, 'rooms', ROOM, 'boundaryStatuses', 'bob'))).data();
-    expect(aliceStatus).toMatchObject({ status: 'unavailable', reason: 'boundary_disabled', lat: null, lng: null, outsideConfirmedAt: null });
-    expect(bobStatus).toMatchObject({ status: 'unavailable', reason: 'boundary_disabled', outsideSince: null });
+    expect(aliceStatus).toMatchObject({
+        status: 'unavailable',
+        reason: 'boundary_disabled',
+        lat: null,
+        lng: null,
+        outsideConfirmedAt: null,
+    });
+    expect(bobStatus).toMatchObject({
+        status: 'unavailable',
+        reason: 'boundary_disabled',
+        outsideSince: null,
+    });
 });
 
 it('does not throw when disabling a boundary for a player with no boundaryStatuses document at all', async () => {
@@ -163,7 +182,7 @@ it('does not throw when disabling a boundary for a player with no boundaryStatus
     await expect(disableAs(host)({ roomId: ROOM, expectedRevision: 1 })).resolves.toBeDefined();
 });
 
-it('leaves an already-inside player\'s boundary status untouched when the boundary is disabled', async () => {
+it("leaves an already-inside player's boundary status untouched when the boundary is disabled", async () => {
     const host = await newIdentity();
     const alice = await newIdentity();
     await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }], {
@@ -178,7 +197,9 @@ it('leaves an already-inside player\'s boundary status untouched when the bounda
 
     await disableAs(host)({ roomId: ROOM, expectedRevision: 1 });
 
-    const aliceStatus = (await getDoc(doc(bypass, 'rooms', ROOM, 'boundaryStatuses', 'alice'))).data();
+    const aliceStatus = (
+        await getDoc(doc(bypass, 'rooms', ROOM, 'boundaryStatuses', 'alice'))
+    ).data();
     expect(aliceStatus).toEqual({ status: 'inside' });
 });
 ```
@@ -273,7 +294,7 @@ Add to `src/pages/PlayerGame.test.jsx`: find wherever this file's `useBoundaryLo
 Add to `functions/callableFunctions/killPlayer.integration.test.js`: find this file's existing test seeding/asserting shape, and add:
 
 ```javascript
-it('clears the target\'s boundary status if they were confirmed outside at the moment of the kill', async () => {
+it("clears the target's boundary status if they were confirmed outside at the moment of the kill", async () => {
     // Seed assassin and target with a valid kill relationship (read this
     // file's existing happy-path test for the exact seeding shape), plus
     // a boundaryStatuses doc for the target with status: 'outside',
@@ -394,7 +415,7 @@ it('sets isGameActive false and endedAt, as the host', async () => {
     // isGameActive is false and endedAt is a Timestamp.
 });
 
-it('clears every exposed player\'s boundary status when the game ends', async () => {
+it("clears every exposed player's boundary status when the game ends", async () => {
     // Mirror Task 2's equivalent test exactly: seed two players, one
     // 'outside' and one 'near', call endGame as the host, assert both
     // are cleared to status 'unavailable', reason 'game_ended'.
@@ -467,7 +488,10 @@ exports.endGame = functions.https.onCall(async (data, context) => {
             );
         }
         if (!room.isGameActive) {
-            throw new functions.https.HttpsError('failed-precondition', 'This game has already ended.');
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                'This game has already ended.'
+            );
         }
 
         await clearExposureForRoom(transaction, roomRef, 'game_ended');
@@ -511,8 +535,8 @@ In `src/components/header_components/Endgamebutton.js` and `src/components/lobby
 In `functions/index.js`, add:
 
 ```javascript
-const { endGame } = require('./callableFunctions/endGame')
-exports.endGame = endGame
+const { endGame } = require('./callableFunctions/endGame');
+exports.endGame = endGame;
 ```
 
 - [ ] **Step 4: Run to verify the tests pass**
@@ -567,16 +591,16 @@ it('shows a hover tooltip (not a native title attribute) for a position with a l
 
 it('always renders a visible label (no hover needed) when alwaysShowLabel is true', () => {
     renderMap({
-        otherPositions: [
-            { id: 'alice', lat: 10, lng: 20, label: 'Alice', alwaysShowLabel: true },
-        ],
+        otherPositions: [{ id: 'alice', lat: 10, lng: 20, label: 'Alice', alwaysShowLabel: true }],
     });
     expect(screen.getByText('Alice')).toBeInTheDocument();
 });
 
 it('does not render a visible label at all for a position with no label', () => {
     renderMap({ otherPositions: [{ id: 'alice', lat: 10, lng: 20 }] });
-    expect(screen.queryByText(/./, { selector: '[data-testid="always-visible-label"]' })).not.toBeInTheDocument();
+    expect(
+        screen.queryByText(/./, { selector: '[data-testid="always-visible-label"]' })
+    ).not.toBeInTheDocument();
 });
 ```
 
@@ -652,21 +676,25 @@ const PositionDot = ({ label, alwaysShowLabel }) => {
 Update both call sites — the existing own-position marker and the `otherPositions.map(...)` block — to pass the new props instead of `title`:
 
 ```jsx
-{ownPosition && (
-    <Marker longitude={ownPosition.lng} latitude={ownPosition.lat}>
-        <PositionDot />
-    </Marker>
-)}
-{otherPositions.map((position) => (
-    <Marker
-        key={position.id}
-        data-testid="other-position-marker"
-        longitude={position.lng}
-        latitude={position.lat}
-    >
-        <PositionDot label={position.label} alwaysShowLabel={position.alwaysShowLabel} />
-    </Marker>
-))}
+{
+    ownPosition && (
+        <Marker longitude={ownPosition.lng} latitude={ownPosition.lat}>
+            <PositionDot />
+        </Marker>
+    );
+}
+{
+    otherPositions.map((position) => (
+        <Marker
+            key={position.id}
+            data-testid="other-position-marker"
+            longitude={position.lng}
+            latitude={position.lat}
+        >
+            <PositionDot label={position.label} alwaysShowLabel={position.alwaysShowLabel} />
+        </Marker>
+    ));
+}
 ```
 
 In `src/components/map_components/LivePlayerMapButton.js`: no change — its entries already only ever set `label`, never `alwaysShowLabel`, so they correctly default to the (now faster/larger) hover mode. Confirm this by reading the file; do not add `alwaysShowLabel: false` explicitly anywhere, since `undefined` already means the same thing and an explicit `false` would be noise.

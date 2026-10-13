@@ -9,11 +9,8 @@ import {
     useDisclosure,
 } from '@chakra-ui/react';
 import React, { useContext } from 'react';
-import {
-    addPlayerMessageForRoom,
-    endGame,
-    fetchAllPlayersDataForRoom,
-} from '../firebase_calls/dbCalls';
+import { addPlayerMessageForRoom, fetchAllPlayersDataForRoom } from '../firebase_calls/dbCalls';
+import { endGame } from '../endGame';
 import { buildLeaderboardStandings } from '../../game/leaderboard';
 import { useNavigate } from 'react-router-dom';
 import CreateAlert from '../CreateAlert';

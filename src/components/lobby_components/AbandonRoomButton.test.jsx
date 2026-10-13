@@ -17,9 +17,9 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import AbandonRoomButton from './AbandonRoomButton';
-import { endGame } from '../firebase_calls/dbCalls';
+import { endGame } from '../endGame';
 
-jest.mock('../firebase_calls/dbCalls', () => ({
+jest.mock('../endGame', () => ({
     endGame: jest.fn(),
 }));
 
