@@ -6,6 +6,7 @@ import ResetTargetsButton from './ResetTargetsButton';
 import Endgamebutton from './Endgamebutton';
 import LogoutButton from './LogoutButton';
 import GameBoundaryButton from '../map_components/GameBoundaryButton';
+import LivePlayerMapButton from '../map_components/LivePlayerMapButton';
 import { gameContext } from '../Contexts';
 
 const HeaderExecution = ({ addLog, arrayOfAlivePlayers, gameBoundary }) => {
@@ -17,6 +18,11 @@ const HeaderExecution = ({ addLog, arrayOfAlivePlayers, gameBoundary }) => {
             <Spacer />
             <PlaybookLink />
             <GameBoundaryButton roomID={roomID} gameBoundary={gameBoundary} />
+            <LivePlayerMapButton
+                roomID={roomID}
+                players={arrayOfAlivePlayers.map((name) => ({ name }))}
+                boundaryVertices={gameBoundary?.vertices ?? null}
+            />
             <ResetTargetsButton arrayOfPlayers={arrayOfAlivePlayers} addLog={addLog} />
             <Endgamebutton />
             <LogoutButton />

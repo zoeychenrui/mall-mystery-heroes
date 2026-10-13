@@ -47,6 +47,16 @@ jest.mock('../utils/firebase', () => ({ auth: {} }));
 // same reasoning as every other stub in this file.
 jest.mock('../components/map_components/BoundaryEditorModal', () => () => null);
 
+// HeaderExecution now also renders LivePlayerMapButton, which imports the
+// real GameMap, which imports 'react-map-gl' -> 'mapbox-gl' at module load
+// time — mapbox-gl's loader touches TextDecoder, undefined in jsdom, same
+// class of problem as the mocks above. LivePlayerMapButton has its own
+// thorough test file (LivePlayerMapButton.test.jsx), where GameMap itself
+// is stubbed instead; stubbing the whole button here keeps this file's
+// concern to GameMasterView's own logic, same reasoning as every other
+// stub in this file.
+jest.mock('../components/map_components/LivePlayerMapButton', () => () => null);
+
 // Explicit factory, not auto-mock — see ChatInput.test.jsx for why.
 jest.mock('../components/firebase_calls/dbCalls', () => ({
     fetchPlayersQueryByDescendPointsThenIsAliveForRoom: jest.fn(() => 'players-query'),
