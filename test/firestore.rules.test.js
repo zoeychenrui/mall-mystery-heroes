@@ -581,6 +581,53 @@ describe('game boundary: rooms/{roomId}/boundaryStatuses and boundaryEvents, and
         );
     });
 
+    it("allows a player to read ANOTHER player's boundaryStatuses doc once it reads outside", async () => {
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        // PLAYER_UID owns bob's player doc (see this block's beforeEach/seed),
+        // so reading bob's own status is the "own doc" case already covered
+        // elsewhere — this test is specifically about a DIFFERENT player
+        // (alice) whose status is NOT outside, confirming the new clause does
+        // not open her door, then flips it to outside and confirms it does.
+        await expectPermissionDenied(
+            getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'alice'))
+        );
+
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+            await setDoc(doc(context.firestore(), 'rooms', 'room-a', 'boundaryStatuses', 'alice'), {
+                status: 'outside',
+            });
+        });
+
+        await assertSucceeds(getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'alice')));
+    });
+
+    it('returns only the currently-outside players from a status-filtered list query, for a non-host player', async () => {
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        const outsideQuery = query(
+            collection(db, 'rooms', 'room-a', 'boundaryStatuses'),
+            where('status', '==', 'outside')
+        );
+        const snapshot = await assertSucceeds(getDocs(outsideQuery));
+        // bob is seeded as 'outside' in this block's beforeEach; alice is
+        // 'inside' and must not appear even though the query ran successfully.
+        expect(snapshot.docs.map((d) => d.id)).toEqual(['bob']);
+    });
+
+    it('still denies an unfiltered list of boundaryStatuses for a non-host player, even though some documents in the room are outside', async () => {
+        // The new rule clause makes SOME documents in this room readable to
+        // this player (bob's, since it's outside) but not ALL of them
+        // (alice's, which is inside) — Firestore cannot prove an unfiltered
+        // list query safe under a rule that only some candidate documents
+        // satisfy, so the whole query must still be denied, exactly as the
+        // pre-existing 'denies a player listing boundaryStatuses' test already
+        // asserts for the pre-change rule. This test exists specifically to
+        // confirm that invariant survives this rule change.
+        const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+        await expectPermissionDenied(
+            getDocs(collection(db, 'rooms', 'room-a', 'boundaryStatuses'))
+        );
+    });
+
     it('denies a signed-in non-member reading any boundaryStatuses or boundaryEvents in another room', async () => {
         const db = testEnv.authenticatedContext(OTHER_UID).firestore();
         await expectPermissionDenied(getDoc(doc(db, 'rooms', 'room-a', 'boundaryStatuses', 'bob')));

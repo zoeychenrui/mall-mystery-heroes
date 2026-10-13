@@ -108,12 +108,15 @@ service cloud.firestore {
       }
 
       // Game boundary status and events are written only by the Cloud
-      // Functions (Admin SDK). A player reads only their own status doc, and
-      // there is no list grant for players, so the roster of statuses stays
-      // host-only.
+      // Functions (Admin SDK). A player reads their own status doc, or any
+      // other player's once it reads 'outside' (live location visibility,
+      // docs/superpowers/specs/2026-10-12-live-location-visibility-design.md)
+      // — there is still no list grant broad enough to enumerate every
+      // status, so an unfiltered roster stays host-only.
       match /boundaryStatuses/{playerId} {
         allow read: if isHostOfExistingRoom(roomId) ||
-          (isSignedIn() && isOwnBoundaryStatus(roomId, playerId));
+          (isSignedIn() && isOwnBoundaryStatus(roomId, playerId)) ||
+          (isSignedIn() && isPlayerOfRoom(roomId) && resource.data.status == 'outside');
         allow write: if false;
       }
 
