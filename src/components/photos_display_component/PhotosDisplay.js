@@ -181,13 +181,27 @@ const PhotosDisplay = ({ players = [] }) => {
                 }
             } else {
                 const target = approvingPhoto.target;
+                const killResult = await executeKill(target, approvingPhoto.assassin, roomID);
+                // A Horcrux saved the target. killPlayer.js has already
+                // logged and announced it; the photo is closed out as
+                // denied, since no kill happened.
+                if (killResult.blockedByHorcrux) {
+                    await updatePhotoStatusForRoom(roomID, approvingPhoto.id, 'denied');
+                    createAlert(
+                        'info',
+                        'Horcrux!',
+                        `${killResult.targetName}'s Horcrux saved them — no kill`,
+                        3000
+                    );
+                    return;
+                }
                 const {
                     targetWasOpenSzn,
                     preKillSnapshot,
                     addedTargets,
                     addedAssassins,
                     remapLogs,
-                } = await executeKill(target, approvingPhoto.assassin, roomID);
+                } = killResult;
 
                 await approvePhotoForRoom(roomID, approvingPhoto.id, target, preKillSnapshot);
                 // Mirrors handleKillPlayer's own ordering for the typed
@@ -376,6 +390,14 @@ const PhotosDisplay = ({ players = [] }) => {
                             </Text>
                         ) : (
                             <Text color="gray.400">No target selected.</Text>
+                        )}
+                        {/* Set by submitKillPhoto.js. A photo taken while the
+                            target's Horcrux was active doesn't count
+                            (POWER_UPS_SPEC.md) — the GM decides. */}
+                        {currentPhoto.targetHorcruxActive && (
+                            <Text color="purple.300" fontWeight="bold">
+                                🛡️ Taken while {currentPhoto.target}&apos;s Horcrux was active
+                            </Text>
                         )}
                     </Box>
                 )}

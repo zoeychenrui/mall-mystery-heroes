@@ -40,6 +40,7 @@ import MessageFeed from '../components/player_messages_components/MessageFeed';
 import MessageComposer from '../components/player_messages_components/MessageComposer';
 import PlayerTaskListModal from '../components/task_components/PlayerTaskListModal';
 import LeaderboardModal from '../components/game_end_components/LeaderboardModal';
+import PowerUpShopModal from '../components/shop_components/PowerUpShopModal';
 import { buildLeaderboardStandings } from '../game/leaderboard';
 import { formatMessageTime } from '../utils/formatMessageTime';
 import { normalizePlayerName, resolvePlayerDisplayName } from '../game/playerNames';
@@ -57,6 +58,8 @@ const {
     isPositionFresh,
     canSee,
 } = require('../game/gameBoundary');
+// require() for the same CommonJS reason as gameBoundary.js above.
+const { isHorcruxActive } = require('../game/powerUpEffects');
 
 // Plain-language text for every reason deriveFreshStatus/gameBoundary.js
 // and the reportPlayerLocation callable can actually produce for an
@@ -119,6 +122,7 @@ const PlayerGame = () => {
         onOpen: onLeaderboardOpen,
         onClose: onLeaderboardClose,
     } = useDisclosure();
+    const { isOpen: isShopOpen, onOpen: onShopOpen, onClose: onShopClose } = useDisclosure();
     const {
         isOpen: isGameEndedOpen,
         onOpen: onGameEndedOpen,
@@ -126,6 +130,33 @@ const PlayerGame = () => {
     } = useDisclosure();
     const cancelRef = useRef();
     const createAlert = CreateAlert();
+    // Positions from a ping card's "View on map", shown alongside the
+    // live ones until the map closes. Snapshots — never updated.
+    const [pingPositions, setPingPositions] = useState([]);
+    const handleShowPings = useCallback(
+        (pings) => {
+            setPingPositions(
+                pings
+                    .filter((ping) => Number.isFinite(ping.lat) && Number.isFinite(ping.lng))
+                    .map((ping) => ({
+                        id: `ping-${ping.name}`,
+                        lat: ping.lat,
+                        lng: ping.lng,
+                        label: `📍 ${ping.name}`,
+                        alwaysShowLabel: true,
+                    }))
+            );
+            onMapOpen();
+        },
+        [onMapOpen]
+    );
+    const handleMapClose = () => {
+        setPingPositions([]);
+        onMapClose();
+    };
+    // purchasePowerUp enforces the same rules server-side; this only hides
+    // the button. `=== true` keeps it hidden until the player doc loads.
+    const canShop = gameStarted && isGameActive && playerData?.isAlive === true;
 
     useEffect(() => {
         setPendingMessages([]);
@@ -330,6 +361,10 @@ const PlayerGame = () => {
         return () => unsubscribe();
     }, [roomID, gameBoundary?.enabled, playerName]);
 
+    // The map exists only under this condition (see the location panel
+    // below), so ping cards offer "View on map" only then too.
+    const isMapAvailable = isGameActive && gameBoundary?.enabled && (playerData?.isAlive ?? true);
+
     // Mounted always, regardless of whether the map modal is open —
     // closing PlayerMapModal must not stop location reporting.
     const { permissionState, ownPosition, requestPermission } = useBoundaryLocation({
@@ -495,9 +530,18 @@ const PlayerGame = () => {
             bg={!isGameActive ? 'red.900' : undefined}
         >
             <Flex justifyContent="space-between" alignItems="center" wrap="wrap" gap={2} mb={2}>
-                <Heading size="md">
-                    {playerName || 'You'} joined {roomID}
-                </Heading>
+                <HStack spacing={2}>
+                    {/* Top-left per POWER_UPS_SPEC.md — only while there's a
+                        game to spend points in, and only for the living. */}
+                    {canShop && (
+                        <Button size="sm" colorScheme="yellow" onClick={onShopOpen}>
+                            Shop
+                        </Button>
+                    )}
+                    <Heading size="md">
+                        {playerName || 'You'} joined {roomID}
+                    </Heading>
+                </HStack>
                 <HStack spacing={2}>
                     <Button
                         size="sm"
@@ -547,6 +591,28 @@ const PlayerGame = () => {
                 isOpen={isLeaderboardOpen}
                 onClose={onLeaderboardClose}
                 standings={buildLeaderboardStandings(players)}
+            />
+            <PowerUpShopModal
+                // && canShop: an open shop closes itself if the player is
+                // eliminated (or the game ends) while browsing it.
+                isOpen={isShopOpen && canShop}
+                onClose={onShopClose}
+                roomID={roomID}
+                score={playerData?.score}
+                cooldowns={playerData?.powerUpCooldowns}
+                horcruxActive={
+                    !!playerData &&
+                    isHorcruxActive(
+                        {
+                            horcrux: playerData.horcrux,
+                            horcruxEndsAtMs: playerData.horcruxEndsAt?.toMillis?.() ?? null,
+                        },
+                        nowMs
+                    )
+                }
+                pendingMysteryItem={playerData?.pendingMysteryItem ?? null}
+                players={players}
+                playerName={playerName}
             />
             {/* Once the game has ended, the target/status text no longer
                 applies — the "please head back" and final-standings
@@ -664,9 +730,9 @@ const PlayerGame = () => {
                             </Button>
                             <PlayerMapModal
                                 isOpen={isMapOpen}
-                                onClose={onMapClose}
+                                onClose={handleMapClose}
                                 boundaryVertices={gameBoundary.vertices}
-                                otherPositions={freshOtherOutsidePositions}
+                                otherPositions={[...freshOtherOutsidePositions, ...pingPositions]}
                                 ownPosition={
                                     ownPosition &&
                                     nowMs - ownPosition.acquiredAtMs <=
@@ -708,6 +774,7 @@ const PlayerGame = () => {
                 </ModalContent>
             </Modal>
             <MessageFeed
+                onShowPings={isMapAvailable ? handleShowPings : undefined}
                 roomID={roomID}
                 playerName={playerName}
                 pendingMessages={pendingMessages}
@@ -721,6 +788,7 @@ const PlayerGame = () => {
                 onOptimisticSendFailed={handleOptimisticSendFailed}
                 players={players}
                 missions={missions}
+                cameraBlockedUntil={playerData?.cameraBlockedUntil}
             />
         </Flex>
     );

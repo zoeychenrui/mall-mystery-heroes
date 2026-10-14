@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Flex, Image, List, ListItem, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Image, List, ListItem, Text } from '@chakra-ui/react';
 import { normalizePlayerName } from '../../game/playerNames';
 import { formatMessageTime } from '../../utils/formatMessageTime';
 import GameEndedLeaderboardBubble from './GameEndedLeaderboardBubble';
@@ -9,7 +9,11 @@ import GameEndedLeaderboardBubble from './GameEndedLeaderboardBubble';
 // applyMessageChanges) is skipped entirely on re-render — the whole point
 // of this split
 // (docs/superpowers/specs/2026-08-12-message-feed-render-perf-design.md).
-const MessageBubble = ({ message, playerName }) => {
+// "3:42 PM" for when a ping's position was captured.
+const captureTime = (ms) =>
+    new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+const MessageBubble = ({ message, playerName, onShowPings }) => {
     const mission = message.mission ?? {};
     // Only 'chat' messages have a sender to compare — every other type
     // (whisper/broadcast/leaderboard/mission) is GM-authored and has no
@@ -80,6 +84,51 @@ const MessageBubble = ({ message, playerName }) => {
                         </Text>
                     )}
                 </Box>
+            ) : message.type === 'powerUpPing' ? (
+                // A ping bought from the power-ups shop
+                // (functions/callableFunctions/purchasePowerUp.js): a snapshot
+                // of where each pinged player was at that moment, from the GPS
+                // system's boundaryStatuses. Global pings name who was pinged,
+                // never the buyer; personal pings reach only the buyer
+                // (recipient-filtered in MessageFeed.js).
+                <Box
+                    bg="orange.900"
+                    border="1px solid"
+                    borderColor="orange.400"
+                    borderRadius="md"
+                    p={2}
+                    display="inline-block"
+                >
+                    <Text as="span" fontWeight="bold" color="orange.300">
+                        Ping
+                    </Text>{' '}
+                    <Text as="span">{message.text}</Text>
+                    {time && (
+                        <Text as="span" fontSize="xs" color="gray.400" ml={2}>
+                            {time}
+                        </Text>
+                    )}
+                    {(message.pings ?? []).map((ping) => (
+                        <Text key={ping.name} fontSize="sm" color="gray.300">
+                            {ping.name}:{' '}
+                            {ping.lat == null
+                                ? 'no location'
+                                : `located at ${captureTime(ping.capturedAtMs)}${
+                                      ping.isStale ? ' (old)' : ''
+                                  }`}
+                        </Text>
+                    ))}
+                    {onShowPings && (message.pings ?? []).some((ping) => ping.lat != null) && (
+                        <Button
+                            size="xs"
+                            mt={1}
+                            colorScheme="orange"
+                            onClick={() => onShowPings(message.pings)}
+                        >
+                            View on map
+                        </Button>
+                    )}
+                </Box>
             ) : message.type === 'whisper' || message.type === 'broadcast' ? (
                 <Box
                     bg={message.type === 'whisper' ? 'whiteAlpha.100' : 'purple.900'}
@@ -126,8 +175,10 @@ const MessageBubble = ({ message, playerName }) => {
                     </Box>
                 </Flex>
             ) : (
-                // Reached only by 'killResult' now — 'whisper'/'broadcast'
-                // have their own GM-labeled branch above.
+                // Reached by 'killResult', and by the power-up notices
+                // 'horcruxSaved' (killPlayer.js) and 'powerUpNotice'
+                // (purchasePowerUp.js) — 'whisper'/'broadcast' have their
+                // own GM-labeled branch above.
                 <Text bg="gray.700" borderRadius="md" p={2} display="inline-block">
                     <Text as="span">{message.text}</Text>
                     {time && (

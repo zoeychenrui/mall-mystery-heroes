@@ -302,6 +302,20 @@ describe('approving a photo persists the undo snapshot (improvements item 6)', (
     });
 });
 
+describe('Horcrux note on a kill photo', () => {
+    it("notes a photo taken while the target's Horcrux was active", () => {
+        mountWithSnapshot([
+            { status: 'pending', target: 'alice', assassin: 'bob', targetHorcruxActive: true },
+        ]);
+        expect(screen.getByText(/Taken while alice's Horcrux was active/)).toBeInTheDocument();
+    });
+
+    it('shows no note otherwise', () => {
+        mountWithSnapshot([{ status: 'pending', target: 'alice', assassin: 'bob' }]);
+        expect(screen.queryByText(/Horcrux was active/)).not.toBeInTheDocument();
+    });
+});
+
 describe('kill outcomes are announced in the room chat', () => {
     it('posts a killResult chat message when a photo is approved', async () => {
         executeKill.mockResolvedValue({
@@ -331,6 +345,23 @@ describe('kill outcomes are announced in the room chat', () => {
                 'room-a'
             )
         );
+    });
+
+    it('closes the photo as denied, without a kill announcement, when a Horcrux saves the target', async () => {
+        executeKill.mockResolvedValue({ blockedByHorcrux: true, targetName: 'alice' });
+        mountWithSnapshot([{ status: 'pending', target: 'alice', assassin: 'bob' }]);
+
+        await userEvent.click(screen.getByAltText('Approve'));
+
+        await waitFor(() =>
+            expect(dbCalls.updatePhotoStatusForRoom).toHaveBeenCalledWith(
+                'room-a',
+                expect.anything(),
+                'denied'
+            )
+        );
+        expect(dbCalls.approvePhotoForRoom).not.toHaveBeenCalled();
+        expect(dbCalls.addPlayerMessageForRoom).not.toHaveBeenCalled();
     });
 
     it('posts a killResult chat message when a photo is denied', async () => {

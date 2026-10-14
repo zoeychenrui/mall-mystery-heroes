@@ -303,6 +303,10 @@ Gaps that remain, per [improvements.md](./improvements.md):
   `src/components/executeKill.js` is now a thin `httpsCallable` wrapper
   around it. This is the one place in the app where game logic runs
   server-side rather than in the browser.
+  Also enforces the Horcrux: a protected target survives, and the call
+  returns `{ blockedByHorcrux, targetName }` instead of a kill result
+  (after starting the 5-second grace period and announcing the save) —
+  both callers, `ChatInput.js` and `PhotosDisplay.js`, check for it.
 - `undoKillPlayer` (`functions/callableFunctions/undoKillPlayer.js`) — the
   atomic reversal of an approved kill (the 2026-08-16 full-kill-undo
   redesign, `docs/superpowers/specs/2026-08-16-full-kill-undo-design.md`).
@@ -416,6 +420,28 @@ Gaps that remain, per [improvements.md](./improvements.md):
   player doc's `rateLimits` field. `src/components/submitKillPhoto.js` is
   its thin `httpsCallable` wrapper, called from `MessageComposer.js` after
   the Storage upload.
+- `purchasePowerUp` and `claimMysteryReward`
+  (`functions/callableFunctions/purchasePowerUp.js`) — the player power-ups
+  shop (POWER_UPS_SPEC.md). Derives the buyer from `context.auth.uid`, then
+  in one transaction re-checks the same `purchaseBlockReason` rule the shop
+  UI uses (`src/game/powerUps.js`, vendored), deducts the price, stores the
+  cooldown in `powerUpCooldowns`, applies the item's effect, and logs it to
+  `logs` (`orange.300`). Effects (`planEffect`, rules in
+  `src/game/powerUpEffects.js`): the ad gives +3 points (no ad provider
+  exists, so completion isn't verified); pings copy each pinged player's
+  position from `boundaryStatuses` into a `'powerUpPing'` `playerMessages`
+  entry — global pings to everyone, personal pings to the buyer only — and
+  log a GPS alert (`orange.500`) for a stale or missing position; the camera
+  block sets the target's `cameraBlockedUntil`; the Horcrux sets
+  `horcrux`. The mystery box rolls once, outside the transaction so a retry
+  can't re-roll, and either awards points, refunds an unusable item's
+  price, applies the item, or — for an item that needs a player picked —
+  parks it in `pendingMysteryItem` for `claimMysteryReward`.
+  Both share a 20-calls-per-minute rate limit, counted in a separate
+  transaction first (`powerUpRateLimits`, see data-model.md) so rejected
+  calls count too.
+  `src/components/purchasePowerUp.js` holds both thin `httpsCallable`
+  wrappers, called from `PowerUpShopModal.js`.
 - `submitChatMessage` (`functions/callableFunctions/submitChatMessage.js`)
   — the same treatment for player group chat: derives `sender` from
   `context.auth.uid`, replacing `dbCalls.addChatMessageForRoom` and the

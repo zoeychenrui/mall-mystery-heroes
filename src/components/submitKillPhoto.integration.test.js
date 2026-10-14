@@ -110,6 +110,58 @@ describe('submitKillPhoto', () => {
         }
     });
 
+    it('rejects a photo while the sender’s camera is blocked', async () => {
+        const alice = await createIndependentIdentity();
+        try {
+            await seedRoom(ROOM, [
+                {
+                    name: 'alice',
+                    uid: alice.uid,
+                    cameraBlockedUntil: Timestamp.fromMillis(Date.now() + 20000),
+                },
+                { name: 'bob' },
+            ]);
+            const call = httpsCallable(alice.functions, 'submitKillPhoto');
+
+            await expect(call({ roomId: ROOM, url: REALISTIC_URL, target: 'bob' })).rejects.toThrow(
+                'Your camera is blocked'
+            );
+            const snapshot = await getDocs(fetchPhotosQueryByAscendingTimestampForRoom(ROOM));
+            expect(snapshot.docs).toHaveLength(0);
+        } finally {
+            await terminate(alice.db);
+        }
+    });
+
+    it('notes on the photo whether the claimed target’s Horcrux was active', async () => {
+        const alice = await createIndependentIdentity();
+        try {
+            await seedRoom(ROOM, [
+                { name: 'alice', uid: alice.uid },
+                {
+                    name: 'bob',
+                    horcrux: true,
+                    horcruxEndsAt: Timestamp.fromMillis(Date.now() + 3000),
+                },
+                { name: 'carol' },
+            ]);
+            const call = httpsCallable(alice.functions, 'submitKillPhoto');
+
+            await call({ roomId: ROOM, url: REALISTIC_URL, target: 'bob' });
+            await call({ roomId: ROOM, url: REALISTIC_URL, target: 'carol' });
+
+            const photos = (await getDocs(fetchPhotosQueryByAscendingTimestampForRoom(ROOM))).docs
+                .map((d) => d.data())
+                .sort((a, b) => a.target.localeCompare(b.target));
+            expect(photos.map((p) => [p.target, p.targetHorcruxActive])).toEqual([
+                ['bob', true],
+                ['carol', false],
+            ]);
+        } finally {
+            await terminate(alice.db);
+        }
+    });
+
     it('rejects a caller who is not a player of the room', async () => {
         await seedRoom(ROOM, [{ name: 'bob' }]);
         const call = callableAsNonHost('submitKillPhoto');

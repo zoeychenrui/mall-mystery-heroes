@@ -141,6 +141,17 @@ describe('/kill (improvements item 4: executeKill is now a Cloud Function call)'
         expect(executionHandlers.handleKillPlayer).toHaveBeenCalledWith('Alice', 'Bob', false);
     });
 
+    it('announces nothing when a Horcrux saves the target', async () => {
+        executeKill.mockResolvedValue({ blockedByHorcrux: true, targetName: 'Alice' });
+
+        const commandInput = mountChatInput();
+        typeAndSubmit(commandInput, '/kill alice bob');
+
+        expect(await screen.findByText(/Alice's Horcrux saved them/)).toBeInTheDocument();
+        expect(executionHandlers.handleKillPlayer).not.toHaveBeenCalled();
+        expect(executionHandlers.handleRemapping).not.toHaveBeenCalled();
+    });
+
     it('rejects a kill for a name not on the roster without calling executeKill', async () => {
         const commandInput = mountChatInput();
         typeAndSubmit(commandInput, '/kill nobody bob');

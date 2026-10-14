@@ -45,7 +45,7 @@
  */
 import React from 'react';
 import { ChakraProvider } from '@chakra-ui/react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MessageComposer from './MessageComposer';
 import { submitChatMessage } from '../submitChatMessage';
@@ -115,6 +115,32 @@ describe('MessageComposer', () => {
         // a kill target
         // (docs/superpowers/specs/2026-08-27-mission-completion-via-photo-design.md).
         mountComposer('Alice', []);
+
+        expect(screen.getByRole('button', { name: 'Send photo' })).toBeEnabled();
+    });
+
+    it('disables the camera and labels it blocked while another player has blocked it', () => {
+        mountComposer('Alice', ['bob'], { cameraBlockedUntil: Date.now() + 30000 });
+
+        expect(screen.getByRole('button', { name: 'Send photo (camera blocked)' })).toBeDisabled();
+    });
+
+    it('re-enables the camera on its own once the block ends', () => {
+        jest.useFakeTimers();
+        try {
+            mountComposer('Alice', ['bob'], { cameraBlockedUntil: Date.now() + 30000 });
+            expect(screen.getByRole('button', { name: /camera blocked/ })).toBeDisabled();
+
+            act(() => jest.advanceTimersByTime(30000));
+
+            expect(screen.getByRole('button', { name: 'Send photo' })).toBeEnabled();
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it('ignores a camera block that has already ended', () => {
+        mountComposer('Alice', ['bob'], { cameraBlockedUntil: Date.now() - 1000 });
 
         expect(screen.getByRole('button', { name: 'Send photo' })).toBeEnabled();
     });

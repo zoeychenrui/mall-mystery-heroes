@@ -10,9 +10,14 @@
  * See functions/callableFunctions/killPlayer.js for what this replaced:
  * ~9-15 separate, unbatched client writes (docs/improvements.md item 4).
  */
-import { doc, getDoc, setDoc, terminate } from 'firebase/firestore';
+import { doc, getDoc, getDocs, setDoc, terminate, Timestamp } from 'firebase/firestore';
 import { executeKill } from './executeKill';
-import { fetchPlayerForRoom, setOpenSznOfPlayerToValueForRoom } from './firebase_calls/dbCalls';
+import {
+    fetchLogsQueryByAscendingTimestampForRoom,
+    fetchPlayerForRoom,
+    fetchPlayerMessagesQueryForRoom,
+    setOpenSznOfPlayerToValueForRoom,
+} from './firebase_calls/dbCalls';
 import {
     callableAsNonHost,
     clearFirestore,
@@ -220,5 +225,61 @@ describe('executeKill', () => {
 
         await expect(executeKill('bob', 'alice', ROOM)).resolves.toBeDefined();
         expect((await fetchPlayerForRoom('bob', ROOM)).data().isAlive).toBe(false);
+    });
+});
+
+describe('executeKill — Horcrux (POWER_UPS_SPEC.md)', () => {
+    const horcruxRoom = (bobExtra) =>
+        seedRoom(ROOM, [
+            { name: 'alice', targets: ['bob'], score: 10 },
+            { name: 'bob', score: 5, assassins: ['alice'], horcrux: true, ...bobExtra },
+        ]);
+
+    it('saves a protected target: no kill, no points move, grace period starts, everyone told', async () => {
+        await horcruxRoom({ horcruxEndsAt: null });
+        const before = Date.now();
+
+        const result = await executeKill('bob', 'alice', ROOM);
+
+        expect(result).toEqual({ blockedByHorcrux: true, targetName: 'bob' });
+        const bob = (await fetchPlayerForRoom('bob', ROOM)).data();
+        expect(bob.isAlive).toBe(true);
+        expect(bob.score).toBe(5);
+        expect(bob.horcrux).toBe(true);
+        expect(bob.horcruxEndsAt.toMillis()).toBeGreaterThanOrEqual(before + 5000 - 2000);
+        expect((await fetchPlayerForRoom('alice', ROOM)).data().score).toBe(10);
+
+        const messages = (await getDocs(fetchPlayerMessagesQueryForRoom(ROOM))).docs.map((d) =>
+            d.data()
+        );
+        expect(messages).toEqual([
+            expect.objectContaining({ type: 'horcruxSaved', text: "🛡️ bob's Horcrux saved them!" }),
+        ]);
+        const logs = (await getDocs(fetchLogsQueryByAscendingTimestampForRoom(ROOM))).docs;
+        expect(logs[0].data().log).toMatch(/bob's Horcrux saved them/);
+    });
+
+    it('also blocks a second attempt inside the 5-second grace period, without extending it', async () => {
+        const endsAt = Timestamp.fromMillis(Date.now() + 4000);
+        await horcruxRoom({ horcruxEndsAt: endsAt });
+
+        expect(await executeKill('bob', 'alice', ROOM)).toEqual(
+            expect.objectContaining({ blockedByHorcrux: true })
+        );
+        const bob = (await fetchPlayerForRoom('bob', ROOM)).data();
+        expect(bob.isAlive).toBe(true);
+        expect(bob.horcruxEndsAt.toMillis()).toBe(endsAt.toMillis());
+    });
+
+    it('kills normally once the grace period is over, and clears the spent Horcrux', async () => {
+        await horcruxRoom({ horcruxEndsAt: Timestamp.fromMillis(Date.now() - 1000) });
+
+        const result = await executeKill('bob', 'alice', ROOM);
+
+        expect(result.blockedByHorcrux).toBeUndefined();
+        const bob = (await fetchPlayerForRoom('bob', ROOM)).data();
+        expect(bob.isAlive).toBe(false);
+        expect(bob.horcrux).toBe(false);
+        expect((await fetchPlayerForRoom('alice', ROOM)).data().score).toBe(15);
     });
 });

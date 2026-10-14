@@ -127,8 +127,20 @@ const handleCommandExecution = async (
                     arrayOfPlayerNames.includes(targetName) &&
                     arrayOfPlayerNames.includes(assassinName)
                 ) {
+                    const killResult = await executeKill(targetName, assassinName, roomID);
+                    // A Horcrux saved the target — killPlayer.js has already
+                    // logged and announced it, and nobody died.
+                    if (killResult.blockedByHorcrux) {
+                        createAlert(
+                            'info',
+                            'Horcrux!',
+                            `${killResult.targetName}'s Horcrux saved them — no kill`,
+                            3000
+                        );
+                        break;
+                    }
                     const { targetWasOpenSzn, addedTargets, addedAssassins, remapLogs } =
-                        await executeKill(targetName, assassinName, roomID);
+                        killResult;
                     // targetName/assassinName are the normalized (lowercased)
                     // matching keys — resolved back to actual stored casing
                     // here since this is the point where they become chat

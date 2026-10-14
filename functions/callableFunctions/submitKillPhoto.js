@@ -18,6 +18,8 @@ const { Timestamp, FieldValue } = require('firebase-admin/firestore');
 // setup) — src/game/ remains the single source of truth.
 const { nextRateLimitWindow } = require('../vendor/game/rateLimit');
 const { isValidKillPhotoUrl } = require('../vendor/game/killPhotoUrl');
+const { normalizePlayerName } = require('../vendor/game/playerNames');
+const { isCameraBlocked, isHorcruxActive } = require('../vendor/game/powerUpEffects');
 
 if (admin.apps.length === 0) {
     admin.initializeApp();
@@ -136,6 +138,43 @@ exports.submitKillPhoto = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('failed-precondition', 'This game has ended.');
         }
 
+        // Another player bought "Block a player's camera" on this one
+        // (purchasePowerUp.js). MessageComposer.js disables the camera
+        // button too; this is the check that can't be bypassed.
+        const nowMs = Date.now();
+        const blockedUntil = assassinData.cameraBlockedUntil
+            ? assassinData.cameraBlockedUntil.toMillis()
+            : null;
+        if (isCameraBlocked(blockedUntil, nowMs)) {
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                'Your camera is blocked — try again in a few seconds.'
+            );
+        }
+
+        // Whether the claimed target's Horcrux was active when this photo
+        // came in (POWER_UPS_SPEC.md: a photo taken during the Horcrux's
+        // 5-second grace period doesn't count). Recorded, not enforced —
+        // the GM judges the photo and sees this as a note.
+        let targetHorcruxActive = false;
+        if (hasTarget) {
+            const targetSnapshot = await transaction.get(
+                playersRef.doc(normalizePlayerName(target))
+            );
+            if (targetSnapshot.exists) {
+                const targetData = targetSnapshot.data();
+                targetHorcruxActive = isHorcruxActive(
+                    {
+                        horcrux: targetData.horcrux,
+                        horcruxEndsAtMs: targetData.horcruxEndsAt
+                            ? targetData.horcruxEndsAt.toMillis()
+                            : null,
+                    },
+                    nowMs
+                );
+            }
+        }
+
         const rateLimits = assassinData.rateLimits || {};
         const currentWindow = rateLimits.photo
             ? {
@@ -171,6 +210,7 @@ exports.submitKillPhoto = functions.https.onCall(async (data, context) => {
             timestamp: FieldValue.serverTimestamp(),
             status: 'pending',
             originalPlayerData: null,
+            targetHorcruxActive,
         });
 
         // Posts the photo into the room's own chat immediately, so every

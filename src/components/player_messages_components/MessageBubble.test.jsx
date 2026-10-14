@@ -11,14 +11,19 @@
 import React from 'react';
 import { ChakraProvider, List } from '@chakra-ui/react';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import MessageBubble from './MessageBubble';
 import { formatMessageTime } from '../../utils/formatMessageTime';
 
-const mountBubble = (message, playerName = 'Alice') =>
+const mountBubble = (message, playerName = 'Alice', onShowPings = undefined) =>
     render(
         <ChakraProvider>
             <List>
-                <MessageBubble message={message} playerName={playerName} />
+                <MessageBubble
+                    message={message}
+                    playerName={playerName}
+                    onShowPings={onShowPings}
+                />
             </List>
         </ChakraProvider>
     );
@@ -78,6 +83,90 @@ describe('MessageBubble', () => {
         expect(
             screen.getByText('Revival Mission · 0 points · Limited to 3 players')
         ).toBeInTheDocument();
+    });
+
+    it('renders a power-up ping as a Ping card naming who was pinged', () => {
+        mountBubble({
+            type: 'powerUpPing',
+            recipient: null,
+            text: '📍 bob has been pinged!',
+            pingedPlayer: 'bob',
+            location: null,
+            standings: null,
+            mission: null,
+            sender: null,
+        });
+
+        expect(screen.getByText('Ping')).toBeInTheDocument();
+        expect(screen.getByText('📍 bob has been pinged!')).toBeInTheDocument();
+        // Not mislabeled as a GM message.
+        expect(screen.queryByText('GM:')).not.toBeInTheDocument();
+    });
+
+    describe('ping locations', () => {
+        const ping = (overrides = {}) => ({
+            type: 'powerUpPing',
+            recipient: null,
+            text: '📍 bob has been pinged!',
+            pingedPlayer: 'bob',
+            pings: [
+                {
+                    name: 'bob',
+                    lat: 36,
+                    lng: -78,
+                    accuracyMeters: 5,
+                    capturedAtMs: Date.now(),
+                    isStale: false,
+                },
+            ],
+            ...overrides,
+        });
+
+        it('says when each pinged position was captured', () => {
+            mountBubble(ping());
+            expect(screen.getByText(/bob: located at/)).toBeInTheDocument();
+        });
+
+        it('marks an old position, and says when there is none', () => {
+            mountBubble(
+                ping({
+                    pings: [
+                        { name: 'bob', lat: 36, lng: -78, capturedAtMs: 0, isStale: true },
+                        { name: 'carol', lat: null, lng: null, capturedAtMs: null, isStale: true },
+                    ],
+                })
+            );
+            expect(screen.getByText(/bob: located at .* \(old\)/)).toBeInTheDocument();
+            expect(screen.getByText('carol: no location')).toBeInTheDocument();
+        });
+
+        it('opens the map on the pinged positions', async () => {
+            const onShowPings = jest.fn();
+            const message = ping();
+            mountBubble(message, 'Alice', onShowPings);
+
+            await userEvent.click(screen.getByRole('button', { name: 'View on map' }));
+
+            expect(onShowPings).toHaveBeenCalledWith(message.pings);
+        });
+
+        it('offers no map button when there is no map, or nothing to show', () => {
+            mountBubble(ping());
+            expect(screen.queryByRole('button', { name: 'View on map' })).not.toBeInTheDocument();
+        });
+    });
+
+    it('shows a Horcrux save and camera notices as plain announcements', () => {
+        mountBubble({
+            type: 'horcruxSaved',
+            recipient: null,
+            text: "🛡️ bob's Horcrux saved them!",
+            standings: null,
+            mission: null,
+            sender: null,
+        });
+        expect(screen.getByText("🛡️ bob's Horcrux saved them!")).toBeInTheDocument();
+        expect(screen.queryByText('GM:')).not.toBeInTheDocument();
     });
 
     it('shows a chat message with its sender', () => {
