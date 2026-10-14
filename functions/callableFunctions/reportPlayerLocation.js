@@ -10,6 +10,7 @@ const {
     classifyFix,
     nextBoundaryState,
     initialBoundaryState,
+    stateAfterBoundaryRevision,
     GAME_BOUNDARY_CONFIG,
 } = require('../vendor/game/gameBoundary');
 const { nextRateLimitWindow } = require('../vendor/game/rateLimit');
@@ -142,20 +143,18 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
         const statusRef = roomRef.collection('boundaryStatuses').doc(playerDoc.id);
         const statusSnapshot = await transaction.get(statusRef);
         const storedData = statusSnapshot.exists ? statusSnapshot.data() : null;
-        // A stored run from a different boundary revision cannot be carried
-        // forward — the area it was measured against no longer applies — but
-        // lastSampleMs survives so out-of-order rejection still works across
-        // the revision change.
-        const prev =
-            storedData === null
-                ? initialBoundaryState()
-                : storedData.boundaryRevision !== boundary.revision
-                  ? { ...initialBoundaryState(), lastSampleMs: toMs(storedData.lastSampleAt) }
-                  : stateFromDoc(storedData);
-        // A revision mismatch does NOT reset these — unlike the
-        // boundary-confirmation state, a player's last known position is
-        // still their last known position regardless of which boundary
-        // revision it was measured against; only the boundary math changes.
+        // Read the stored run whole. A revision change does not discard it
+        // here — stateAfterBoundaryRevision decides that once this report
+        // has been classified against the new ring. lastSampleMs is what
+        // the out-of-order check below compares, and it is meaningful
+        // either way.
+        const stored = storedData === null ? initialBoundaryState() : stateFromDoc(storedData);
+        const revisionChanged =
+            storedData !== null && storedData.boundaryRevision !== boundary.revision;
+        // A revision change does not reset these. A player's last known
+        // position is still their last known position; only the boundary
+        // math changes. Exposure state is decided separately, once this
+        // report is classified against the new ring.
         const prevLat = storedData === null ? null : (storedData.lat ?? null);
         const prevLng = storedData === null ? null : (storedData.lng ?? null);
 
@@ -184,7 +183,7 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
                     lat: prevLat,
                     lng: prevLng,
                     boundaryRevision,
-                    lastSampleAt: toTimestamp(prev.lastSampleMs),
+                    lastSampleAt: toTimestamp(stored.lastSampleMs),
                 },
                 { merge: true }
             );
@@ -193,7 +192,7 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
 
         // Applies to every report, error reports included, so a late error
         // cannot overwrite a newer sample's status.
-        if (prev.lastSampleMs !== null && sampleMs <= prev.lastSampleMs) {
+        if (stored.lastSampleMs !== null && sampleMs <= stored.lastSampleMs) {
             throw new functions.https.HttpsError(
                 'invalid-argument',
                 'Location sample is out of order.'
@@ -204,19 +203,19 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
         let accuracyMeters = null;
         let nextLat = prevLat;
         let nextLng = prevLng;
-        if (isErrorReport) {
-            // An error report is an unusable fix: same transition, reason is the error code.
-            next = nextBoundaryState(
-                prev,
-                { kind: 'unusable', reason: error },
-                { sampleMs, receivedMs }
-            );
-        } else {
+        // An error report is an unusable fix: same transition, reason is the error code.
+        // A revision change keeps an already-exposed player's clock only when
+        // this fix is still outside the new ring; every other classification
+        // starts clean. Same revision: the stored run is the previous state.
+        const classification = isErrorReport
+            ? { kind: 'unusable', reason: error }
+            : classifyFix(boundary.vertices, { lat, lng, accuracyM });
+        const prev = revisionChanged ? stateAfterBoundaryRevision(stored, classification) : stored;
+        next = nextBoundaryState(prev, classification, { sampleMs, receivedMs });
+        if (!isErrorReport) {
             if (Number.isFinite(accuracyM)) {
                 accuracyMeters = accuracyM;
             }
-            const classification = classifyFix(boundary.vertices, { lat, lng, accuracyM });
-            next = nextBoundaryState(prev, classification, { sampleMs, receivedMs });
             nextLat = lat;
             nextLng = lng;
         }
@@ -268,7 +267,9 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
                 timestamp: FieldValue.serverTimestamp(),
             });
         }
-        if (prev.outsideConfirmedAt !== null && next.status === 'inside') {
+        // Exposure ends on a clear inside fix or on a near-edge fix (returning
+        // toward the area). Both clear outsideConfirmedAt.
+        if (prev.outsideConfirmedAt !== null && next.outsideConfirmedAt === null) {
             transaction.create(roomRef.collection('boundaryEvents').doc(), {
                 type: 'returnedInside',
                 playerId: playerDoc.id,

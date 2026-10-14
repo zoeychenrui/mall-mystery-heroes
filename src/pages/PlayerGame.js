@@ -56,6 +56,7 @@ const {
     deriveFreshStatus,
     GAME_BOUNDARY_CONFIG,
     isPositionFresh,
+    canSee,
 } = require('../game/gameBoundary');
 // require() for the same CommonJS reason as gameBoundary.js above.
 const { isHorcruxActive } = require('../game/powerUpEffects');
@@ -348,6 +349,8 @@ const PlayerGame = () => {
                         id: doc.id,
                         lat: data.lat,
                         lng: data.lng,
+                        accuracyM: data.accuracyMeters ?? 0,
+                        status: data.status,
                         lastUsableMs: data.lastUsableReceivedAt?.toMillis?.() ?? null,
                     });
                 });
@@ -395,6 +398,38 @@ const PlayerGame = () => {
         // gating on aliveness before this change existed.
         isAlive: playerData?.isAlive ?? true,
     });
+
+    // Derived at render time from the raw snapshot data above and the
+    // existing `nowMs` ticker — not stored state of its own — so a position
+    // goes stale and disappears purely from time passing, even with no new
+    // Firestore snapshot. Also guards against a legacy/malformed doc whose
+    // lat/lng are missing or not finite numbers.
+    // The viewer and each target go through canSee, which classifies both
+    // positions with the same outside check. Freshness and finite
+    // coordinates stay here: they decide whether a marker can be drawn,
+    // not whether the player is exposed.
+    const viewer = {
+        id: playerName ? normalizePlayerName(playerName) : null,
+        lat: ownPosition?.lat,
+        lng: ownPosition?.lng,
+        accuracyM: ownPosition?.accuracyM,
+        status: boundaryStatusDoc?.status,
+    };
+    const freshOtherOutsidePositions = otherOutsidePositions
+        .filter(
+            (position) =>
+                canSee(viewer, position, gameBoundary?.vertices) &&
+                isPositionFresh(position.lastUsableMs, nowMs) &&
+                Number.isFinite(position.lat) &&
+                Number.isFinite(position.lng)
+        )
+        .map((position) => ({
+            id: position.id,
+            lat: position.lat,
+            lng: position.lng,
+            label: resolvePlayerDisplayName(position.id, players),
+            alwaysShowLabel: true,
+        }));
 
     // Derived from the subscribed status doc, the local ticker, and this
     // device's own identity/revision — not stored state of its own.

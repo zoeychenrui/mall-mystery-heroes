@@ -313,6 +313,8 @@ const {
     classifyFix,
     initialBoundaryState,
     nextBoundaryState,
+    stateAfterBoundaryRevision,
+    canSee,
     deriveFreshStatus,
     isPositionFresh,
     offsetPoint,
@@ -465,11 +467,14 @@ describe('nextBoundaryState', () => {
         expect(s.outsideSinceMs).toBeNull();
     });
 
-    it('keeps a confirmed outside flag through near readings until clearly inside', () => {
+    it('ends exposure on a near reading so a returning player is no longer visible to peers', () => {
         let s = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, at(0));
         s = nextBoundaryState(s, { kind: 'outside' }, at(20000));
-        s = nextBoundaryState(s, { kind: 'near' }, at(25000));
         expect(s.status).toBe('outside');
+        expect(s.outsideConfirmedAt).toBe(20000);
+        s = nextBoundaryState(s, { kind: 'near' }, at(25000));
+        expect(s.status).toBe('near');
+        expect(s.outsideConfirmedAt).toBeNull();
         s = nextBoundaryState(s, { kind: 'inside' }, at(30000));
         expect(s.status).toBe('inside');
         expect(s.outsideConfirmedAt).toBeNull();
@@ -490,15 +495,18 @@ describe('nextBoundaryState', () => {
         expect(s.lastSampleMs).toBe(7000);
     });
 
-    it('keeps a confirmed outside flag through unusable readings', () => {
+    it('keeps a confirmed outside flag through unusable readings until the next usable near/inside', () => {
         let s = nextBoundaryState(initialBoundaryState(), { kind: 'outside' }, at(0));
         s = nextBoundaryState(s, { kind: 'outside' }, at(20000));
         s = nextBoundaryState(s, { kind: 'unusable', reason: 'poor_accuracy' }, at(25000));
         expect(s.status).toBe('unavailable');
         expect(s.outsideConfirmedAt).toBe(20000);
-        s = nextBoundaryState(s, { kind: 'near' }, at(30000));
+        s = nextBoundaryState(s, { kind: 'outside' }, at(30000));
         expect(s.status).toBe('outside');
         expect(s.outsideConfirmedAt).toBe(20000);
+        s = nextBoundaryState(s, { kind: 'near' }, at(35000));
+        expect(s.status).toBe('near');
+        expect(s.outsideConfirmedAt).toBeNull();
     });
 
     it('confirms on server receipt spacing, ignoring device sample times', () => {
@@ -517,6 +525,111 @@ describe('nextBoundaryState', () => {
         expect(b.status).toBe('outside');
         expect(b.outsideConfirmedAt).toBe(a.outsideConfirmedAt);
         expect(b.outsideConfirmedAt).toBe(20000);
+    });
+});
+
+describe('stateAfterBoundaryRevision', () => {
+    const at = (ms) => ({ sampleMs: ms, receivedMs: ms });
+
+    const exposed = (extra) => ({
+        ...initialBoundaryState(),
+        status: 'outside',
+        outsideSinceMs: 5000,
+        lastOutsideSampleMs: 25000,
+        outsideSampleCount: 2,
+        lastUsableMs: 25000,
+        lastSampleMs: 25000,
+        outsideConfirmedAt: 25000,
+        ...extra,
+    });
+
+    it('keeps an already-exposed player exposed, with the same cooldown, when the new boundary still leaves them outside', () => {
+        const position = { ...metersNorthOfPlot(60), accuracyM: 5 };
+        const revisedRing = shapeToPolygon('rectangle', {
+            corners: [
+                { lat: 40.0, lng: -74.0 },
+                { lat: 40.0004, lng: -73.9994 },
+            ],
+        });
+        const classification = classifyFix(revisedRing, position);
+        expect(classification.kind).toBe('outside');
+
+        const carried = stateAfterBoundaryRevision(exposed(), classification);
+        const next = nextBoundaryState(carried, classification, at(30000));
+
+        expect(next.status).toBe('outside');
+        expect(next.outsideSinceMs).toBe(5000);
+        expect(next.outsideConfirmedAt).toBe(25000);
+    });
+
+    it('starts a new cooldown when a player who was not exposed is outside the revised boundary', () => {
+        const prev = {
+            ...initialBoundaryState(),
+            status: 'inside',
+            lastSampleMs: 1000,
+        };
+        const position = { ...metersNorthOfPlot(60), accuracyM: 5 };
+        const classification = classifyFix(plot, position);
+        expect(classification.kind).toBe('outside');
+
+        const carried = stateAfterBoundaryRevision(prev, classification);
+        const next = nextBoundaryState(carried, classification, at(40000));
+
+        expect(next.status).toBe('near');
+        expect(next.outsideConfirmedAt).toBeNull();
+        expect(next.outsideSinceMs).toBe(40000);
+    });
+
+    it('clears exposure when the revised boundary now contains the player', () => {
+        const classification = classifyFix(plot, fix());
+        expect(classification.kind).toBe('inside');
+
+        const carried = stateAfterBoundaryRevision(exposed(), classification);
+        const next = nextBoundaryState(carried, classification, at(30000));
+
+        expect(next.status).toBe('inside');
+        expect(next.outsideSinceMs).toBeNull();
+        expect(next.outsideConfirmedAt).toBeNull();
+    });
+});
+
+describe('canSee', () => {
+    it('is symmetric when both players are outside the boundary', () => {
+        const dbo = {
+            id: 'dbo',
+            ...metersNorthOfPlot(80),
+            accuracyM: 5,
+            status: 'outside',
+        };
+        const allen = {
+            id: 'allen',
+            lat: metersNorthOfPlot(140).lat,
+            lng: -73.9992,
+            accuracyM: 5,
+            status: 'outside',
+        };
+
+        expect(classifyFix(plot, dbo).kind).toBe('outside');
+        expect(classifyFix(plot, allen).kind).toBe('outside');
+        expect(canSee(dbo, allen, plot)).toBe(true);
+        expect(canSee(allen, dbo, plot)).toBe(true);
+    });
+
+    it('hides a target whose position is back near or inside the boundary, even if status still says outside', () => {
+        const viewer = {
+            id: 'viewer',
+            ...metersNorthOfPlot(80),
+            accuracyM: 5,
+            status: 'outside',
+        };
+        const returned = {
+            id: 'returned',
+            ...fix(),
+            accuracyM: 5,
+            status: 'outside',
+        };
+        expect(classifyFix(plot, returned).kind).toBe('inside');
+        expect(canSee(viewer, returned, plot)).toBe(false);
     });
 });
 
