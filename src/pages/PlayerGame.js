@@ -361,29 +361,9 @@ const PlayerGame = () => {
         return () => unsubscribe();
     }, [roomID, gameBoundary?.enabled, playerName]);
 
-    // Derived at render time from the raw snapshot data above and the
-    // existing `nowMs` ticker — not stored state of its own — so a position
-    // goes stale and disappears purely from time passing, even with no new
-    // Firestore snapshot (Finding 1). Also guards against a legacy/malformed
-    // doc whose lat/lng are missing or not finite numbers.
     // The map exists only under this condition (see the location panel
     // below), so ping cards offer "View on map" only then too.
     const isMapAvailable = isGameActive && gameBoundary?.enabled && (playerData?.isAlive ?? true);
-
-    const freshOtherOutsidePositions = otherOutsidePositions
-        .filter(
-            (position) =>
-                isPositionFresh(position.lastUsableMs, nowMs) &&
-                Number.isFinite(position.lat) &&
-                Number.isFinite(position.lng)
-        )
-        .map((position) => ({
-            id: position.id,
-            lat: position.lat,
-            lng: position.lng,
-            label: resolvePlayerDisplayName(position.id, players),
-            alwaysShowLabel: true,
-        }));
 
     // Mounted always, regardless of whether the map modal is open —
     // closing PlayerMapModal must not stop location reporting.
