@@ -135,7 +135,16 @@ const GameMap = ({
             ownAccuracyGeoJson = null;
         }
     }
-    const [styleMode, setStyleMode] = useState('satellite');
+    // Defaults to 'standard' (non-satellite), not 'satellite': Mapbox's
+    // shared mapbox.satellite raster tileset — which every satellite
+    // style depends on, Classic or Standard alike — is currently
+    // returning 429s account-wide and plan-wide, a live Mapbox-side
+    // incident unrelated to this project (see mapbox/mapbox-gl-js#13744,
+    // an independent report with the identical symptom, filed the same
+    // week). The non-satellite Standard style doesn't touch that
+    // tileset at all and is unaffected. Satellite stays picked via the
+    // toggle below for whenever Mapbox resolves this.
+    const [styleMode, setStyleMode] = useState('standard');
     const [hasError, setHasError] = useState(false);
     const hasFitRef = useRef(false);
 
