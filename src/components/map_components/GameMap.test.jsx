@@ -187,7 +187,7 @@ describe('GameMap', () => {
         renderMap();
         expect(screen.getByTestId('mock-map')).toHaveAttribute(
             'data-style',
-            'mapbox://styles/mapbox/satellite-v9'
+            'mapbox://styles/mapbox/standard-satellite'
         );
         fireEvent.click(screen.getByRole('button', { name: 'Standard map' }));
         expect(screen.getByTestId('mock-map')).toHaveAttribute(
