@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useMemo } from 'react';
 import { Image, Heading, HStack, Spacer } from '@chakra-ui/react';
 import whiteLogo from '../../assets/mall-logo-white-2.png';
 import PlaybookLink from './PlaybookLink';
@@ -11,6 +11,22 @@ import { gameContext } from '../Contexts';
 
 const HeaderExecution = ({ addLog, arrayOfAlivePlayers, allPlayerNames, gameBoundary }) => {
     const { roomID } = useContext(gameContext);
+    // Memoized by the roster's actual names, sorted — not by
+    // `allPlayerNames`'s own reference, which is a fresh array every
+    // GameMasterView render (even on an unrelated player-doc write, e.g.
+    // a boundary location report every 5-15s) — and not by insertion
+    // order, which reshuffles whenever a score changes even though the
+    // roster itself didn't. Keeping this reference stable across renders
+    // that don't actually add/remove/rename a player is what stops
+    // LivePlayerMapButton's effect (keyed on this same `players` value)
+    // from tearing down and re-subscribing its Firestore listener —
+    // which re-reads every document in the collection, not just the
+    // delta — on every one of those unrelated renders.
+    const livePlayerMapPlayers = useMemo(
+        () => allPlayerNames.map((name) => ({ name })),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [[...allPlayerNames].sort().join('|')]
+    );
     return (
         <HStack justifyContent="left" p="8px" h="100%" alignItems="center">
             <Image objectFit="cover" src={whiteLogo} alt="Logo" boxSize="36px" />
@@ -27,7 +43,7 @@ const HeaderExecution = ({ addLog, arrayOfAlivePlayers, allPlayerNames, gameBoun
                 // falling back to the raw normalized id
                 // (LivePlayerMapButton itself does no filtering; it
                 // resolves labels against whatever `players` it's given).
-                players={allPlayerNames.map((name) => ({ name }))}
+                players={livePlayerMapPlayers}
                 boundaryVertices={gameBoundary?.vertices ?? null}
             />
             <ResetTargetsButton arrayOfPlayers={arrayOfAlivePlayers} addLog={addLog} />

@@ -18,15 +18,23 @@ const { shapeToPolygon } = require('../../game/gameBoundary');
 // set/unset process.env.REACT_APP_MAPBOX_TOKEN for that test.
 const getMapboxToken = () => process.env.REACT_APP_MAPBOX_TOKEN;
 
-// Deliberately the older, pre-"Standard" style family (v9/v11), not the
-// newer v12 ones. The v12 styles are Mapbox's 3D-globe-era "Standard"
-// style, which keeps reasserting the globe projection no matter how
-// often setProjection('mercator') is called at runtime — confirmed by
-// hand, twice, against a real map. v9/v11 predate the globe feature
-// entirely, so there is no 3D mode for them to fall back into; this
-// sidesteps the problem at its source instead of fighting it at
-// runtime. Mapbox still hosts and supports these for compatibility.
-const SATELLITE_STYLE = 'mapbox://styles/mapbox/satellite-v9';
+// satellite-v9/streets-v11 (the pre-"Standard" "Classic" style family)
+// used to live here, chosen specifically to dodge the newer v12
+// "Standard" styles' globe-projection default. Moved off Classic
+// entirely: Mapbox no longer actively maintains that family (no bug
+// fixes, no new features — docs.mapbox.com/map-styles/guides/
+// classic-styles/), and classic raster tile requests started failing
+// outright (HTTP 429, reproducible on a brand-new account with normal
+// request volume — not an actual rate-limit, a deprecation-era
+// restriction) well before this comment, with no announced cutover
+// date. The globe-reassertion risk this avoided is handled instead by
+// handleLoad's own setProjection('mercator') call below, reasserted on
+// every style.load — Mapbox's current docs confirm a runtime
+// setProjection call takes precedence over the style's own default and
+// persists across reloads, which may simply not have held reliably on
+// the older mapbox-gl version this project was on when Classic was
+// first chosen over Standard.
+const SATELLITE_STYLE = 'mapbox://styles/mapbox/standard-satellite';
 const STANDARD_STYLE = 'mapbox://styles/mapbox/streets-v11';
 
 // A workable default when there is no existing boundary and no fitTo —
@@ -127,7 +135,16 @@ const GameMap = ({
             ownAccuracyGeoJson = null;
         }
     }
-    const [styleMode, setStyleMode] = useState('satellite');
+    // Defaults to 'standard' (non-satellite), not 'satellite': Mapbox's
+    // shared mapbox.satellite raster tileset — which every satellite
+    // style depends on, Classic or Standard alike — is currently
+    // returning 429s account-wide and plan-wide, a live Mapbox-side
+    // incident unrelated to this project (see mapbox/mapbox-gl-js#13744,
+    // an independent report with the identical symptom, filed the same
+    // week). The non-satellite Standard style doesn't touch that
+    // tileset at all and is unaffected. Satellite stays picked via the
+    // toggle below for whenever Mapbox resolves this.
+    const [styleMode, setStyleMode] = useState('standard');
     const [hasError, setHasError] = useState(false);
     const hasFitRef = useRef(false);
 

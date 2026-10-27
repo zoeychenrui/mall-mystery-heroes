@@ -183,11 +183,16 @@ describe('GameMap', () => {
         expect(mockMapInstance.setProjection).toHaveBeenCalledWith('mercator');
     });
 
-    it('toggles between satellite and standard styles', () => {
+    it('defaults to the non-satellite Standard style, then toggles to satellite and back', () => {
         renderMap();
         expect(screen.getByTestId('mock-map')).toHaveAttribute(
             'data-style',
-            'mapbox://styles/mapbox/satellite-v9'
+            'mapbox://styles/mapbox/streets-v11'
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Satellite' }));
+        expect(screen.getByTestId('mock-map')).toHaveAttribute(
+            'data-style',
+            'mapbox://styles/mapbox/standard-satellite'
         );
         fireEvent.click(screen.getByRole('button', { name: 'Standard map' }));
         expect(screen.getByTestId('mock-map')).toHaveAttribute(
