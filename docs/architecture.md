@@ -473,7 +473,10 @@ Gaps that remain, per [improvements.md](./improvements.md):
   error in place of a fix. The function looks up the caller's player document
   by `uid`, rejects a report whose `boundaryRevision` is not the room's
   current one, rejects stale or reordered sample times, and rate-limits
-  reports through `rateLimits.boundaryReport` on the player document. It
+  reports through `rateLimit` on the `boundaryStatuses` document, not the
+  player document — the player document is watched by every player's and
+  the GM's roster listener, and a field changing on every 5-15s report
+  would re-deliver to all of them for nothing the UI shows. It
   evaluates the fix against the boundary on the server, so the device's
   coordinates never reach a stored document: only the resulting status is
   written, to `boundaryStatuses/{playerId}`, along with a `boundaryEvents`
