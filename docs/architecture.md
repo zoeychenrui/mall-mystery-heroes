@@ -416,8 +416,11 @@ Gaps that remain, per [improvements.md](./improvements.md):
   validation, which moved to `src/game/killPhotoUrl.js`'s
   `isValidKillPhotoUrl` (`improvements.md` item 60). It also hardcodes
   `status`/`originalPlayerData`, requires the room to still be active, and
-  applies a rolling per-player rate limit (10 per 60s) recorded in the
-  player doc's `rateLimits` field. `src/components/submitKillPhoto.js` is
+  applies a rolling per-player rate limit (10 per 60s) recorded in
+  `photoRateLimits` (see data-model.md) — not the player doc, which is
+  watched by every player's and the GM's roster listener, and would
+  re-deliver to all of them on every submission for nothing the UI shows.
+  `src/components/submitKillPhoto.js` is
   its thin `httpsCallable` wrapper, called from `MessageComposer.js` after
   the Storage upload.
 - `purchasePowerUp` and `claimMysteryReward`
@@ -448,7 +451,9 @@ Gaps that remain, per [improvements.md](./improvements.md):
   player-facing `playerMessages` `allow create` grant, both deleted. Also
   validates `text` is a string of at most 500 characters
   (`improvements.md` item 57), requires the room to still be active, and
-  rate-limits to 20 messages per 60s. `src/components/submitChatMessage.js`
+  rate-limits to 20 messages per 60s, recorded in `chatRateLimits` (see
+  data-model.md) for the same roster-fan-out reason as `submitKillPhoto`'s
+  `photoRateLimits` above. `src/components/submitChatMessage.js`
   is its thin `httpsCallable` wrapper, called from `MessageComposer.js`.
   GM-originated `playerMessages` writes (broadcast, whisper, leaderboard,
   mission) are untouched — they still go through

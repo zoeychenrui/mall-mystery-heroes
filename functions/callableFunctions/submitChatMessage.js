@@ -112,11 +112,22 @@ exports.submitChatMessage = functions.https.onCall(async (data, context) => {
         // banter the whole way, not just up to the moment the GM clicks
         // "End Game". submitKillPhoto.js keeps its own isGameActive check
         // (nothing left to submit a kill for once the game's over).
-        const rateLimits = senderData.rateLimits || {};
-        const currentWindow = rateLimits.chat
+        //
+        // Stored in rooms/{roomId}/chatRateLimits/{uid}, not on the player
+        // doc: every player and the GM listen to the roster
+        // (fetchPlayersQueryByDescendPointsThenIsAliveForRoom), so a counter
+        // on the player doc re-delivers to all of them on every chat
+        // message for a field nobody's UI reads — the same read-amplification
+        // bug fixed on reportPlayerLocation.js's rate limit, and the same
+        // dedicated-collection pattern purchasePowerUp.js's powerUpRateLimits
+        // already uses. Nothing listens to this doc, and firestore.rules has
+        // no match for it, so clients can't read or write it.
+        const limitRef = roomRef.collection('chatRateLimits').doc(context.auth.uid);
+        const limitSnapshot = await transaction.get(limitRef);
+        const currentWindow = limitSnapshot.exists
             ? {
-                  windowStartMs: rateLimits.chat.windowStart.toMillis(),
-                  count: rateLimits.chat.count,
+                  windowStartMs: limitSnapshot.data().windowStart.toMillis(),
+                  count: limitSnapshot.data().count,
               }
             : null;
         const nextWindow = nextRateLimitWindow(currentWindow, Date.now(), CHAT_RATE_LIMIT);
@@ -127,14 +138,9 @@ exports.submitChatMessage = functions.https.onCall(async (data, context) => {
             );
         }
 
-        transaction.update(senderDoc.ref, {
-            rateLimits: {
-                ...rateLimits,
-                chat: {
-                    windowStart: Timestamp.fromMillis(nextWindow.windowStartMs),
-                    count: nextWindow.count,
-                },
-            },
+        transaction.set(limitRef, {
+            windowStart: Timestamp.fromMillis(nextWindow.windowStartMs),
+            count: nextWindow.count,
         });
 
         transaction.create(roomRef.collection('playerMessages').doc(), {
