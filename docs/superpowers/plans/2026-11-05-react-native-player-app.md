@@ -28,9 +28,26 @@ version as the web app, `^10.x`), `@react-navigation/native`,
 
 ## Global Constraints
 
+- **This plan was revised after a merge.** The original plan was
+  written against a local `main` that turned out to be badly behind
+  `origin/main` — a large amount of upstream player-facing work had
+  landed (player avatars, a Game Rules modal, a "just for fun" photo
+  option, a "join after the game started" reconnect-request variant,
+  and a visual refresh of the player header) that the original design
+  doc and plan simply never saw. `main` has since been brought current
+  and every task below reflects the real, current code. This note
+  exists so a reader of the plan's history understands why some task
+  text references files that didn't exist when the design doc was
+  written.
 - No changes to Firestore schema, `firestore.rules`, or any
   `functions/callableFunctions/*.js` endpoint. Every task below calls
-  the exact same backend the web app already calls.
+  the exact same backend the web app already calls — this holds even
+  for the avatar feature (Task 15): the write it needs
+  (`players/{playerId}.avatarUrl`) is already permitted directly by an
+  existing `firestore.rules` clause (a signed-in player may update only
+  that one field on their own player doc), and the existing
+  `storage.rules` already has a matching `rooms/{roomId}/avatars/
+  {uid}` rule — nothing to add on either side.
 - `src/game/*.js`, `src/utils/applyMessageChanges.js`, and
   `src/utils/formatMessageTime.js` are the single source of truth —
   imported by `mobile/`, never copied by hand. (`src/game/` mixes
@@ -60,18 +77,29 @@ version as the web app, `^10.x`), `@react-navigation/native`,
   the web components, resolved to RN-usable hex via Chakra's published
   default theme palette (`@chakra-ui/theme`'s `foundations/colors`) at
   implementation time, plus one literal hex already in the source,
-  `#202030` (every modal/panel background). Named tokens in use, by
-  where: `teal.700`/`blue.900` (chat bubbles, mine/theirs),
-  `gray.700` (killPhoto/mission/leaderboard bubbles, location-unavailable
-  panel in a slightly different shade — see each screen's task),
-  `purple.900`/`purple.400` (GM broadcast bubble bg/border),
-  `whiteAlpha.100`/`gray.400` (GM whisper bubble bg/border, dashed),
-  `yellow.300` (the "GM:" label), `orange.900`/`orange.400`/`orange.300`
-  (power-up ping bubble), `orange.800` (location denied/unavailable
-  panel), `orange.700` (approaching-exposure panel), `red.900`/`red.700`
-  (outside-boundary panel, game-ended page background and banner),
-  button `colorScheme`s `teal` (primary actions), `red` (Leave),
-  `yellow` (Shop).
+  `#202030` (every modal/panel background — `KillPhotoModal`,
+  `PowerUpShopModal`, `LeaderboardModal`, `PlayerMapModal`,
+  `PlayerTaskListModal`, `PlayerGameDialogs`' leave-confirm dialog).
+  Named tokens in use, by where: `teal.700`/`blue.900` (chat bubbles,
+  mine/theirs), `gray.700` (killPhoto/mission/leaderboard bubbles),
+  `gray.800` (`PlayerRulesModal`, the target-photo-viewer modal —
+  Task 15), `gray.900`/`gray.950` (the header, `PlayerGameHeader`, and
+  the page background), `red.950` (page background once the game has
+  ended, in place of the older `red.900` — `PlayerGame.js`'s own root
+  `Flex`), `purple.900`/`purple.400`/`purple.700` (GM broadcast bubble
+  bg/border; the target-list accordion's background/border in the
+  header uses `purple.900`/`purple.700`), `whiteAlpha.100`/`gray.400`
+  (GM whisper bubble bg/border, dashed; `whiteAlpha.100` also the
+  waiting-room notice box), `whiteAlpha.200`/`whiteAlpha.400`/
+  `whiteAlpha.600` (header dividers/borders/secondary text),
+  `yellow.300` (the "GM:" label), `orange.900`/`orange.400`/
+  `orange.300` (power-up ping bubble), `orange.800` (location denied/
+  unavailable panel), `orange.700` (approaching-exposure panel),
+  `red.900` (outside-boundary panel), `red.700` (the game-ended page
+  banner and modal), `red.500` (the "YOU'VE BEEN ELIMINATED" heading),
+  `green.800` (the "inside" status banner), `teal.200` (headings inside
+  `PlayerRulesModal`), button `colorScheme`s `teal` (primary actions),
+  `red` (Leave), `yellow` (Shop).
 - Mobile's own Firebase-touching files (`mobile/src/firebase/*.js`) are
   never imported from a unit test — same rule as the web app's
   `dbCalls.js`/`utils/firebase.js` (`CLAUDE.md`), for the same reason:
@@ -112,7 +140,7 @@ version as the web app, `^10.x`), `@react-navigation/native`,
   subscriptions (room, player, players, tasks, boundary status,
   outside-positions). If any isn't torn down on unmount/leave, repeated
   testing (join → leave → rejoin, many times, which this plan's own
-  manual QA pass in Task 15 will naturally do) reproduces the exact
+  manual QA pass in Task 16 will naturally do) reproduces the exact
   listener-leak/read-amplification bug class already fixed on the web
   side this session. Task 7's tests must assert every subscription's
   unsubscribe function is called exactly once on unmount.
@@ -174,7 +202,14 @@ mobile/
       ReconnectPendingScreen.js
       GameScreen.js                 the PlayerGame.js equivalent: target/
                                      eliminated display, Leave, game-ended
-                                     banner/modal, hosts the panels below
+                                     banner/modal, Rules modal entry point,
+                                     hosts the panels below. Ports SIX web
+                                     files, not one — PlayerGame.js's logic
+                                     is split across src/pages/PlayerGame.js
+                                     and src/components/player_game/
+                                     {PlayerGameHeader,PlayerGameDialogs,
+                                     PlayerGameStatusNotices,
+                                     PlayerBoundaryPanel,PlayerRulesModal}.js
       components/
         ChatFeed.js
         ChatComposer.js
@@ -185,6 +220,10 @@ mobile/
         MissionsModal.js
         LeaderboardModal.js
         PowerUpShopModal.js
+        AvatarButton.js             Task 15: capture/compress/upload own
+                                     avatar; also renders a target's avatar
+                                     + opens TargetPhotoModal
+        TargetPhotoModal.js         Task 15: view one target's full photo
 ```
 
 ---
@@ -593,7 +632,9 @@ Expected: FAIL with "Cannot find module './JoinScreen'".
 Read `src/pages/JoinGame.js` now and mirror its logic exactly: two
 `TextInput`s (game code — `autoCapitalize="characters"` plus an
 explicit `.toUpperCase()` transform in `onChangeText`, matching the web
-version's belt-and-suspenders uppercase-as-typed; player name, `maxLength={40}`),
+version's belt-and-suspenders uppercase-as-typed; player name, `maxLength={16}`
+— read the file now to confirm this exact current value rather than
+assuming),
 a submit handler that calls `signInAnonymously(auth)` only if
 `auth.currentUser` is null, then `callables.joinRoom(roomId, playerName)`,
 then `playerSession.writePlayerSession(roomId, playerName)`, then
@@ -666,6 +707,20 @@ describe('ReconnectPendingScreen', () => {
             expect(navigate).toHaveBeenCalledWith('Game', { roomID: 'ROOM1' })
         );
     });
+
+    it('shows join-specific wording when requestType is "join"', async () => {
+        onSnapshot.mockImplementation((ref, onNext) => {
+            onNext({ exists: () => true, data: () => ({ status: 'pending', requestType: 'join' }) });
+            return () => {};
+        });
+        const { findByText } = render(
+            <ReconnectPendingScreen
+                route={{ params: { roomID: 'ROOM1', requestId: 'req1' } }}
+                navigation={{ navigate: jest.fn() }}
+            />
+        );
+        await findByText('Waiting for the host to approve your join…');
+    });
 });
 ```
 
@@ -684,7 +739,14 @@ subscribe (via `onSnapshot`) to
 `playerSession.writePlayerSession(roomID, data.playerName)` then
 `navigation.navigate('Game', { roomID })`; otherwise render
 `data.status` (`'pending'`/`'denied'`) as a status message, matching
-the web version's three-state render.
+the web version's three-state render. Also track `data.requestType`
+(defaulting to `'reconnect'` when absent) and switch the pending/denied
+copy between "...your join…"/"Your join request..." and
+"...your reconnect…"/"Your reconnect request..." accordingly — this is
+a real, current behavior of the web version (a player joining fresh
+after the game has already started goes through this same screen with
+`requestType: 'join'`, not just a returning player reconnecting), not
+an extra feature to invent.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -715,10 +777,11 @@ git commit -m "Add reconnect-pending screen to the mobile app"
   `playerSession.{readPlayerSession, clearPlayerSession}`.
 - Produces: `GameScreen` renders child slots (filled by later tasks)
   for chat (Task 9), the location/map panel (Tasks 11–12), missions/
-  leaderboard entry points (Task 13), and the shop entry point (Task
-  14) — this task stubs those as empty `<View>`s with a comment
-  pointing at the task that fills each in, so later tasks have an exact
-  mount point without needing to re-read this whole file.
+  leaderboard entry points (Task 13), the shop entry point (Task 14),
+  and the avatar button + target-photo-viewer (Task 15) — this task
+  stubs those as empty `<View>`s with a comment pointing at the task
+  that fills each in, so later tasks have an exact mount point without
+  needing to re-read this whole file.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -755,18 +818,15 @@ describe('GameScreen', () => {
         await findByText('Waiting for the host to start...');
     });
 
-    it("shows the player's current target once the game has started", async () => {
-        onSnapshot.mockImplementation((ref, onNext) => {
-            onNext({ exists: () => true, data: () => ({ gameStarted: true, isGameActive: true }) });
-            return () => {};
-        });
+    it('shows the eliminated heading once the player is marked dead', async () => {
+        // Drive the room-doc snapshot to {gameStarted: true, isGameActive:
+        // true} and the player-doc snapshot to {isAlive: false} through
+        // the mocked onSnapshot calls (two separate listeners — see the
+        // player-doc subscription in Step 3), then assert:
         const { findByText } = render(
             <GameScreen route={{ params: { roomID: 'ROOM1' } }} navigation={{ navigate: jest.fn() }} />
         );
-        // Further player-doc snapshot wiring in the implementer's test
-        // setup should drive `targets: ['Bob']` through the player-doc
-        // listener and assert the exact text the web version renders:
-        await findByText('Your target: Bob');
+        await findByText("YOU'VE BEEN ELIMINATED");
     });
 });
 ```
@@ -778,9 +838,13 @@ Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement `GameScreen.js`**
 
-Read `src/pages/PlayerGame.js` now in full and mirror, for this task's
-scope only (chat/location/missions/leaderboard/shop are explicitly
-out — later tasks):
+Read `src/pages/PlayerGame.js` now in full, and also
+`src/components/player_game/{PlayerGameHeader,PlayerGameDialogs,
+PlayerGameStatusNotices,PlayerBoundaryPanel,PlayerRulesModal}.js` —
+`PlayerGame.js`'s own logic is split across these five files today;
+read all six before writing anything, not `PlayerGame.js` alone.
+Mirror the following, for this task's scope only (chat/location/
+missions/leaderboard/shop/avatar are explicitly out — later tasks):
 - The room-doc subscription, including the `handleSubscriptionError`
   pattern (clear the session via `playerSession.clearPlayerSession`,
   navigate back to `'Join'`) on a missing room or a permission error.
@@ -795,15 +859,28 @@ out — later tasks):
 - The players-query and tasks-query subscriptions (needed by Task 9's
   chat composer and Task 13's missions list — mount them here, pass
   down as props to the stubbed child slots).
-- Target/eliminated display: `"Your target: {targets.join(', ')}"` /
-  `"Waiting for your target..."` / the eliminated heading + revival
-  note — exact copy from `PlayerGame.js`.
+- Eliminated display (ported from `PlayerGameStatusNotices.js`):
+  `"YOU'VE BEEN ELIMINATED"` heading (color `red.500`) +
+  `"Be on the lookout for revival missions to get back in."` — exact
+  copy, read the file now to confirm it hasn't drifted further.
 - Leave button + confirm dialog (use `Alert.alert` with two buttons,
   the RN equivalent of the web's `AlertDialog`) calling
   `callables.leaveGame(roomID)`, then `clearPlayerSession()`, then
   `navigation.navigate('Join')`.
 - Game-ended banner (persistent, matching the web's pinned red banner)
   once `isGameActive` is false — chat (Task 9) stays mounted regardless.
+- A Rules button in the header opening a Game Rules modal: port
+  `PlayerRulesModal.js` verbatim (it is pure static copy — targets,
+  missions/points, avatars, zones, shop, safety, and
+  "if you are eliminated" sections; read the file now for the exact
+  text) to a RN `Modal`/`ScrollView`. This has no test of its own
+  beyond "the button opens it" (covered by this task's existing
+  render-based tests needing no new case) — there is no logic in this
+  component to pin with an assertion.
+- The target-list display itself (the accordion UI is Task 15's to
+  build, since it's tightly coupled to avatars — this task only needs
+  to pass `players`/`playerData.targets` down to the slot Task 15
+  fills).
 - Every `useEffect` that calls `onSnapshot` must return its unsubscribe
   function, and must not re-subscribe on every render (same dependency-
   array discipline as the web version) — this is what the Step 1
@@ -1017,10 +1094,15 @@ git commit -m "Add text chat feed and composer to the mobile game screen"
 
 - [ ] **Step 1: Write the failing test for `KillPhotoModal`**
 
-Mirror the web `KillPhotoModal.test.jsx`'s core cases: zero claim
-options disables Submit with a message; exactly one option
-auto-selects and shows as plain text; multiple options render a picker
-and Submit is disabled until one is chosen.
+Read `src/components/player_messages_components/KillPhotoModal.js`
+now — it has a "Just for fun" option always available alongside any
+real target/mission claims (under a "Socials" group in the web
+picker), not just a kill/mission choice. Mirror its current cases:
+zero target/mission options still enables Submit, defaulted to `'fun'`,
+with the message "No open targets or missions; this will be a fun
+photo." (not a disabled-Submit state — that behavior is gone); one or
+more real options plus the always-present fun option render a picker,
+defaulting to the first real option if any exist, else to `'fun'`.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -1029,13 +1111,16 @@ Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement `KillPhotoModal.js`**
 
-Read `src/components/player_messages_components/KillPhotoModal.js` now
-and port its logic to a RN `Modal`: same `buildPhotoClaimOptions`
-call, same three-way render (0/1/many options), a native picker for
-"many" (e.g. RN's own `Modal`-presented list, or `@react-native-picker/
-picker` if installed — either is acceptable; the behavior being tested
-is the three-way branch, not the exact picker widget), Submit disabled
-until `previewUrl` and a selection both exist.
+Port the file read in Step 1 to a RN `Modal`: the same
+`buildPhotoClaimOptions` call, plus the always-present `{value: 'fun',
+label: 'Just for fun'}` option the web version adds directly in the
+component (not from `buildPhotoClaimOptions` — that function only ever
+returns real target/mission options); a native picker (e.g.
+`@react-native-picker/picker` if installed, or a custom list — the
+behavior being tested is the option set and the default selection, not
+the exact picker widget) grouped the same way (Kill Target / Mission /
+Socials); Submit disabled only while `!previewUrl` (a selection always
+exists now, since `'fun'` is always a valid fallback).
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -1063,8 +1148,18 @@ Expected: FAIL.
 - [ ] **Step 7: Implement the camera button and its flow in
   `ChatComposer.js`**
 
-Install `expo-image-picker` and `expo-image-manipulator`. On tapping
-the camera button (disabled when `cameraBlocked`, same
+Install `expo-image-picker` and `expo-image-manipulator`. Read the
+current `src/components/player_messages_components/MessageComposer.js`
+now: the camera button takes a `locationEnabled` prop (passed from
+`GameScreen` as `permissionState === 'granted'`, from Task 11's hook)
+and is disabled whenever `!locationEnabled`, in addition to the
+existing `disabled`/`!isGameActive`/`cameraBlocked` conditions — port
+this exact gate, even though it means the button stays disabled in a
+room with no boundary/zones enabled at all (boundaryless rooms never
+move `permissionState` past `'unknown'`, since Task 11's hook only
+starts tracking once a boundary exists) — that is the current,
+real behavior of the web app, not a bug this plan is fixing. On
+tapping the camera button (disabled when `cameraBlocked`, same
 `isCameraBlocked(blockedUntilMs, nowMs)` check from the shared
 `src/game/powerUpEffects.js` as the web version): call
 `ImagePicker.launchCameraAsync({mediaTypes: ImagePicker.MediaTypeOptions.Images})`;
@@ -1073,10 +1168,13 @@ on a result, call `ImageManipulator.manipulateAsync(uri, [{resize:
 — the same `MAX_DIMENSION`/`JPEG_QUALITY` values as the web
 `compressImage.js`, read now for the exact numbers — open
 `KillPhotoModal` with the manipulated result's `uri` as the preview; on
-Submit, convert that `uri` to a `Blob` (`await (await
+Submit, derive `target`/`mission`/`isFunPhoto` from the picker's
+selected value the same way the web version's `handlePhotoSubmit`
+does (`target:`/`mission:` prefixes, or `isFunPhoto = claimValue ===
+'fun'`), convert the `uri` to a `Blob` (`await (await
 fetch(uri)).blob()`), call `storageCalls.uploadKillPhoto(roomID, blob)`,
-then `callables.submitKillPhoto({roomId, url, target, mission})` — same
-error handling as the web version (log + a visible alert on rejection,
+then `callables.submitKillPhoto({roomId, url, target, mission,
+isFunPhoto})` — same error handling as the web version (log + a visible alert on rejection,
 since the modal has already closed by the time a network call could
 fail, matching the web version's own "assume success, alert on
 failure" design named in the spec's Review Focus).
@@ -1183,9 +1281,16 @@ Expected: PASS.
 
 - [ ] **Step 5: Write the failing test for `LocationStatusPanel`**
 
-Mirror the web `PlayerGame.js`'s rendering logic for one representative
-case per status (`inside`, `near` with the countdown, `outside`, each
-`unavailable` reason's exact text from `UNAVAILABLE_REASON_TEXT`).
+Read `src/components/player_game/PlayerBoundaryPanel.js` now — this is
+where the status-rendering logic actually lives today (moved out of
+`PlayerGame.js` itself), and it added one behavior since the design
+doc was written: the `inside` status renders in a dismissible banner
+(`green.800` background, an X button) that, once dismissed, stays
+hidden until `liveBoundaryStatus.status` changes away from `'inside'`
+and back. Mirror its rendering logic for one representative case per
+status (`inside` — both not-yet-dismissed and dismissed, `near` with
+the countdown, `outside`, each `unavailable` reason's exact text from
+`UNAVAILABLE_REASON_TEXT`).
 
 - [ ] **Step 6: Run the test to verify it fails**
 
@@ -1194,13 +1299,16 @@ Expected: FAIL.
 
 - [ ] **Step 7: Implement `LocationStatusPanel.js`**
 
-Port the status-rendering block from `src/pages/PlayerGame.js` (the
-`UNAVAILABLE_REASON_TEXT` map, `DEFAULT_UNAVAILABLE_TEXT`,
-`UNAVAILABLE_RETRY_REASONS`, the exposure-countdown text, and every
-conditional box) to RN `View`/`Text`/`Button`, same exact copy and the
-same Global-Constraints color tokens (`blue.900` prompt, `orange.800`
-denied/unavailable, `orange.700` approaching-exposure, `red.900`
-outside).
+Port the status-rendering block from `PlayerBoundaryPanel.js` (the
+`UNAVAILABLE_REASON_TEXT` map and `DEFAULT_UNAVAILABLE_TEXT`/
+`UNAVAILABLE_RETRY_REASONS` constants live in `src/pages/PlayerGame.js`
+— both files are needed) to RN `View`/`Text`/`Button`, same exact copy
+and the same Global-Constraints color tokens (`blue.900` prompt,
+`orange.800` denied/unavailable, `orange.700` approaching-exposure,
+`red.900` outside, `green.800` inside — with the dismiss button from
+Step 5, using a local `isInsideStatusDismissed` state reset whenever
+`liveBoundaryStatus.status` changes away from `'inside'`, same as the
+web version).
 
 - [ ] **Step 8: Run the test to verify it passes**
 
@@ -1376,10 +1484,11 @@ git commit -m "Add missions list and leaderboard screens to the mobile app"
 **Interfaces:**
 - Consumes: Task 3's `callables.{purchasePowerUp, claimMysteryReward}`;
   Task 7's `players` and the player doc's `score`/`cooldowns`/
-  `horcruxActive`/`pendingMysteryItem` fields; the shared
-  `src/game/powerUps.js`'s `POWER_UPS`, `cooldownRemaining`,
-  `purchaseBlockReason` and `src/game/powerUpEffects.js`'s
-  `isHorcruxActive` (Task 2).
+  `horcruxActive`/`pendingMysteryItem` fields, plus
+  `gameBoundary?.enabled === true` (passed down as `zonesEnabled` — see
+  Step 3); the shared `src/game/powerUps.js`'s `POWER_UPS`,
+  `cooldownRemaining`, `purchaseBlockReason` and
+  `src/game/powerUpEffects.js`'s `isHorcruxActive` (Task 2).
 - Produces: nothing consumed by later tasks.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1403,7 +1512,14 @@ showing its cooldown countdown (re-rendering once a second only while
 the modal is open, same as the web version), a player picker for
 items where `item.needsTarget` (a native `Picker`/custom list, same
 filtering — alive, not self), the mystery-box reveal flow calling
-`claimMysteryReward` when a target is needed.
+`claimMysteryReward` when a target is needed. Also port the
+`zonesEnabled` prop (default `true` in the web version, but
+`GameScreen` always passes a real value, same as `canShop`): thread it
+into `purchaseBlockReason`'s `boundaryEnabled` argument, and disable/
+hide the pending-mystery-reward claim button when the rolled item
+`requiresGameBoundary === true` and `!zonesEnabled` — read the exact
+current gating logic in `PowerUpShopModal.js` now rather than guessing
+its shape.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -1425,7 +1541,136 @@ git commit -m "Add power-up shop screen to the mobile app"
 
 ---
 
-### Task 15: Docs update and full-parity manual QA pass
+### Task 15: Player avatar — capture, upload, display, target photo viewer
+
+**Files:**
+- Create: `mobile/src/screens/components/AvatarButton.js`
+- Create: `mobile/src/screens/components/TargetPhotoModal.js`
+- Test: `mobile/src/screens/components/AvatarButton.test.js`
+- Test: `mobile/src/screens/components/TargetPhotoModal.test.js`
+- Modify: `mobile/src/firebase/storageCalls.js` (adds
+  `uploadPlayerAvatar`)
+- Modify: `mobile/src/screens/GameScreen.js` (wires the avatar button
+  into the header and the target list into an accordion that opens
+  `TargetPhotoModal`, replacing the plain-text target display and the
+  avatar/target-photo stubs from Task 7)
+
+**Interfaces:**
+- Consumes: Task 3's `dbCalls.fetchPlayerReferenceForRoom` (for the
+  direct `updateDoc` call below) and `storage` (via this task's own
+  new `storageCalls.uploadPlayerAvatar`); Task 7's `players` and
+  `playerData`.
+- Produces: nothing consumed by later tasks.
+
+- [ ] **Step 1: Write the failing test for `uploadPlayerAvatar`**
+
+Read `src/components/firebase_calls/storageCalls.js`'s current
+`uploadPlayerAvatar(roomID, uid, photoBlob)` now — it uploads to
+`rooms/{roomID}/avatars/{uid}` (no file extension, unlike
+`uploadKillPhoto`'s `.jpg` suffix — read the file now to confirm this
+exactly, rather than assuming the same naming scheme applies) and
+returns the download URL. No dedicated unit test (per Global
+Constraints, thin SDK wrappers aren't unit tested) — add it to
+`mobile/src/firebase/storageCalls.js` directly.
+
+- [ ] **Step 2: Implement `uploadPlayerAvatar` in
+  `mobile/src/firebase/storageCalls.js`**
+
+```js
+export const uploadPlayerAvatar = async (roomID, uid, photoBlob) => {
+    const photoRef = ref(storage, `rooms/${roomID}/avatars/${uid}`);
+    await uploadBytes(photoRef, photoBlob, { contentType: 'image/jpeg' });
+    return getDownloadURL(photoRef);
+};
+```
+
+- [ ] **Step 3: Write the failing test for `AvatarButton`**
+
+```js
+it('uploads a captured selfie and writes avatarUrl onto the player doc', async () => {
+    // mock expo-image-picker's launchCameraAsync (front camera —
+    // cameraType: ImagePicker.CameraType.front, matching the web
+    // version's capture="user"), expo-image-manipulator's
+    // manipulateAsync, storageCalls.uploadPlayerAvatar resolving with
+    // a URL, and updateDoc; assert updateDoc was called with
+    // { avatarUrl: <that URL> } against
+    // dbCalls.fetchPlayerReferenceForRoom(playerName, roomID).
+});
+```
+
+- [ ] **Step 4: Run the test to verify it fails**
+
+Run: `cd mobile && npx jest src/screens/components/AvatarButton.test.js`
+Expected: FAIL — module not found.
+
+- [ ] **Step 5: Implement `AvatarButton.js`**
+
+Read `src/components/player_game/PlayerGameHeader.js`'s own-avatar
+button (`handleAvatarChange` lives in `src/pages/PlayerGame.js` itself
+— read that too) now and port: an `Image`/placeholder showing
+`playerData.avatarUrl` or a generic placeholder when absent, tapped to
+launch `ImagePicker.launchCameraAsync({cameraType:
+ImagePicker.CameraType.front})`, then the same
+`expo-image-manipulator` resize/compress step Task 10 already
+introduced (same `MAX_DIMENSION`/`JPEG_QUALITY` values — reuse, don't
+redefine), then this task's own `uploadPlayerAvatar`, then
+`updateDoc(dbCalls.fetchPlayerReferenceForRoom(playerName, roomID),
+{avatarUrl})` directly (no Cloud Function — this exact direct write is
+what the existing `firestore.rules` clause permits, and is what the
+web version does). Show a loading state while in flight (mirroring
+`avatarBusy`).
+
+- [ ] **Step 6: Run the test to verify it passes**
+
+Run: `cd mobile && npx jest src/screens/components/AvatarButton.test.js`
+Expected: PASS.
+
+- [ ] **Step 7: Write the failing test for `TargetPhotoModal`**
+
+Mirror `PlayerGameHeader.js`'s target-photo-viewer modal: given a
+target with `avatarUrl` set, renders the image; given one without,
+renders `"This player has not added a photo yet."` (read the file now
+for this exact string).
+
+- [ ] **Step 8: Run the test to verify it fails**
+
+Run: `cd mobile && npx jest src/screens/components/TargetPhotoModal.test.js`
+Expected: FAIL — module not found.
+
+- [ ] **Step 9: Implement `TargetPhotoModal.js`**
+
+Port the modal directly from `PlayerGameHeader.js`'s
+`isTargetPhotoOpen` block.
+
+- [ ] **Step 10: Run the test to verify it passes**
+
+Run: `cd mobile && npx jest src/screens/components/TargetPhotoModal.test.js`
+Expected: PASS.
+
+- [ ] **Step 11: Wire into `GameScreen.js`**
+
+Read `PlayerGameHeader.js`'s target-list accordion now and port it:
+each target rendered as a button with their avatar (or a
+name-initials placeholder — RN has no direct equivalent of Chakra's
+`Avatar` `name` fallback, so render the initial letter(s) manually
+when `avatarUrl` is absent) that opens `TargetPhotoModal` for that
+target. Mount the own-avatar `AvatarButton` in the header next to the
+existing Leave/Rules buttons from Task 7.
+
+- [ ] **Step 12: Commit**
+
+```bash
+git add mobile/src/screens/components/AvatarButton.js \
+  mobile/src/screens/components/TargetPhotoModal.js \
+  mobile/src/screens/components/AvatarButton.test.js \
+  mobile/src/screens/components/TargetPhotoModal.test.js \
+  mobile/src/firebase/storageCalls.js mobile/src/screens/GameScreen.js
+git commit -m "Add player avatar capture/upload/display and the target photo viewer to the mobile app"
+```
+
+---
+
+### Task 16: Docs update and full-parity manual QA pass
 
 **Files:**
 - Modify: `docs/architecture.md` (the "Player mobile app (aspirational
@@ -1456,14 +1701,19 @@ real writer/reader now exists.
 Install the app on the test iPhone (Expo dev client) and a real test
 room. Work through every item in the design doc's "Scope: player
 features" list end to end against the real backend (not mocks):
-join → waiting room → game start → see target → send chat → receive a
-GM broadcast and whisper from the web GM console → take and submit a
-kill photo → take and submit a mission photo → enable location and
-confirm inside/near/outside status text and the map → view missions →
-view leaderboard → buy at least one power-up of each `needsTarget`
-true/false shape → trigger a mystery box → get eliminated and confirm
-the eliminated state → have the GM end the game and confirm the
-game-ended banner, with chat still usable → leave the game. Also
+join → waiting room → set an avatar before the game starts → game
+start → see target (tap a target's avatar to view their photo) → send
+chat → receive a GM broadcast and whisper from the web GM console →
+take and submit a kill photo → take and submit a mission photo → take
+and submit a "just for fun" photo with no target/mission claimed →
+enable location and confirm inside/near/outside status text and the
+map, including dismissing the "inside" banner → view the Game Rules
+modal → view missions → view leaderboard → buy at least one power-up
+of each `needsTarget` true/false shape, including one gated on
+zones/boundary being enabled → trigger a mystery box → get eliminated
+and confirm the eliminated state → have the GM end the game and
+confirm the game-ended banner, with chat still usable → leave the
+game. Also
 exercise this plan's own Review Focus items manually: deny location
 permission then grant it from OS Settings while the app is still
 running; lock and unlock the phone while location tracking is active;
