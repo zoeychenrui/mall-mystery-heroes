@@ -5,7 +5,7 @@ import { onSnapshot } from 'firebase/firestore';
 import { fetchReconnectRequestReferenceForRoom } from '../components/firebase_calls/dbCalls';
 import { writePlayerSession } from '../utils/playerSession';
 
-// The requester-facing side of a mid-game reconnect
+// The requester-facing side of a mid-game reconnect or new-join request
 // (docs/superpowers/specs/2026-08-30-player-reconnect-design.md). Reached
 // only via JoinGame.js's fallback when joinRoom rejects a join attempt
 // specifically because the game has already started and the typed name
@@ -18,6 +18,7 @@ const ReconnectPending = () => {
     const { roomID, requestId } = useParams();
     const navigate = useNavigate();
     const [status, setStatus] = useState('pending');
+    const [requestType, setRequestType] = useState('reconnect');
 
     useEffect(() => {
         if (!roomID || !requestId) return undefined;
@@ -30,6 +31,7 @@ const ReconnectPending = () => {
                     return;
                 }
                 const data = snapshot.data();
+                setRequestType(data.requestType ?? 'reconnect');
                 if (data.status === 'approved') {
                     // The request document's own playerName, not a route
                     // param or anything else — this is the one value a
@@ -53,13 +55,19 @@ const ReconnectPending = () => {
             <Flex direction="column" alignItems="center" gap={4}>
                 {status === 'pending' && (
                     <>
-                        <Heading size="md">Waiting for the host to approve your reconnect…</Heading>
+                        <Heading size="md">
+                            {requestType === 'join'
+                                ? 'Waiting for the host to approve your join…'
+                                : 'Waiting for the host to approve your reconnect…'}
+                        </Heading>
                         <Text>Hang tight — this updates automatically.</Text>
                     </>
                 )}
                 {status === 'denied' && (
                     <>
-                        <Heading size="md">Your reconnect request was denied</Heading>
+                        <Heading size="md">
+                            Your {requestType === 'join' ? 'join' : 'reconnect'} request was denied
+                        </Heading>
                         <Button colorScheme="teal" onClick={() => navigate('/')}>
                             Back to home
                         </Button>

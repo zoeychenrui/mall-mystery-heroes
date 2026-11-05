@@ -48,7 +48,7 @@ beforeEach(() => {
 // don't need to drive Chakra's NumberInput to cover the core create flow.
 const fillOutRevivalMissionTask = async (title) => {
     await userEvent.type(screen.getByPlaceholderText('Task Title'), title);
-    await userEvent.selectOptions(screen.getByRole('combobox'), 'Revival Mission');
+    await userEvent.click(screen.getByRole('button', { name: 'Revival Mission' }));
 };
 
 describe('TaskCreation (improvements item 15)', () => {
@@ -143,7 +143,7 @@ describe('optional completion cap (bug report)', () => {
         mountTaskCreation();
 
         await fillOutRevivalMissionTask('Find the clue');
-        await userEvent.type(screen.getByPlaceholderText('Max completions'), '5');
+        await userEvent.type(screen.getByPlaceholderText('Max Players'), '5');
         await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
         await waitFor(() =>

@@ -74,14 +74,23 @@ describe('requestReconnect', () => {
         expect(requestsSnapshot.docs).toHaveLength(1);
     });
 
-    it('rejects a name with no matching player, writing nothing', async () => {
+    it('creates a pending join request for a name with no matching player', async () => {
         await seedRoom(ROOM, [{ name: 'alice' }], { gameStarted: true });
 
-        await expect(requestReconnect(ROOM, 'nobody')).rejects.toThrow(
-            'No player named nobody in this room.'
+        const result = await requestReconnect(ROOM, 'nobody');
+        expect(result.requestId).toBeDefined();
+
+        const requestSnapshot = await getDoc(
+            doc(db, 'rooms', ROOM, 'reconnectRequests', result.requestId)
         );
+        expect(requestSnapshot.data()).toMatchObject({
+            playerName: 'nobody',
+            trimmedNameLowerCase: 'nobody',
+            requestType: 'join',
+            status: 'pending',
+        });
         const requestsSnapshot = await getDocs(collection(db, 'rooms', ROOM, 'reconnectRequests'));
-        expect(requestsSnapshot.docs).toHaveLength(0);
+        expect(requestsSnapshot.docs).toHaveLength(1);
     });
 
     it('rejects a room where the game has not started yet', async () => {

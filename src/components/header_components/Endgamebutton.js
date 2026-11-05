@@ -91,7 +91,6 @@ const Endgamebutton = () => {
                 borderRadius="3xl"
                 _hover={{ bg: 'white', color: 'black' }}
                 onClick={handleClick}
-                mr="12px"
             >
                 End Game
             </Button>

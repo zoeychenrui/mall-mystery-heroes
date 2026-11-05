@@ -28,6 +28,7 @@ const ARG_LABELS = {
     '/kick': ['[player_name]'],
     '/kill': ['[player_name]', '[assassin_name]'],
     '/openseason': ['[player_name]', 'start/end'],
+    '/ping': ['[player_name]'],
     '/revive': ['[player_name]'],
     '/whisper': ['[player_name]', '[message]'],
     '/broadcast': ['[message]'],
@@ -165,6 +166,8 @@ const candidatesForSlot = (command, slotIndex, args, { players, missions }) => {
             if (slotIndex === 1) return playerNames(players);
             if (slotIndex === 2) return OPEN_SEASON_VALUES;
             return null;
+        case '/ping':
+            return slotIndex === 1 ? playerNames(players) : null;
         case '/revive':
             return slotIndex === 1 ? deadPlayerNames(players) : null;
         case '/leaderboard':

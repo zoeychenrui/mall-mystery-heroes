@@ -5,9 +5,9 @@ import { fetchPlayerMessagesQueryForRoom } from '../firebase_calls/dbCalls';
 import { applyMessageChanges } from '../../utils/applyMessageChanges';
 import GMChatMessage from './GMChatMessage';
 
-// Read-only view of the players' group chat, for the GM console — a
+// Read-only view of player chat and GM broadcasts, for the GM console — a
 // separate panel from the GM's own game-event Logs (different collection,
-// different purpose), so the GM isn't blind to player banter
+// different purpose), so the GM can see the room conversation
 // (docs/superpowers/specs/2026-08-12-chat-send-and-efficiency-design.md).
 //
 // Merges via docChanges() rather than remapping the full snapshot.docs
@@ -40,7 +40,10 @@ const GMChatPanel = ({ roomID }) => {
     // would corrupt future merges. messages (below) is the filtered,
     // rendered view.
     const messages = useMemo(
-        () => allMessages.filter((message) => message.type === 'chat'),
+        () =>
+            allMessages.filter((message) =>
+                ['chat', 'broadcast', 'killPhoto', 'powerUpPing'].includes(message.type)
+            ),
         [allMessages]
     );
 

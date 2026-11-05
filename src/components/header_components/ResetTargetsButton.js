@@ -80,7 +80,6 @@ const ResetTargetsButton = ({ arrayOfPlayers, addLog }) => {
                 borderRadius="3xl"
                 _hover={{ bg: 'white', color: 'black' }}
                 onClick={handleClick}
-                mr="12px"
             >
                 Reset Targets
             </Button>

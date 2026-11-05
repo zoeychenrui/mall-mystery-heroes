@@ -49,6 +49,7 @@ const PowerUpShopModal = ({
     players = [],
     playerName = '',
     horcruxActive = false,
+    zonesEnabled = true,
     pendingMysteryItem = null, // an item id, from the player doc
 }) => {
     // What the last mystery box rolled, while its reveal is showing.
@@ -74,6 +75,9 @@ const PowerUpShopModal = ({
     const pickablePlayers = players.filter(
         (player) => player.isAlive && player.name.toLowerCase() !== playerName.toLowerCase()
     );
+    const pendingRewardRequiresZones =
+        POWER_UPS.find((item) => item.id === pendingMysteryItem)?.requiresGameBoundary === true;
+    const pendingRewardUnavailable = pendingRewardRequiresZones && !zonesEnabled;
 
     const handleBuy = async (item) => {
         setBuyingItemId(item.id);
@@ -87,6 +91,7 @@ const PowerUpShopModal = ({
                 setReveal({
                     label: result.mysteryBox.label,
                     needsTarget: result.mysteryBox.needsTarget,
+                    itemId: result.mysteryBox.resolution?.itemId ?? null,
                 });
             }
             setNowMs(Date.now()); // keep the clock in step, or the timer can briefly show 6:01
@@ -103,9 +108,14 @@ const PowerUpShopModal = ({
             <ModalContent bg="#202030" color="white">
                 <ModalHeader>
                     Shop
-                    <Text fontSize="md" fontWeight="normal" color="yellow.300">
-                        Your points: {Number(score) || 0}
-                    </Text>
+                    <Box flexDirection="row" display="flex" justifyContent="space-between">
+                        <Text fontSize="md" fontWeight="normal" color="yellow.300">
+                            Your points: {Number(score) || 0}
+                        </Text>
+                        <Text fontSize="md" fontWeight="normal" color="gray.400">
+                            CD = cooldown
+                        </Text>
+                    </Box>
                     {horcruxActive && (
                         <Text fontSize="sm" fontWeight="normal" color="purple.300">
                             🛡️ Horcrux active
@@ -120,14 +130,21 @@ const PowerUpShopModal = ({
                                 Your mystery box reward is waiting:{' '}
                                 {POWER_UPS.find((p) => p.id === pendingMysteryItem)?.name}
                             </Text>
+                            {pendingRewardUnavailable && (
+                                <Text mb={2} fontSize="sm" color="orange.200">
+                                    This location reward is unavailable while zones are off.
+                                </Text>
+                            )}
                             <Button
                                 size="sm"
                                 colorScheme="orange"
+                                isDisabled={pendingRewardUnavailable}
                                 onClick={() =>
                                     setReveal({
                                         label: POWER_UPS.find((p) => p.id === pendingMysteryItem)
                                             ?.name,
                                         needsTarget: true,
+                                        itemId: pendingMysteryItem,
                                     })
                                 }
                             >
@@ -153,6 +170,7 @@ const PowerUpShopModal = ({
                                           nowMs,
                                           targetName: targets[item.id],
                                           horcruxActive,
+                                          boundaryEnabled: zonesEnabled,
                                       });
 
                             return (
@@ -193,6 +211,12 @@ const PowerUpShopModal = ({
                         isOpen={reveal !== null}
                         label={reveal?.label}
                         needsTarget={reveal?.needsTarget}
+                        unavailableMessage={
+                            POWER_UPS.find((item) => item.id === reveal?.itemId)
+                                ?.requiresGameBoundary === true && !zonesEnabled
+                                ? 'This location reward is unavailable while zones are off.'
+                                : ''
+                        }
                         pickablePlayers={pickablePlayers}
                         onClaim={(targetName) => claimMysteryReward({ roomId: roomID, targetName })}
                         onClose={() => setReveal(null)}

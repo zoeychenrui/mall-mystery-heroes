@@ -1,14 +1,12 @@
 import { ListItem, OrderedList, Flex } from '@chakra-ui/react';
 
 const PlayerList = ({ arrayOfPlayers }) => {
-    // Takes arrayOfPlayers and renders it as a single centered column
-    // (docs/superpowers/specs/2026-08-14-simplified-lobby-design.md) — was
-    // previously split into two side-by-side columns for the old
-    // split-screen Lobby layout, which no longer exists.
+    // A two-column row-major grid places names left to right, then continues
+    // on the next row (Alice, Bob / Carol, Dave).
     const listOfNames = arrayOfPlayers.map((eachName) => (
         <ListItem
             key={eachName}
-            mb="4px"
+            mt="12px"
             fontSize="2xl"
             overflow="hidden"
             textOverflow="ellipsis"
@@ -29,7 +27,16 @@ const PlayerList = ({ arrayOfPlayers }) => {
             align="center"
             textAlign="center"
         >
-            <OrderedList listStyleType="none">{listOfNames}</OrderedList>
+            <OrderedList
+                listStyleType="none"
+                display="grid"
+                gridTemplateColumns="repeat(2, minmax(0, 1fr))"
+                columnGap={6}
+                rowGap={1}
+                w="100%"
+            >
+                {listOfNames}
+            </OrderedList>
         </Flex>
     );
 };

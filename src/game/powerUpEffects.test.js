@@ -209,10 +209,14 @@ describe('pingEntry', () => {
 describe('pingMessageText', () => {
     const entry = (name) => ({ name });
 
-    it('announces a global ping by who was pinged', () => {
-        expect(pingMessageText({ itemId: 'global-ping-random', pings: [entry('bob')] })).toBe(
-            '📍 bob has been pinged!'
-        );
+    it('announces who was pinged and who pinged them globally', () => {
+        expect(
+            pingMessageText({
+                itemId: 'global-ping-random',
+                pings: [entry('bob')],
+                buyerName: 'alice',
+            })
+        ).toBe('📍 bob has been pinged by alice!');
     });
 
     it('lists the pinged players for personal pings', () => {

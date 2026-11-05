@@ -1,5 +1,18 @@
-import React from 'react';
-import { Box, Button, Flex, Image, List, ListItem, Text } from '@chakra-ui/react';
+import React, { useState } from 'react';
+import {
+    Box,
+    Button,
+    Flex,
+    Image,
+    List,
+    ListItem,
+    Modal,
+    ModalBody,
+    ModalCloseButton,
+    ModalContent,
+    ModalOverlay,
+    Text,
+} from '@chakra-ui/react';
 import { normalizePlayerName } from '../../game/playerNames';
 import { formatMessageTime } from '../../utils/formatMessageTime';
 import GameEndedLeaderboardBubble from './GameEndedLeaderboardBubble';
@@ -14,6 +27,7 @@ const captureTime = (ms) =>
     new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
 const MessageBubble = ({ message, playerName, onShowPings }) => {
+    const [isPhotoOpen, setIsPhotoOpen] = useState(false);
     const mission = message.mission ?? {};
     // Only 'chat' messages have a sender to compare — every other type
     // (whisper/broadcast/leaderboard/mission) is GM-authored and has no
@@ -71,13 +85,50 @@ const MessageBubble = ({ message, playerName, onShowPings }) => {
                 <Box bg="gray.700" borderRadius="md" p={2}>
                     <Text fontWeight="bold" mb={1}>
                         {message.assassin}
+                        {message.isFunPhoto ? '' : ' · Photo submission'}
                     </Text>
-                    <Image
-                        src={message.photoUrl}
-                        alt="Kill photo submission"
-                        borderRadius="md"
-                        maxH="200px"
-                    />
+                    <Button
+                        variant="unstyled"
+                        display="block"
+                        height="auto"
+                        minW="0"
+                        onClick={() => setIsPhotoOpen(true)}
+                        aria-label={
+                            message.isFunPhoto ? 'View larger fun photo' : 'View larger kill photo'
+                        }
+                    >
+                        <Image
+                            src={message.photoUrl}
+                            alt={message.isFunPhoto ? 'Fun photo' : 'Kill photo submission'}
+                            borderRadius="md"
+                            maxH="200px"
+                            cursor="zoom-in"
+                        />
+                    </Button>
+                    <Modal
+                        isOpen={isPhotoOpen}
+                        onClose={() => setIsPhotoOpen(false)}
+                        size="6xl"
+                        isCentered
+                    >
+                        <ModalOverlay />
+                        <ModalContent bg="gray.900" maxW="90vw">
+                            <ModalCloseButton aria-label="Close enlarged photo" zIndex={1} />
+                            <ModalBody p={2} display="flex" justifyContent="center">
+                                <Image
+                                    src={message.photoUrl}
+                                    alt={
+                                        message.isFunPhoto
+                                            ? 'Enlarged fun photo'
+                                            : 'Enlarged kill photo submission'
+                                    }
+                                    maxH="85vh"
+                                    maxW="100%"
+                                    objectFit="contain"
+                                />
+                            </ModalBody>
+                        </ModalContent>
+                    </Modal>
                     {time && (
                         <Text fontSize="xs" color="gray.400" mt={1}>
                             {time}
@@ -100,7 +151,7 @@ const MessageBubble = ({ message, playerName, onShowPings }) => {
                     display="inline-block"
                 >
                     <Text as="span" fontWeight="bold" color="orange.300">
-                        Ping
+                        {message.source === 'boundaryExposure' ? 'Zone alert' : 'Ping'}
                     </Text>{' '}
                     <Text as="span">{message.text}</Text>
                     {time && (
@@ -113,9 +164,11 @@ const MessageBubble = ({ message, playerName, onShowPings }) => {
                             {ping.name}:{' '}
                             {ping.lat == null
                                 ? 'no location'
-                                : `located at ${captureTime(ping.capturedAtMs)}${
-                                      ping.isStale ? ' (old)' : ''
-                                  }`}
+                                : `located at ${
+                                      ping.capturedAtMs == null
+                                          ? 'an unknown time'
+                                          : captureTime(ping.capturedAtMs)
+                                  }${ping.isStale ? ' (old)' : ''}`}
                         </Text>
                     ))}
                     {onShowPings && (message.pings ?? []).some((ping) => ping.lat != null) && (

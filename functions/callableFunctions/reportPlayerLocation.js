@@ -12,6 +12,7 @@ const {
     initialBoundaryState,
     stateAfterBoundaryRevision,
     GAME_BOUNDARY_CONFIG,
+    isPositionFresh,
 } = require('../vendor/game/gameBoundary');
 const { nextRateLimitWindow } = require('../vendor/game/rateLimit');
 
@@ -264,6 +265,29 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
                 playerId: playerDoc.id,
                 playerName: playerData.name,
                 boundaryRevision,
+                timestamp: FieldValue.serverTimestamp(),
+            });
+            // Announce the same confirmation edge in room chat. Keeping the
+            // message in this transaction makes the announcement exactly
+            // once per outside episode, alongside the boundary event. The
+            // position snapshot gives everyone a View on map action even if
+            // the player moves back inside before they open the message.
+            transaction.create(roomRef.collection('playerMessages').doc(), {
+                type: 'powerUpPing',
+                source: 'boundaryExposure',
+                recipient: null,
+                text: `📍 ${playerData.name} is outside the game area and their location is now visible to everyone.`,
+                pingedPlayer: playerData.name,
+                pings: [
+                    {
+                        name: playerData.name,
+                        lat: nextLat,
+                        lng: nextLng,
+                        accuracyMeters,
+                        capturedAtMs: next.lastUsableMs,
+                        isStale: !isPositionFresh(next.lastUsableMs, receivedMs),
+                    },
+                ],
                 timestamp: FieldValue.serverTimestamp(),
             });
         }

@@ -18,21 +18,36 @@ const ShopItemCard = ({ item, secondsLeft, fractionLeft, disabledReason, onBuy, 
             borderRadius="md"
             p={3}
             overflow="hidden" // clips the cover to the rounded corners
+            h="100%"
+            display="flex"
+            flexDirection="column"
         >
-            <VStack align="stretch" spacing={1}>
+            <VStack align="stretch" spacing={1} flex="1">
                 <Text fontWeight="bold">{item.name}</Text>
-                <Text>{item.cost} pts</Text>
-                <Text>Cooldown {formatSeconds(item.cooldownSeconds)}</Text>
-                {children /* Step 3 puts the player picker here */}
+                <Box display="flex" justifyContent="space-between" fontSize="md">
+                    <Text>{item.cost} pts</Text>
+                    <Text>{formatSeconds(item.cooldownSeconds)} CD</Text>
+                </Box>
+                {item.description && (
+                    <Text fontSize="sm" color="gray.600">
+                        {item.description}
+                    </Text>
+                )}
+                <Box h={10}>{children /* Step 3 puts the player picker here */}</Box>
+            </VStack>
+            <Box display="flex" flexDirection="column" justifyContent="center" mt="auto" pt={2}>
                 <Button
                     aria-label={`Buy ${item.name}`}
                     isDisabled={Boolean(disabledReason)}
                     onClick={onBuy}
+                    colorScheme="green"
                 >
                     Buy
                 </Button>
-                {disabledReason && <Text fontSize={'sm'}>{disabledReason}</Text>}
-            </VStack>
+                <Box h={3} mt={1}>
+                    {disabledReason && <Text fontSize="sm">{disabledReason}</Text>}
+                </Box>
+            </Box>
 
             {isCoolingDown && (
                 <Box

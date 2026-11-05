@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useState } from 'react';
 import {
     Input,
+    Textarea,
     Button,
     Flex,
     NumberInput,
@@ -8,7 +9,6 @@ import {
     NumberDecrementStepper,
     NumberIncrementStepper,
     NumberInputStepper,
-    Select,
 } from '@chakra-ui/react';
 import CreateAlert from '../CreateAlert';
 import {
@@ -23,7 +23,7 @@ const TaskCreation = React.forwardRef((props, titleInputRef) => {
     const { roomID } = useContext(gameContext);
     const [TaskTitle, setTaskTitle] = useState('');
     const [TaskDescription, setTaskDescription] = useState('');
-    const [PointValue, setPointValue] = useState('0');
+    const [PointValue, setPointValue] = useState('');
     const [MaxCompletions, setMaxCompletions] = useState('');
     const time = new Date();
     const [selectedTaskType, setSelectedTaskType] = useState('');
@@ -51,15 +51,14 @@ const TaskCreation = React.forwardRef((props, titleInputRef) => {
     };
 
     //stores task type
-    const handleChangeTaskType = (event) => {
-        setSelectedTaskType(event.target.value);
-        if (event.target.value === 'Revival Mission') {
+    const handleChangeTaskType = (taskType) => {
+        setSelectedTaskType(taskType);
+        if (taskType === 'Revival Mission') {
             setDisableNumberInput(true);
             setPointValue('0');
         } else {
             setDisableNumberInput(false);
         }
-        console.log(selectedTaskType);
     };
 
     //handles task submisison
@@ -145,33 +144,49 @@ const TaskCreation = React.forwardRef((props, titleInputRef) => {
     }, [selectedTaskType]);
 
     return (
-        <Flex m="6px" direction="column">
-            <Flex mb="4px">
-                <Input
-                    ref={titleInputRef}
-                    sx={styles.titleInput}
-                    value={TaskTitle}
-                    onChange={handleTitleChange}
-                    placeholder="Task Title"
-                />
-                <Input
-                    placeholder="Description"
-                    value={TaskDescription}
-                    onChange={handleDescriptionChange}
-                />
+        <Flex m="12px" direction="column">
+            <Input
+                ref={titleInputRef}
+                sx={styles.titleInput}
+                value={TaskTitle}
+                onChange={handleTitleChange}
+                placeholder="Task Title"
+            />
+            <Textarea
+                placeholder="Description"
+                value={TaskDescription}
+                onChange={handleDescriptionChange}
+                minH="96px"
+                resize="vertical"
+                borderRadius="3xl"
+                mb="12px"
+            />
+            <Flex gap={2} my={2}>
+                <Button
+                    flex="1"
+                    variant={selectedTaskType === 'Task' ? 'solid' : 'outline'}
+                    colorScheme={selectedTaskType === 'Task' ? 'blue' : 'gray'}
+                    aria-pressed={selectedTaskType === 'Task'}
+                    onClick={() => handleChangeTaskType('Task')}
+                    color="white"
+                    borderRadius="3xl"
+                >
+                    Task
+                </Button>
+                <Button
+                    flex="1"
+                    variant={selectedTaskType === 'Revival Mission' ? 'solid' : 'outline'}
+                    colorScheme={selectedTaskType === 'Revival Mission' ? 'blue' : 'gray'}
+                    aria-pressed={selectedTaskType === 'Revival Mission'}
+                    onClick={() => handleChangeTaskType('Revival Mission')}
+                    color="white"
+                    borderRadius="3xl"
+                >
+                    Revival Mission
+                </Button>
             </Flex>
 
-            <Flex>
-                <Select
-                    sx={styles.taskTypeSelection}
-                    placeholder="Select Task Type"
-                    value={selectedTaskType}
-                    onChange={handleChangeTaskType}
-                >
-                    <option value="Task">Task</option>
-                    <option value="Revival Mission">Revival Mission</option>
-                </Select>
-
+            <Flex flexDirection="row" justify="center" align="center" gap={2} my={2}>
                 <NumberInput
                     style={styles.pointInput}
                     value={PointValue}
@@ -180,13 +195,12 @@ const TaskCreation = React.forwardRef((props, titleInputRef) => {
                     m="2px"
                     marginX="4px"
                 >
-                    <NumberInputField />
+                    <NumberInputField placeholder="Points" />
                     <NumberInputStepper>
                         <NumberIncrementStepper color="white" />
                         <NumberDecrementStepper color="white" />
                     </NumberInputStepper>
                 </NumberInput>
-
                 <NumberInput
                     style={styles.pointInput}
                     value={MaxCompletions}
@@ -195,13 +209,12 @@ const TaskCreation = React.forwardRef((props, titleInputRef) => {
                     m="2px"
                     marginX="4px"
                 >
-                    <NumberInputField placeholder="Max completions" />
+                    <NumberInputField placeholder="Max Players" />
                     <NumberInputStepper>
                         <NumberIncrementStepper color="white" />
                         <NumberDecrementStepper color="white" />
                     </NumberInputStepper>
                 </NumberInput>
-
                 <Button sx={styles.addButton} onClick={handleAddTask} colorScheme="blue">
                     Add
                 </Button>
@@ -216,15 +229,12 @@ const styles = {
         size: 'md',
         borderRadius: '2xl',
         m: '2px',
+        mb: '12px',
     },
     descInput: {
         borderRadius: '2xl',
         m: '2px',
-    },
-    taskTypeSelection: {
-        size: 'md',
-        borderRadius: '2xl',
-        m: '2px',
+        mb: '12px',
     },
     addButton: {
         size: 'md',

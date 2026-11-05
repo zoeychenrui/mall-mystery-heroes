@@ -108,7 +108,9 @@ service cloud.firestore {
 
       match /players/{playerId} {
         allow read: if isHostOrPlayerOfRoom(roomId);
-        allow write: if isHostOfExistingRoom(roomId);
+        allow write: if isHostOfExistingRoom(roomId) ||
+          (isSignedIn() && resource.data.uid == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['avatarUrl']));
       }
 
       // Game boundary status and events are written only by the Cloud

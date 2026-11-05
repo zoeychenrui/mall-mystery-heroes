@@ -12,3 +12,11 @@ export const uploadKillPhoto = async (roomID, photoBlob) => {
     await uploadBytes(photoRef, photoBlob, { contentType: 'image/jpeg' });
     return getDownloadURL(photoRef);
 };
+
+// Self-photos live separately from kill evidence and can be replaced by
+// uploading to the player's own uid-scoped avatar path.
+export const uploadPlayerAvatar = async (roomID, uid, photoBlob) => {
+    const photoRef = ref(storage, `rooms/${roomID}/avatars/${uid}`);
+    await uploadBytes(photoRef, photoBlob, { contentType: 'image/jpeg' });
+    return getDownloadURL(photoRef);
+};

@@ -20,6 +20,6 @@ const submitKillPhotoCallable = httpsCallable(functions, 'submitKillPhoto');
  *   (docs/improvements.md item 10's error-propagation pattern needs no
  *   changes to handle this).
  */
-export const submitKillPhoto = async ({ roomId, target, mission, url }) => {
-    await submitKillPhotoCallable({ roomId, target, mission, url });
+export const submitKillPhoto = async ({ roomId, target, mission, url, isFunPhoto = false }) => {
+    await submitKillPhotoCallable({ roomId, target, mission, url, isFunPhoto });
 };

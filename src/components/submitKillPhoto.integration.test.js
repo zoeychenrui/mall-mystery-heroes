@@ -302,7 +302,7 @@ describe('submitKillPhoto', () => {
             const call = httpsCallable(alice.functions, 'submitKillPhoto');
 
             await expect(call({ roomId: ROOM, url: REALISTIC_URL })).rejects.toThrow(
-                'Exactly one of target or mission must be provided.'
+                'Choose either a kill/mission claim or a fun photo.'
             );
             const snapshot = await getDocs(fetchPhotosQueryByAscendingTimestampForRoom(ROOM));
             expect(snapshot.docs).toHaveLength(0);
@@ -319,7 +319,7 @@ describe('submitKillPhoto', () => {
 
             await expect(
                 call({ roomId: ROOM, url: REALISTIC_URL, target: 'bob', mission: 3 })
-            ).rejects.toThrow('Exactly one of target or mission must be provided.');
+            ).rejects.toThrow('Choose either a kill/mission claim or a fun photo.');
             const snapshot = await getDocs(fetchPhotosQueryByAscendingTimestampForRoom(ROOM));
             expect(snapshot.docs).toHaveLength(0);
         } finally {
@@ -334,7 +334,7 @@ describe('submitKillPhoto', () => {
             const call = httpsCallable(alice.functions, 'submitKillPhoto');
 
             await expect(call({ roomId: ROOM, url: REALISTIC_URL, target: '   ' })).rejects.toThrow(
-                'Exactly one of target or mission must be provided.'
+                'Choose either a kill/mission claim or a fun photo.'
             );
             const snapshot = await getDocs(fetchPhotosQueryByAscendingTimestampForRoom(ROOM));
             expect(snapshot.docs).toHaveLength(0);
@@ -350,7 +350,7 @@ describe('submitKillPhoto', () => {
             const call = httpsCallable(alice.functions, 'submitKillPhoto');
 
             await expect(call({ roomId: ROOM, url: REALISTIC_URL, mission: 1.5 })).rejects.toThrow(
-                'Exactly one of target or mission must be provided.'
+                'Choose either a kill/mission claim or a fun photo.'
             );
             const snapshot = await getDocs(fetchPhotosQueryByAscendingTimestampForRoom(ROOM));
             expect(snapshot.docs).toHaveLength(0);
