@@ -196,13 +196,41 @@ unspecified:
   "bare"/custom-dev-client path for no benefit here, since this project
   doesn't need anything the JS SDK can't do, like heavier background
   processing).
-- **Native equivalents for the two browser-API dependencies:**
-  `expo-location`'s foreground position watch in place of
-  `navigator.geolocation` (`useBoundaryLocation.js`'s logic — the
-  cadence/throttling in `src/game/locationReportCadence.js` is reused
-  unchanged, only the OS-level watch call changes), and
-  `expo-image-picker`'s camera capture in place of the hidden
-  `<input type="file" capture="environment">` (`MessageComposer.js`).
+- **Native equivalents for the browser-only APIs the current player
+  code depends on.** Found by reading the actual files, not just the
+  top-level components:
+  - `navigator.geolocation` (`useBoundaryLocation.js`) → `expo-location`'s
+    foreground position watch. The cadence/throttling logic in
+    `src/game/locationReportCadence.js` is reused unchanged; only the
+    OS-level watch call changes.
+  - The hidden `<input type="file" capture="environment">`
+    (`MessageComposer.js`) → `expo-image-picker`'s camera capture.
+  - `src/utils/compressImage.js`'s `new Image()`/`<canvas>`/
+    `URL.createObjectURL` (run on every kill-photo before upload, so a
+    multi-MB phone photo doesn't go out over a possibly-weak venue
+    connection uncompressed — skipping this would reproduce exactly the
+    "janky camera" failure this doc's Anti-goals section rules out) →
+    `expo-image-manipulator` for the resize/compress step.
+  - `crypto.randomUUID()` (`src/components/firebase_calls/
+    storageCalls.js`'s `uploadKillPhoto`, naming the Storage object) →
+    `expo-crypto` (or an equivalent RN UUID polyfill), since Hermes does
+    not provide this by default.
+  Each of these is a client-side swap only — none change what gets
+  uploaded, stored, or how the backend processes it, so none of them
+  are backend changes under this doc's Non-goals.
+- **Firestore's realtime listeners need a transport setting under
+  React Native.** The web SDK's default `onSnapshot` streaming
+  transport is browser-specific; under Hermes it commonly needs
+  `initializeFirestore(app, { experimentalForceLongPolling: true })`
+  (or `experimentalAutoDetectLongPolling`) to work at all. Every
+  parity feature in this doc (chat, boundary status, map positions,
+  missions, leaderboard, shop) is an `onSnapshot` subscription, so the
+  plan should verify this works — with that setting — as a first step,
+  before estimating anything built on top of it. If it turns out not to
+  work even with that setting, the fallback is reconsidering
+  `@react-native-firebase`, which would be a real change to the "How
+  it's built" decisions above, not a small fix — worth surfacing early
+  rather than discovering mid-build.
 - **A native map component** (e.g. `react-native-maps`) replacing
   `react-map-gl`/Mapbox GL JS for `GameMap.js`'s player-facing rendering
   — the boundary polygon, position markers, and accuracy circle are the
