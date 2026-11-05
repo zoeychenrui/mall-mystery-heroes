@@ -1,30 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-    AlertDialog,
-    AlertDialogBody,
-    AlertDialogContent,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogOverlay,
-    Box,
-    Button,
-    Flex,
-    Heading,
-    HStack,
-    Modal,
-    ModalBody,
-    ModalCloseButton,
-    ModalContent,
-    ModalFooter,
-    ModalHeader,
-    ModalOverlay,
-    Text,
-    useDisclosure,
-} from '@chakra-ui/react';
+import { Flex, useDisclosure } from '@chakra-ui/react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { onSnapshot } from 'firebase/firestore';
+import { onSnapshot, updateDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { auth } from '../utils/firebase';
+import { uploadPlayerAvatar } from '../components/firebase_calls/storageCalls';
+import { compressImage } from '../utils/compressImage';
 import {
     fetchRoomReferenceForRoom,
     fetchPlayerReferenceForRoom,
@@ -41,11 +22,16 @@ import MessageComposer from '../components/player_messages_components/MessageCom
 import PlayerTaskListModal from '../components/task_components/PlayerTaskListModal';
 import LeaderboardModal from '../components/game_end_components/LeaderboardModal';
 import PowerUpShopModal from '../components/shop_components/PowerUpShopModal';
+import PlayerGameHeader from '../components/player_game/PlayerGameHeader';
+import PlayerRulesModal from '../components/player_game/PlayerRulesModal';
+import PlayerGameDialogs from '../components/player_game/PlayerGameDialogs';
+import PlayerGameStatusNotices from '../components/player_game/PlayerGameStatusNotices';
+import PlayerBoundaryPanel from '../components/player_game/PlayerBoundaryPanel';
 import { buildLeaderboardStandings } from '../game/leaderboard';
 import { formatMessageTime } from '../utils/formatMessageTime';
 import { normalizePlayerName, resolvePlayerDisplayName } from '../game/playerNames';
 import useBoundaryLocation from '../hooks/useBoundaryLocation';
-import PlayerMapModal from '../components/map_components/PlayerMapModal';
+
 // require(), not a named `import` — gameBoundary.js is CommonJS
 // (module.exports) by design (see its own header comment), and a named ES
 // `import` of it is not statically analyzable the way CRA's production
@@ -107,6 +93,8 @@ const PlayerGame = () => {
     const [boundaryStatusDoc, setBoundaryStatusDoc] = useState(null);
     const [otherOutsidePositions, setOtherOutsidePositions] = useState([]);
     const [nowMs, setNowMs] = useState(Date.now());
+    const [avatarBusy, setAvatarBusy] = useState(false);
+    const avatarInputRef = useRef(null);
     const previousRevisionRef = useRef(undefined);
     const session = readPlayerSession();
     const playerName = session && session.roomID === roomID ? session.playerName : '';
@@ -123,12 +111,12 @@ const PlayerGame = () => {
         onClose: onLeaderboardClose,
     } = useDisclosure();
     const { isOpen: isShopOpen, onOpen: onShopOpen, onClose: onShopClose } = useDisclosure();
+    const { isOpen: areRulesOpen, onOpen: onRulesOpen, onClose: onRulesClose } = useDisclosure();
     const {
         isOpen: isGameEndedOpen,
         onOpen: onGameEndedOpen,
         onClose: onGameEndedClose,
     } = useDisclosure();
-    const cancelRef = useRef();
     const createAlert = CreateAlert();
     // Positions from a ping card's "View on map", shown alongside the
     // live ones until the map closes. Snapshots — never updated.
@@ -239,11 +227,10 @@ const PlayerGame = () => {
         if (!isGameActive) onGameEndedOpen();
     }, [isGameActive, onGameEndedOpen]);
 
-    // Only starts once the game has actually begun — no need to read the
-    // player's own doc while still in the waiting room, and it keeps the
-    // waiting screen's read footprint unchanged from before this doc.
+    // Read the player's own doc in the waiting room too, so they can set
+    // their avatar before the host starts the game.
     useEffect(() => {
-        if (!roomID || !gameStarted || !playerName) return undefined;
+        if (!roomID || !playerName) return undefined;
         const playerRef = fetchPlayerReferenceForRoom(playerName, roomID);
         const unsubscribe = onSnapshot(
             playerRef,
@@ -258,7 +245,7 @@ const PlayerGame = () => {
             handleSubscriptionError
         );
         return () => unsubscribe();
-    }, [roomID, gameStarted, playerName, navigate, handleSubscriptionError]);
+    }, [roomID, playerName, navigate, handleSubscriptionError]);
 
     useEffect(() => {
         if (!roomID || !gameStarted) return undefined;
@@ -267,6 +254,7 @@ const PlayerGame = () => {
             setPlayers(
                 snapshot.docs.map((doc) => ({
                     name: doc.data().name,
+                    ...(doc.data().avatarUrl ? { avatarUrl: doc.data().avatarUrl } : {}),
                     score: doc.data().score,
                     targets: doc.data().targets,
                     openSeason: doc.data().openSeason,
@@ -500,6 +488,23 @@ const PlayerGame = () => {
         onOpen();
     };
 
+    const handleAvatarChange = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file || !auth.currentUser || !playerData) return;
+        setAvatarBusy(true);
+        try {
+            const blob = await compressImage(file);
+            const avatarUrl = await uploadPlayerAvatar(roomID, auth.currentUser.uid, blob);
+            await updateDoc(fetchPlayerReferenceForRoom(playerName, roomID), { avatarUrl });
+        } catch (error) {
+            console.error('Could not update avatar:', error);
+            createAlert('error', 'Could not save your photo', 'Please try again.', 3000);
+        } finally {
+            setAvatarBusy(false);
+        }
+    };
+
     const handleConfirmLeave = async () => {
         try {
             await leaveGame(roomID);
@@ -521,67 +526,42 @@ const PlayerGame = () => {
 
     return (
         <Flex
-            height="100vh"
+            minH="100vh"
+            height="100dvh"
+            pt="env(safe-area-inset-top)"
+            pb="env(safe-area-inset-bottom)"
             direction="column"
-            p={4}
-            // Dark red, and it stays — closing the "game ended" popup below
-            // dismisses the popup, not this. Player-facing only; the GM
-            // console (GameMasterView.js) is untouched.
-            bg={!isGameActive ? 'red.900' : undefined}
+            bg={!isGameActive ? 'red.950' : 'gray.950'}
+            color="white"
+            overflow="hidden"
         >
-            <Flex justifyContent="space-between" alignItems="center" wrap="wrap" gap={2} mb={2}>
-                <HStack spacing={2}>
-                    {/* Top-left per POWER_UPS_SPEC.md — only while there's a
-                        game to spend points in, and only for the living. */}
-                    {canShop && (
-                        <Button size="sm" colorScheme="yellow" onClick={onShopOpen}>
-                            Shop
-                        </Button>
-                    )}
-                    <Heading size="md">
-                        {playerName || 'You'} joined {roomID}
-                    </Heading>
-                </HStack>
-                <HStack spacing={2}>
-                    <Button
-                        size="sm"
-                        colorScheme="red"
-                        variant="outline"
-                        onClick={handleLeaveClick}
-                    >
-                        Leave
-                    </Button>
-                    <Button size="sm" colorScheme="teal" variant="outline" onClick={onMissionsOpen}>
-                        Missions
-                    </Button>
-                    <Button
-                        size="sm"
-                        colorScheme="teal"
-                        variant="outline"
-                        onClick={onLeaderboardOpen}
-                    >
-                        Leaderboard
-                    </Button>
-                </HStack>
-            </Flex>
-            <AlertDialog isOpen={isOpen} leastDestructiveRef={cancelRef} onClose={onClose}>
-                <AlertDialogOverlay />
-                <AlertDialogContent bg="#202030">
-                    <AlertDialogHeader color="red">WARNING</AlertDialogHeader>
-                    <AlertDialogBody color="#FFFFFF">
-                        Leave the game? You&apos;ll be removed, and won&apos;t be able to rejoin
-                        once the game has started.
-                    </AlertDialogBody>
-                    <AlertDialogFooter>
-                        <Button ref={cancelRef} onClick={onClose} colorScheme="red">
-                            Go Back
-                        </Button>
-                        <Button colorScheme="green" onClick={handleConfirmLeave}>
-                            Confirm
-                        </Button>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <PlayerGameHeader
+                roomID={roomID}
+                playerName={playerName}
+                isGameActive={isGameActive}
+                gameStarted={gameStarted}
+                playerData={playerData}
+                players={players}
+                gameBoundaryEnabled={gameBoundary?.enabled === true}
+                canShop={canShop}
+                avatarInputRef={avatarInputRef}
+                avatarBusy={avatarBusy}
+                onAvatarChange={handleAvatarChange}
+                onLeaveClick={handleLeaveClick}
+                onRulesOpen={onRulesOpen}
+                onShopOpen={onShopOpen}
+                onMissionsOpen={onMissionsOpen}
+                onLeaderboardOpen={onLeaderboardOpen}
+                onMapOpen={onMapOpen}
+            />
+            <PlayerRulesModal isOpen={areRulesOpen} onClose={onRulesClose} />
+            <PlayerGameDialogs
+                isLeaveOpen={isOpen}
+                onLeaveClose={onClose}
+                onConfirmLeave={handleConfirmLeave}
+                isGameEndedOpen={isGameEndedOpen}
+                onGameEndedClose={onGameEndedClose}
+            />
             <PlayerTaskListModal
                 isOpen={isMissionsOpen}
                 onClose={onMissionsClose}
@@ -610,176 +590,45 @@ const PlayerGame = () => {
                         nowMs
                     )
                 }
+                zonesEnabled={gameBoundary?.enabled === true}
                 pendingMysteryItem={playerData?.pendingMysteryItem ?? null}
                 players={players}
                 playerName={playerName}
             />
-            {/* Once the game has ended, the target/status text no longer
-                applies — the "please head back" and final-standings
-                announcements arrive as real chat messages instead
-                (Endgamebutton.js posts them). Chat itself stays mounted
-                either way, so players can keep talking on the way back. */}
-            {isGameActive && (
-                <>
-                    {!gameStarted && <Text mb={4}>Waiting for the host to start...</Text>}
-                    {gameStarted && playerData?.isAlive && (
-                        <Text mb={4}>
-                            {(playerData.targets ?? []).length > 0
-                                ? `Your target: ${(playerData.targets ?? []).join(', ')}`
-                                : 'Waiting for your target...'}
-                        </Text>
-                    )}
-                    {gameStarted && playerData && !playerData.isAlive && (
-                        <>
-                            <Heading size="md" mb={2}>
-                                You&apos;ve been eliminated
-                            </Heading>
-                            <Text mb={4}>
-                                You may be revived if the host assigns you a revival mission.
-                            </Text>
-                        </>
-                    )}
-                    {gameBoundary?.enabled && (playerData?.isAlive ?? true) && (
-                        <>
-                            {permissionState === 'unknown' && (
-                                <Box bg="blue.900" color="white" borderRadius="md" p={3} mb={2}>
-                                    <Text mb={2}>
-                                        Turn on location so we can check that you are inside the
-                                        game area. The moderator sees your boundary status. Other
-                                        players cannot see your location unless you leave the game
-                                        area. Keep the game open for location updates.
-                                    </Text>
-                                    <Button size="sm" onClick={requestPermission}>
-                                        Enable Location
-                                    </Button>
-                                </Box>
-                            )}
-                            {permissionState === 'denied' && (
-                                <Box bg="orange.800" color="white" borderRadius="md" p={3} mb={2}>
-                                    <Text mb={2}>
-                                        Location permission was denied. Enable it in your browser or
-                                        device settings, then retry.
-                                    </Text>
-                                    <Button size="sm" onClick={requestPermission}>
-                                        Retry
-                                    </Button>
-                                </Box>
-                            )}
-                            {permissionState === 'unavailable' && (
-                                <Box bg="orange.800" color="white" borderRadius="md" p={3} mb={2}>
-                                    <Text>{UNAVAILABLE_REASON_TEXT.unavailable}</Text>
-                                </Box>
-                            )}
-                            {isApproachingExposure && (
-                                <Box
-                                    bg="orange.700"
-                                    color="white"
-                                    borderRadius="md"
-                                    p={2}
-                                    mb={2}
-                                    textAlign="center"
-                                >
-                                    <Text fontWeight="bold">
-                                        Return to the game area — your location will be revealed to
-                                        everyone in {secondsUntilExposed}s.
-                                    </Text>
-                                </Box>
-                            )}
-                            {liveBoundaryStatus.status === 'outside' && (
-                                <Box
-                                    bg="red.900"
-                                    color="white"
-                                    borderRadius="md"
-                                    p={2}
-                                    mb={2}
-                                    textAlign="center"
-                                >
-                                    <Text fontWeight="bold">{statusText}</Text>
-                                </Box>
-                            )}
-                            {liveBoundaryStatus.status !== 'outside' &&
-                                liveBoundaryStatus.status !== 'unavailable' && (
-                                    <Text mb={2}>{statusText}</Text>
-                                )}
-                            {/* Suppressed while permissionState is still 'unknown' — the
-                                pre-permission box above already explains why there is
-                                nothing to show yet; stacking both is confusing. */}
-                            {permissionState !== 'unknown' &&
-                                liveBoundaryStatus.status === 'unavailable' && (
-                                    <Box
-                                        bg="orange.800"
-                                        color="white"
-                                        borderRadius="md"
-                                        p={3}
-                                        mb={2}
-                                    >
-                                        <Text mb={showUnavailableRetry ? 2 : 0}>
-                                            Location unavailable: {unavailableText}
-                                            {lastCheckTime &&
-                                                ` Last confirmed at ${lastCheckTime}.`}
-                                        </Text>
-                                        {showUnavailableRetry && (
-                                            <Button size="sm" onClick={requestPermission}>
-                                                Retry
-                                            </Button>
-                                        )}
-                                    </Box>
-                                )}
-                            <Button size="sm" mb={2} onClick={onMapOpen}>
-                                View Game Map
-                            </Button>
-                            <PlayerMapModal
-                                isOpen={isMapOpen}
-                                onClose={handleMapClose}
-                                boundaryVertices={gameBoundary.vertices}
-                                otherPositions={[...freshOtherOutsidePositions, ...pingPositions]}
-                                ownPosition={
-                                    ownPosition &&
-                                    nowMs - ownPosition.acquiredAtMs <=
-                                        GAME_BOUNDARY_CONFIG.freshnessMs
-                                        ? ownPosition
-                                        : null
-                                }
-                                statusText={mapStatusText}
-                            />
-                        </>
-                    )}
-                </>
-            )}
-            {/* Pinned above the chat feed for as long as the game stays
-                inactive — closing the popup below only dismisses the
-                popup, not this. */}
-            {!isGameActive && (
-                <Box bg="red.700" color="white" borderRadius="md" p={2} mb={2} textAlign="center">
-                    <Text fontWeight="bold">
-                        GAME ENDED. PLEASE HEAD BACK TO THE STARTING AREA.
-                    </Text>
-                </Box>
-            )}
-            <Modal isOpen={isGameEndedOpen} onClose={onGameEndedClose} size="xl" isCentered>
-                <ModalOverlay />
-                <ModalContent bg="red.900" color="white">
-                    <ModalHeader textAlign="center" fontSize="2xl" fontWeight="bold">
-                        GAME ENDED
-                    </ModalHeader>
-                    <ModalCloseButton aria-label="Close modal" />
-                    <ModalBody textAlign="center">
-                        <Text fontSize="lg" fontWeight="bold">
-                            PLEASE HEAD BACK TO THE STARTING AREA.
-                        </Text>
-                    </ModalBody>
-                    <ModalFooter justifyContent="center">
-                        <Button onClick={onGameEndedClose}>Close</Button>
-                    </ModalFooter>
-                </ModalContent>
-            </Modal>
-            <MessageFeed
-                onShowPings={isMapAvailable ? handleShowPings : undefined}
-                roomID={roomID}
-                playerName={playerName}
-                pendingMessages={pendingMessages}
-                onPendingMessageConfirmed={handlePendingMessageConfirmed}
+            <PlayerGameStatusNotices
+                isGameActive={isGameActive}
+                gameStarted={gameStarted}
+                playerData={playerData}
             />
+            <Flex position="relative" direction="column" flex="1" minH="0" overflow="hidden">
+                <PlayerBoundaryPanel
+                    enabled={gameBoundary?.enabled === true}
+                    isAlive={playerData?.isAlive ?? true}
+                    permissionState={permissionState}
+                    requestPermission={requestPermission}
+                    isApproachingExposure={isApproachingExposure}
+                    secondsUntilExposed={secondsUntilExposed}
+                    liveBoundaryStatus={liveBoundaryStatus}
+                    statusText={statusText}
+                    unavailableText={unavailableText}
+                    lastCheckTime={lastCheckTime}
+                    showUnavailableRetry={showUnavailableRetry}
+                    isMapOpen={isMapOpen}
+                    onMapClose={handleMapClose}
+                    boundaryVertices={gameBoundary?.vertices ?? []}
+                    otherPositions={[...freshOtherOutsidePositions, ...pingPositions]}
+                    ownPosition={ownPosition}
+                    nowMs={nowMs}
+                    mapStatusText={mapStatusText}
+                />
+                <MessageFeed
+                    onShowPings={isMapAvailable ? handleShowPings : undefined}
+                    roomID={roomID}
+                    playerName={playerName}
+                    pendingMessages={pendingMessages}
+                    onPendingMessageConfirmed={handlePendingMessageConfirmed}
+                />
+            </Flex>
             <MessageComposer
                 roomID={roomID}
                 playerName={playerName}
@@ -789,6 +638,7 @@ const PlayerGame = () => {
                 players={players}
                 missions={missions}
                 cameraBlockedUntil={playerData?.cameraBlockedUntil}
+                locationEnabled={permissionState === 'granted'}
             />
         </Flex>
     );

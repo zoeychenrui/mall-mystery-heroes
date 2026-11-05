@@ -77,7 +77,7 @@ describe('GMChatPanel', () => {
         expect(screen.getByText('lol where are you')).toBeInTheDocument();
     });
 
-    it('filters out non-chat messages, e.g. a GM broadcast', () => {
+    it('shows broadcasts alongside player chat', () => {
         onSnapshot.mockImplementation((query, onNext) => {
             onNext({
                 docChanges: () =>
@@ -96,7 +96,7 @@ describe('GMChatPanel', () => {
 
         mountPanel();
 
-        expect(screen.queryByText('Game starts soon!')).not.toBeInTheDocument();
+        expect(screen.getByText('Game starts soon!')).toBeInTheDocument();
         expect(screen.getByText('hyped')).toBeInTheDocument();
     });
 

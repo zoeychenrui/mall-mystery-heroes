@@ -15,6 +15,7 @@ export const KNOWN_COMMANDS = [
     '/leaderboard',
     '/mission',
     '/openseason',
+    '/ping',
     '/revive',
     '/whisper',
 ];

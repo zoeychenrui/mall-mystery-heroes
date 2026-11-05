@@ -13,6 +13,7 @@ import userEvent from '@testing-library/user-event';
 import TargetGenerator from './TargetGenerator';
 import {
     addLogForRoom,
+    addPlayerMessageForRoom,
     markGameAsStarted,
     updateAssassinsForPlayer,
     updateTargetsForPlayer,
@@ -20,6 +21,7 @@ import {
 
 jest.mock('./firebase_calls/dbCalls', () => ({
     addLogForRoom: jest.fn(),
+    addPlayerMessageForRoom: jest.fn(),
     markGameAsStarted: jest.fn(),
     updateAssassinsForPlayer: jest.fn(),
     updateTargetsForPlayer: jest.fn(),
@@ -48,6 +50,7 @@ beforeEach(() => {
     updateTargetsForPlayer.mockResolvedValue(undefined);
     updateAssassinsForPlayer.mockResolvedValue(undefined);
     addLogForRoom.mockResolvedValue(undefined);
+    addPlayerMessageForRoom.mockResolvedValue(undefined);
     markGameAsStarted.mockResolvedValue(undefined);
 });
 
@@ -113,6 +116,19 @@ describe('confirming writes targets, logs the start, and hands off to the lobby 
 
         await waitFor(() =>
             expect(addLogForRoom).toHaveBeenCalledWith('Game has begun!', 'gray.400', 'room-a')
+        );
+    });
+
+    it('broadcasts the game start to players', async () => {
+        mountTargetGenerator();
+
+        await beginGame();
+
+        await waitFor(() =>
+            expect(addPlayerMessageForRoom).toHaveBeenCalledWith(
+                { type: 'broadcast', recipient: null, text: 'Game has begun!', standings: null },
+                'room-a'
+            )
         );
     });
 

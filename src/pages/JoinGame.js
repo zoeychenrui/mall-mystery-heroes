@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Button, Input, Stack, Heading, Flex, Alert, AlertIcon } from '@chakra-ui/react';
+import { Button, Input, Stack, Heading, Flex, Alert, AlertIcon, Image } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { signInAnonymously } from 'firebase/auth';
 import { auth } from '../utils/firebase';
 import { joinRoom } from '../components/joinRoom';
 import { requestReconnect } from '../components/requestReconnect';
 import { writePlayerSession } from '../utils/playerSession';
+import bgimg from '../assets/logo-3.png';
+import logo from '../assets/mall-logo-white-2.png';
 
 const JoinGame = () => {
     const navigate = useNavigate();
@@ -53,8 +55,24 @@ const JoinGame = () => {
     };
 
     return (
-        <Flex height="100vh" alignItems="center" justifyContent="center" p={4}>
-            <Stack as="form" onSubmit={handleSubmit} spacing={4} width="100%" maxWidth="320px">
+        <Flex
+            height="100vh"
+            alignItems="center"
+            justifyContent="center"
+            p={4}
+            backgroundImage={`url(${bgimg})`}
+            backgroundSize="cover"
+            backgroundPosition="center"
+        >
+            <Stack
+                as="form"
+                onSubmit={handleSubmit}
+                align="center"
+                spacing={4}
+                width="100%"
+                maxWidth="320px"
+            >
+                <Image src={logo} maxWidth="250px" maxHeight="250px" alt="logo white" mb={4} />
                 <Heading size="lg" textAlign="center">
                     Join Game
                 </Heading>
@@ -79,7 +97,7 @@ const JoinGame = () => {
                     value={playerName}
                     onChange={(e) => setPlayerName(e.target.value)}
                     borderWidth="3px"
-                    maxLength={40}
+                    maxLength={16}
                 />
                 <Button type="submit" colorScheme="teal" isLoading={isSubmitting}>
                     Join

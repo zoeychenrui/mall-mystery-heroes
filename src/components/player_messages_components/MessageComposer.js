@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, Flex, Image, Input, Button, VisuallyHidden } from '@chakra-ui/react';
+import { Box, Button, Flex, Image, Textarea, VisuallyHidden } from '@chakra-ui/react';
 import { submitChatMessage } from '../submitChatMessage';
 import { submitKillPhoto } from '../submitKillPhoto';
 import { compressImage } from '../../utils/compressImage';
@@ -7,6 +7,9 @@ import { uploadKillPhoto } from '../firebase_calls/storageCalls';
 import CreateAlert from '../CreateAlert';
 import KillPhotoModal from './KillPhotoModal';
 import redX from '../../assets/red-x.png';
+import enterIcon from '../../assets/enter-green.png';
+import imageIcon from '../../assets/kill-white.png';
+
 // require(), not a named `import` — powerUpEffects.js is CommonJS; see
 // PowerUpShopModal.js.
 const { isCameraBlocked } = require('../../game/powerUpEffects');
@@ -35,6 +38,7 @@ const MessageComposer = ({
     // From this player's own doc — set when someone uses "Block a player's
     // camera" on them (purchasePowerUp.js).
     cameraBlockedUntil = null,
+    locationEnabled = true,
 }) => {
     const [text, setText] = useState('');
     const blockedUntilMs = toMs(cameraBlockedUntil);
@@ -105,9 +109,8 @@ const MessageComposer = ({
     };
 
     const handleKeyDown = (event) => {
-        // Guards Shift+Enter (would insert a newline, if this ever becomes
-        // multiline) and IME composition (an Enter keystroke that's
-        // confirming a composed character, not submitting the message).
+        // Shift+Enter inserts a newline in the multiline composer. Ignore
+        // IME composition because Enter may be confirming a composed character.
         if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
             handleSend();
         }
@@ -161,9 +164,10 @@ const MessageComposer = ({
         const mission = claimValue.startsWith('mission:')
             ? Number(claimValue.slice('mission:'.length))
             : null;
+        const isFunPhoto = claimValue === 'fun';
         try {
             const url = await uploadKillPhoto(roomID, blobToSubmit);
-            await submitKillPhoto({ roomId: roomID, url, target, mission });
+            await submitKillPhoto({ roomId: roomID, url, target, mission, isFunPhoto });
         } catch (submitError) {
             console.error('Error submitting kill photo:', submitError);
             createAlert(
@@ -187,53 +191,91 @@ const MessageComposer = ({
     // photo — the moderator's combined target/mission dropdown may still
     // have an open mission to offer them even with no live kill target
     // (docs/superpowers/specs/2026-08-27-mission-completion-via-photo-design.md).
-    const photoDisabled = disabled || !isGameActive || cameraBlocked;
+    const photoDisabled = disabled || !isGameActive || cameraBlocked || !locationEnabled;
 
     return (
         <Flex p={2} borderTop="1px solid" borderColor="gray.600">
-            <Input
-                placeholder="Type a message..."
-                value={text}
-                onChange={(event) => setText(event.target.value)}
-                onKeyDown={handleKeyDown}
-                isDisabled={disabled}
-                mr={2}
-                maxLength={500}
-            />
-            <VisuallyHidden>
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handleFileChange}
-                    aria-label="Take Photo"
-                    disabled={photoDisabled}
+            <Box position="relative" flex="1" minW="0" mr={2}>
+                <Textarea
+                    placeholder="Type a message..."
+                    value={text}
+                    onChange={(event) => setText(event.target.value)}
+                    onKeyDown={handleKeyDown}
+                    isDisabled={disabled}
+                    maxLength={500}
+                    minH="50px"
+                    maxH="160px"
+                    resize="none"
+                    overflowY="auto"
+                    w="100%"
+                    pr="60px"
                 />
-            </VisuallyHidden>
-            <Box position="relative" mr={2}>
-                <Button
-                    isDisabled={photoDisabled}
-                    onClick={() => fileInputRef.current.click()}
-                    aria-label={cameraBlocked ? 'Send photo (camera blocked)' : 'Send photo'}
-                >
-                    📷
-                </Button>
-                {/* The spec's X-cross over a blocked player's camera icon. */}
-                {cameraBlocked && (
-                    <Image
-                        src={redX}
-                        alt=""
-                        position="absolute"
-                        inset={0}
-                        m="auto"
-                        boxSize="70%"
-                        pointerEvents="none"
+                <VisuallyHidden>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleFileChange}
+                        aria-label="Take Photo"
+                        disabled={photoDisabled}
                     />
-                )}
+                </VisuallyHidden>
+                <Button
+                    position="absolute"
+                    right="6px"
+                    top="50%"
+                    transform="translateY(-50%)"
+                    variant="ghost"
+                    aria-label={
+                        !locationEnabled
+                            ? 'Send photo (enable location first)'
+                            : cameraBlocked
+                              ? 'Send photo (camera blocked)'
+                              : 'Send photo'
+                    }
+                    onClick={() => fileInputRef.current?.click()}
+                    isDisabled={photoDisabled}
+                    w="44px"
+                    h="44px"
+                    minW="44px"
+                    p={1}
+                    _hover={{ bg: 'whiteAlpha.200' }}
+                >
+                    <Image
+                        src={imageIcon}
+                        alt=""
+                        w="32px"
+                        h="32px"
+                        opacity={photoDisabled ? 0.5 : 1}
+                    />
+                    {/* The spec's X-cross over a blocked player's camera icon. */}
+                    {cameraBlocked && (
+                        <Image
+                            src={redX}
+                            alt=""
+                            position="absolute"
+                            inset={0}
+                            m="auto"
+                            boxSize="70%"
+                            pointerEvents="none"
+                        />
+                    )}
+                </Button>
             </Box>
-            <Button onClick={handleSend} colorScheme="teal" isDisabled={disabled}>
-                Send
+            <Button
+                aria-label="Send"
+                variant="ghost"
+                onClick={handleSend}
+                isDisabled={disabled}
+                w={12}
+                h={12}
+                minW={12}
+                p={0}
+                _hover={{ bg: 'whiteAlpha.200' }}
+                _active={{ opacity: 0.7 }}
+            >
+                <Image src={enterIcon} alt="Send message" w={12} h={12} pointerEvents="none" />
             </Button>
             <KillPhotoModal
                 isOpen={isPhotoModalOpen}

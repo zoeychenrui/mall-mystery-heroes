@@ -89,7 +89,7 @@ describe('TaskCreationModal', () => {
         mountModal(true);
 
         await userEvent.type(screen.getByPlaceholderText('Task Title'), 'Find the clue');
-        await userEvent.selectOptions(screen.getByRole('combobox'), 'Revival Mission');
+        await userEvent.click(screen.getByRole('button', { name: 'Revival Mission' }));
         await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
         expect(await screen.findByText('Task Added')).toBeInTheDocument();

@@ -3,8 +3,20 @@ import { useEffect, useRef, useState } from 'react';
 import PlayersList from '../components/player_listing/PlayersList';
 import { useParams } from 'react-router-dom';
 import { onSnapshot } from 'firebase/firestore';
-import { HStack, Heading, VStack, Box, Divider } from '@chakra-ui/react';
+import {
+    HStack,
+    Heading,
+    VStack,
+    Box,
+    Divider,
+    Tabs,
+    TabList,
+    Tab,
+    TabPanels,
+    TabPanel,
+} from '@chakra-ui/react';
 import TaskCreationModal from '../components/task_components/TaskCreationModal';
+import TaskList from '../components/task_components/TaskList';
 import TaskListModal from '../components/task_components/TaskListModal';
 import LeaderboardModal from '../components/game_end_components/LeaderboardModal';
 import HeaderExecution from '../components/header_components/HeaderExecution';
@@ -55,6 +67,7 @@ const GameMasterView = () => {
             setPlayers(
                 snapshot.docs.map((doc) => ({
                     name: doc.data().name,
+                    avatarUrl: doc.data().avatarUrl,
                     score: doc.data().score,
                     targets: doc.data().targets,
                     openSeason: doc.data().openSeason,
@@ -236,9 +249,9 @@ const GameMasterView = () => {
         handleTaskCompleted,
         handleNewTaskAdded,
         handleSetShowMessageToTrue,
+        handleShowLeaderboardView,
         handleShowMissionCreation,
         handleShowMissionList,
-        handleShowLeaderboardView,
         handleOpenSznstarted,
         handleOpenSznended,
         addLog,
@@ -252,15 +265,13 @@ const GameMasterView = () => {
                     onClose={() => setShowTaskCreationModal(false)}
                     handleNewTaskAdded={handleNewTaskAdded}
                 />
-                {/* TaskAccordion (rendered inside TaskListModal) needs addLog
-                    for mission edit/delete announcements — this modal sits
-                    outside both narrower executionContext.Provider scopes
-                    below, so it gets its own. */}
+                <TaskListModal
+                    isOpen={showTaskListModal}
+                    onClose={() => setShowTaskListModal(false)}
+                />
+                {/* TaskAccordion needs addLog for mission edit/delete
+                    announcements, so it shares the execution context here. */}
                 <executionContext.Provider value={executionContextProviderValues}>
-                    <TaskListModal
-                        isOpen={showTaskListModal}
-                        onClose={() => setShowTaskListModal(false)}
-                    />
                     <LeaderboardModal
                         isOpen={showLeaderboardModal}
                         onClose={() => setShowLeaderboardModal(false)}
@@ -280,7 +291,7 @@ const GameMasterView = () => {
                 {/* ReconnectRequests needs addLog from executionContext, but
                     belongs visually in the header area, which sits outside
                     both narrower executionContext.Provider scopes below —
-                    same situation as TaskListModal above, same fix. */}
+                    same situation as TaskAccordion above, same fix. */}
                 <executionContext.Provider value={executionContextProviderValues}>
                     <ReconnectRequests />
                 </executionContext.Provider>
@@ -293,17 +304,38 @@ const GameMasterView = () => {
                     </Box>
 
                     <Box sx={styles.logsWrapper}>
-                        <Heading sx={styles.chatHeaderText}>Logs</Heading>
-                        <Divider />
-                        <Box sx={styles.logsBox} ref={logsBoxRef} data-testid="logs-box">
-                            <Log logList={logList} />
-                        </Box>
-                        <Divider />
-                        <executionContext.Provider value={executionContextProviderValues}>
-                            <Box sx={styles.logInput}>
-                                <ChatInput />
-                            </Box>
-                        </executionContext.Provider>
+                        <Tabs
+                            display="flex"
+                            flexDirection="column"
+                            h="100%"
+                            minH={0}
+                            variant="unstyled"
+                        >
+                            <TabList flexShrink={0}>
+                                <Tab sx={styles.tabHeader}>Player Chat</Tab>
+                                <Tab sx={styles.tabHeader}>Logs</Tab>
+                            </TabList>
+                            <TabPanels flex="1" minH={0}>
+                                <TabPanel h="100%" display="flex" flexDirection="column" p={2}>
+                                    <GMChatPanel roomID={roomID} />
+                                </TabPanel>
+                                <TabPanel h="100%" display="flex" flexDirection="column" p={2}>
+                                    <Box
+                                        sx={styles.logsBox}
+                                        ref={logsBoxRef}
+                                        data-testid="logs-box"
+                                    >
+                                        <Log logList={logList} />
+                                    </Box>
+                                </TabPanel>
+                            </TabPanels>
+                            <Divider />
+                            <executionContext.Provider value={executionContextProviderValues}>
+                                <Box sx={styles.logInput}>
+                                    <ChatInput />
+                                </Box>
+                            </executionContext.Provider>
+                        </Tabs>
                     </Box>
 
                     <executionContext.Provider value={executionContextProviderValues}>
@@ -311,10 +343,10 @@ const GameMasterView = () => {
                             <Box sx={styles.photosBox}>
                                 <PhotosDisplay players={players} />
                             </Box>
-                            <Box sx={styles.chatPanelWrapper}>
-                                <Heading sx={styles.chatHeaderText}>Player Chat</Heading>
+                            <Box sx={styles.missionPanelWrapper}>
+                                <Heading sx={styles.chatHeaderText}>Missions</Heading>
                                 <Divider />
-                                <GMChatPanel roomID={roomID} />
+                                <TaskList onStartMission={handleShowMissionCreation} />
                             </Box>
                         </VStack>
                     </executionContext.Provider>
@@ -349,14 +381,17 @@ const styles = {
         mx: '8px',
     },
     playerListHeader: {
-        fontSize: '26px',
+        fontSize: '28px',
+        fontWeight: 'bold',
         textAlign: 'center',
         m: '4px',
+        my: '8px',
     },
     chatHeaderText: {
         size: 'lg',
         textAlign: 'center',
         mb: '4px',
+        fontSize: '26px',
     },
     logsWrapper: {
         borderWidth: '2px',
@@ -371,11 +406,11 @@ const styles = {
     },
     logsBox: {
         overflow: 'auto',
-        h: '85%',
-        minH: '85%',
+        flex: '1',
+        minH: 0,
     },
     logInput: {
-        flex: '1',
+        flex: '0 0 56px',
     },
     rightHandStack: {
         ml: '10px',
@@ -389,21 +424,10 @@ const styles = {
     },
     photosBox: {
         w: { base: '100%', md: '100%' },
-        // PhotosDisplay shares rightHandStack with the new GM chat panel
-        // below (docs/superpowers/specs/2026-08-12-chat-send-and-
-        // efficiency-design.md) — no longer the sole child.
         h: '58%',
     },
-    chatPanelWrapper: {
+    missionPanelWrapper: {
         w: '100%',
-        // flex:1, not a fixed h — photosBox's 58% plus the old fixed 35%
-        // plus the 8px margin between them never quite summed to
-        // rightHandStack's own 95%, leaving a gap below this box that
-        // logsWrapper (a plain 95%, filling its column completely) didn't
-        // have — so this box's bottom border ended noticeably higher than
-        // the logs panel's. flex:1 makes it claim all the height
-        // photosBox doesn't, right down to rightHandStack's own bottom
-        // edge, which is the same edge logsWrapper's border sits on.
         flex: '1',
         mt: '8px',
         borderWidth: '2px',
@@ -412,5 +436,16 @@ const styles = {
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
+    },
+    tabHeader: {
+        fontSize: '28px',
+        fontWeight: 'bold',
+        textAlign: 'center',
+        w: '50%',
+        outline: 'none',
+        boxShadow: 'none',
+        _selected: { borderBottom: '2px solid', borderColor: 'blue.300', color: 'blue.300' },
+        borderBottom: '2px solid',
+        borderColor: 'gray.300',
     },
 };

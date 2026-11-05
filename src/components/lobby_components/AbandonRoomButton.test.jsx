@@ -47,7 +47,7 @@ describe('AbandonRoomButton', () => {
     it('opens a confirmation dialog instead of abandoning immediately', async () => {
         mountAbandonRoomButton();
 
-        await userEvent.click(screen.getByRole('button', { name: 'Abandon Room' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Restart Room' }));
 
         expect(screen.getByText(/abandon this room/i)).toBeInTheDocument();
         expect(endGame).not.toHaveBeenCalled();
@@ -56,7 +56,7 @@ describe('AbandonRoomButton', () => {
     it('calls endGame and navigates to the dashboard only after Confirm is clicked', async () => {
         mountAbandonRoomButton();
 
-        await userEvent.click(screen.getByRole('button', { name: 'Abandon Room' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Restart Room' }));
         await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
         expect(endGame).toHaveBeenCalledWith('room-a');
@@ -66,7 +66,7 @@ describe('AbandonRoomButton', () => {
     it('abandons nothing when Go Back is clicked', async () => {
         mountAbandonRoomButton();
 
-        await userEvent.click(screen.getByRole('button', { name: 'Abandon Room' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Restart Room' }));
         await userEvent.click(screen.getByRole('button', { name: 'Go Back' }));
 
         expect(endGame).not.toHaveBeenCalled();
@@ -77,7 +77,7 @@ describe('AbandonRoomButton', () => {
         endGame.mockRejectedValue(new Error('Room not found: room-a'));
         mountAbandonRoomButton();
 
-        await userEvent.click(screen.getByRole('button', { name: 'Abandon Room' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Restart Room' }));
         await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
         expect(await screen.findByText('Room not found: room-a')).toBeInTheDocument();

@@ -1,4 +1,4 @@
-import { Button, Divider, Flex, Heading, Image } from '@chakra-ui/react';
+import { Box, Button, Divider, Flex, Heading, Image, Input } from '@chakra-ui/react';
 import { signOut } from 'firebase/auth';
 import { onSnapshot } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
@@ -10,7 +10,9 @@ import PlayerRemove from '../components/lobby_components/PlayerRemove';
 import AbandonRoomButton from '../components/lobby_components/AbandonRoomButton';
 import TargetGenerator from '../components/TargetGenerator';
 import GameBoundaryButton from '../components/map_components/GameBoundaryButton';
+import GMChatPanel from '../components/player_messages_components/GMChatPanel';
 import {
+    addPlayerMessageForRoom,
     fetchAllPlayersQueryForRoom,
     fetchRoomReferenceForRoom,
 } from '../components/firebase_calls/dbCalls';
@@ -21,6 +23,8 @@ const Lobby = () => {
     const { roomID } = useParams();
     const [arrayOfPlayers, setArrayOfPlayers] = useState([]);
     const [gameBoundary, setGameBoundary] = useState(undefined);
+    const [broadcastText, setBroadcastText] = useState('');
+    const [isBroadcasting, setIsBroadcasting] = useState(false);
     const createAlert = CreateAlert();
 
     const logout = async () => {
@@ -30,6 +34,32 @@ const Lobby = () => {
             navigate('/');
         } catch (err) {
             console.error(err);
+        }
+    };
+
+    const handleBroadcast = async () => {
+        const text = broadcastText.trim();
+        if (!text || isBroadcasting) return;
+        setIsBroadcasting(true);
+        setBroadcastText('');
+        try {
+            await addPlayerMessageForRoom(
+                {
+                    type: 'broadcast',
+                    recipient: null,
+                    text,
+                    standings: null,
+                    mission: null,
+                    sender: null,
+                },
+                roomID
+            );
+        } catch (error) {
+            console.error('Error broadcasting lobby message:', error);
+            setBroadcastText(text);
+            createAlert('error', 'Error broadcasting message', error.message, 1500);
+        } finally {
+            setIsBroadcasting(false);
         }
     };
 
@@ -99,13 +129,31 @@ const Lobby = () => {
     // redundant since players self-join via JoinGame.js
     // (docs/superpowers/specs/2026-08-14-simplified-lobby-design.md).
     return (
-        <Flex h="100vh" w="100vw" direction="column">
-            <Flex direction="column" w="100%" h="30%" bg="#66bf78">
-                <Flex justify="flex-end" w="100%">
+        <Flex h="100vh" w="100vw" direction="row">
+            <Flex direction="column" w="30%" h="100%" bg="#66bf78" justify="center" align="center">
+                <Image src={mallLogo} alt="logo" w="280px" h="300px" />
+                <Heading fontSize={28} mt="4%" color="black">
+                    Game ID: {roomID}
+                </Heading>
+                <Flex mt="8%" gap="12px" align="center" direction="column">
+                    <TargetGenerator
+                        roomID={roomID}
+                        arrayOfPlayers={arrayOfPlayers}
+                        handleLobbyRoom={handleLobbyRoom}
+                    />
+                </Flex>
+            </Flex>
+
+            <Flex direction="column" w="100%" flex="1" bg="black" align="center" overflow="auto">
+                <Flex justify="flex-end" w="98%" mt={1}>
+                    <Flex justify="flex-start" flex="1">
+                        <GameBoundaryButton roomID={roomID} gameBoundary={gameBoundary} />
+                    </Flex>
+                    <AbandonRoomButton roomID={roomID} />
                     <Button
                         colorScheme="red"
                         m="12px"
-                        borderRadius="2px"
+                        borderRadius="3xl"
                         variant="ghost"
                         _hover={{ bg: 'red', color: 'white' }}
                         onClick={logout}
@@ -113,18 +161,10 @@ const Lobby = () => {
                         Log Out
                     </Button>
                 </Flex>
-                <Flex flex="1" justify="center" align="center">
-                    <Image src={mallLogo} alt="logo" w="120px" h="120px" />
-                </Flex>
-            </Flex>
-
-            <Flex direction="column" w="100%" flex="1" bg="black" align="center" overflow="auto">
-                <Heading as="h2" size="md" mt="4%">
-                    Game ID: {roomID}
-                </Heading>
                 <Heading mt="4%" mb="1%">
                     Players ({arrayOfPlayers.length})
                 </Heading>
+
                 <Divider />
 
                 <Flex flex="1" w="100%" justify="center" align="center" overflow="auto">
@@ -137,15 +177,43 @@ const Lobby = () => {
                     )}
                 </Flex>
 
-                <Flex mb="4%" gap="12px" align="center">
-                    <TargetGenerator
-                        roomID={roomID}
-                        arrayOfPlayers={arrayOfPlayers}
-                        handleLobbyRoom={handleLobbyRoom}
-                    />
-                    <AbandonRoomButton roomID={roomID} />
-                    <GameBoundaryButton roomID={roomID} gameBoundary={gameBoundary} />
-                </Flex>
+                <Box
+                    w="100%"
+                    h="24%"
+                    minH="150px"
+                    maxH="240px"
+                    mb="3%"
+                    display="flex"
+                    flexDirection="column"
+                    borderColor="gray.600"
+                    borderRadius="md"
+                >
+                    <Divider />
+                    <GMChatPanel roomID={roomID} />
+                    <Flex p={2} gap={2} borderTop="1px solid" borderColor="gray.600">
+                        <Input
+                            aria-label="Broadcast message"
+                            placeholder="Write a message to all players…"
+                            value={broadcastText}
+                            onChange={(event) => setBroadcastText(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                                    handleBroadcast();
+                                }
+                            }}
+                            maxLength={500}
+                            isDisabled={isBroadcasting}
+                        />
+                        <Button
+                            colorScheme="teal"
+                            onClick={handleBroadcast}
+                            isLoading={isBroadcasting}
+                            isDisabled={!broadcastText.trim()}
+                        >
+                            Send
+                        </Button>
+                    </Flex>
+                </Box>
             </Flex>
         </Flex>
     );

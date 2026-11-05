@@ -10,7 +10,7 @@ import { approveReconnectRequest } from './approveReconnectRequest';
 import { denyReconnectRequest } from './denyReconnectRequest';
 import CreateAlert from './CreateAlert';
 
-// The moderator-facing side of a mid-game reconnect
+// The moderator-facing side of mid-game reconnect and new-join requests
 // (docs/superpowers/specs/2026-08-30-player-reconnect-design.md). Mirrors
 // PhotosDisplay.js's own shape: a small live list of pending items, one
 // row each, with judgment buttons that call a thin Cloud Function
@@ -40,19 +40,27 @@ const ReconnectRequests = () => {
     const handleApprove = async (request) => {
         try {
             await approveReconnectRequest(roomID, request.id);
-            await addLog(`${request.playerName} reconnected`, 'blue.300');
-            await addPlayerMessageForRoom(
-                {
-                    type: 'broadcast',
-                    recipient: null,
-                    text: `${request.playerName} reconnected`,
-                    standings: null,
-                },
-                roomID
-            );
+            const message =
+                request.requestType === 'join'
+                    ? `${request.playerName} joined the game; target assignments were updated.`
+                    : `${request.playerName} reconnected`;
+            await addLog(message, 'blue.300');
+            // New joins are announced inside the approval transaction;
+            // reconnects still need their client-side announcement.
+            if (request.requestType !== 'join') {
+                await addPlayerMessageForRoom(
+                    {
+                        type: 'broadcast',
+                        recipient: null,
+                        text: message,
+                        standings: null,
+                    },
+                    roomID
+                );
+            }
         } catch (error) {
-            console.error('Error approving reconnect request: ', error);
-            createAlert('error', 'Error approving reconnect', error.message, 1500);
+            console.error('Error approving request: ', error);
+            createAlert('error', 'Error approving request', error.message, 1500);
         }
     };
 
@@ -60,8 +68,8 @@ const ReconnectRequests = () => {
         try {
             await denyReconnectRequest(roomID, request.id);
         } catch (error) {
-            console.error('Error denying reconnect request: ', error);
-            createAlert('error', 'Error denying reconnect', error.message, 1500);
+            console.error('Error denying request: ', error);
+            createAlert('error', 'Error denying request', error.message, 1500);
         }
     };
 
@@ -71,7 +79,11 @@ const ReconnectRequests = () => {
         <Box sx={styles.container}>
             {pendingRequests.map((request) => (
                 <Flex key={request.id} sx={styles.row}>
-                    <Text>{request.playerName} wants to reconnect</Text>
+                    <Text>
+                        {request.requestType === 'join'
+                            ? `${request.playerName} wants to join the game (target assignments will be updated)`
+                            : `${request.playerName} wants to reconnect`}
+                    </Text>
                     <Button size="sm" colorScheme="red" onClick={() => handleDeny(request)}>
                         Deny
                     </Button>

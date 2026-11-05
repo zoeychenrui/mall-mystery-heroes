@@ -125,10 +125,10 @@ describe('JoinGame', () => {
         expect(await screen.findByText('Alice is already taken in this room.')).toBeInTheDocument();
     });
 
-    it('limits the name input to 40 characters', () => {
+    it('limits the name input to 16 characters', () => {
         renderJoinGame();
 
-        expect(screen.getByPlaceholderText('Your name')).toHaveAttribute('maxlength', '40');
+        expect(screen.getByPlaceholderText('Your name')).toHaveAttribute('maxlength', '16');
     });
 
     it('shows the game ID in uppercase as it is typed, not just at submit', async () => {

@@ -6,21 +6,23 @@ const RARITY_COLORS = {
     common: 'gray.100',
     rare: 'blue.100',
     mythic: 'yellow.300',
-    na: 'whiteAlpha.200',
+    na: 'orange.100',
 };
 
 const POWER_UPS = [
-    {
-        id: 'watch-ad',
-        name: 'Watch an ad',
-        cost: 0,
-        rarity: 'na',
-        cooldownSeconds: 300,
-        needsTarget: false,
-    },
+    // {
+    //     id: 'watch-ad',
+    //     name: 'Watch an ad',
+    //     cost: 0,
+    //     rarity: 'na',
+    //     cooldownSeconds: 300,
+    //     needsTarget: false,
+    // },
     {
         id: 'ping-assassins',
-        name: 'Ping your assassins',
+        name: 'Assassin Ping',
+        description: 'See where your assassins are on the map.',
+        requiresGameBoundary: true,
         cost: 4,
         rarity: 'common',
         cooldownSeconds: 90,
@@ -28,7 +30,9 @@ const POWER_UPS = [
     },
     {
         id: 'ping-targets',
-        name: 'Ping your targets',
+        name: 'Target Ping',
+        description: 'See where your targets are on the map.',
+        requiresGameBoundary: true,
         cost: 5,
         rarity: 'common',
         cooldownSeconds: 90,
@@ -36,7 +40,9 @@ const POWER_UPS = [
     },
     {
         id: 'global-ping-picked',
-        name: 'Global ping: picked player',
+        name: 'Global Player Ping',
+        description: 'Show everyone where a picked player is on the map.',
+        requiresGameBoundary: true,
         cost: 6,
         rarity: 'rare',
         cooldownSeconds: 150,
@@ -44,7 +50,9 @@ const POWER_UPS = [
     },
     {
         id: 'global-ping-random',
-        name: 'Global ping: random player',
+        name: 'Global Random Ping',
+        description: 'Show everyone where a random player is on the map.',
+        requiresGameBoundary: true,
         cost: 3,
         rarity: 'common',
         cooldownSeconds: 180,
@@ -52,7 +60,8 @@ const POWER_UPS = [
     },
     {
         id: 'block-camera',
-        name: "Block a player's camera",
+        name: 'Camera Block',
+        description: 'Block a player from taking pictures for 30 seconds.',
         cost: 7,
         rarity: 'rare',
         cooldownSeconds: 120,
@@ -61,6 +70,8 @@ const POWER_UPS = [
     {
         id: 'horcrux',
         name: 'Horcrux',
+        description:
+            'The next time you would be eliminated, your horcrux will be destroyed instead.',
         cost: 20,
         rarity: 'mythic',
         cooldownSeconds: 360,
@@ -68,7 +79,8 @@ const POWER_UPS = [
     },
     {
         id: 'mystery-box',
-        name: 'Mystery box',
+        name: 'Mystery Box',
+        description: '???',
         cost: 4,
         rarity: 'na',
         cooldownSeconds: 120,
@@ -84,6 +96,7 @@ const purchaseBlockReason = ({
     targetName,
     isAlive,
     horcruxActive,
+    boundaryEnabled = true,
 }) => {
     // `=== false`, not `!isAlive`: callers that don't know yet (undefined)
     // aren't treated as dead.
@@ -91,6 +104,9 @@ const purchaseBlockReason = ({
     if (cooldownEndsAtMs != null && nowMs < cooldownEndsAtMs) return 'On cooldown';
     // Non-stackable (POWER_UPS_SPEC.md): one active Horcrux at a time.
     if (item.id === 'horcrux' && horcruxActive === true) return 'Horcrux already active';
+    if (item.requiresGameBoundary === true && boundaryEnabled === false) {
+        return 'Zones are not enabled';
+    }
     if (Number(score) < item.cost) return 'Not enough points';
     if (item.needsTarget === true && !targetName) return 'Pick a player';
     return null;

@@ -416,6 +416,14 @@ export const fetchBoundaryStatusReferenceForPlayer = (playerName, roomID) => {
     return doc(db, 'rooms', roomID, 'boundaryStatuses', normalizePlayerName(playerName));
 };
 
+// One-time location snapshot for a GM ping announcement. The host can read
+// boundaryStatuses; the resulting coordinates are copied into the room-wide
+// player message so players can view the ping later from their chat feed.
+export const fetchBoundaryStatusForPlayer = async (playerName, roomID) => {
+    const statusSnapshot = await getDoc(fetchBoundaryStatusReferenceForPlayer(playerName, roomID));
+    return statusSnapshot.exists() ? statusSnapshot.data() : null;
+};
+
 // Every boundary status in the room, unfiltered — only the host's read
 // grant makes this succeed (firestore.rules); a non-host player's
 // equivalent call is denied outright, by design, since Firestore cannot

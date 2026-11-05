@@ -41,8 +41,8 @@ describe('KillPhotoModal', () => {
     it('auto-resolves and shows plain text when there is exactly one option', () => {
         mountModal();
 
-        expect(screen.queryByLabelText('Select target or mission')).not.toBeInTheDocument();
-        expect(screen.getByText('Target: bob')).toBeInTheDocument();
+        expect(screen.getByLabelText('Photo type')).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'bob' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Submit' })).not.toBeDisabled();
     });
 
@@ -62,11 +62,11 @@ describe('KillPhotoModal', () => {
             ],
         });
 
-        expect(screen.getByLabelText('Select target or mission')).toBeInTheDocument();
+        expect(screen.getByLabelText('Photo type')).toBeInTheDocument();
         expect(screen.getByRole('option', { name: 'bob' })).toBeInTheDocument();
         expect(screen.getByRole('option', { name: 'carol' })).toBeInTheDocument();
         expect(screen.getByRole('option', { name: 'Find the clue' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Submit' })).toBeEnabled();
     });
 
     it('enables Submit once a pick is made from the dropdown, and calls onSubmit with the resolved claim', async () => {
@@ -76,7 +76,7 @@ describe('KillPhotoModal', () => {
             ],
         });
 
-        await userEvent.selectOptions(screen.getByLabelText('Select target or mission'), 'carol');
+        await userEvent.selectOptions(screen.getByLabelText('Photo type'), 'target:carol');
         expect(screen.getByRole('button', { name: 'Submit' })).not.toBeDisabled();
 
         await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
@@ -96,9 +96,9 @@ describe('KillPhotoModal', () => {
         mountModal({ players: [{ name: 'alice', targets: [], isAlive: true, openSeason: false }] });
 
         expect(
-            screen.getByText('No open targets or missions for this player.')
+            screen.getByText('No open targets or missions; this will be a fun photo.')
         ).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Submit' })).toBeEnabled();
     });
 
     it('is still disabled while previewUrl has not arrived yet, even with a resolved option', () => {

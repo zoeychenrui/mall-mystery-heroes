@@ -6,6 +6,7 @@
         "functions"
     ],
     "dependencies": {
+        "@chakra-ui/icons": "^2.2.4",
         "@chakra-ui/react": "^2.8.2",
         "@emotion/react": "^11.11.4",
         "@emotion/styled": "^11.11.5",
@@ -16,6 +17,7 @@
         "cors": "^2.8.5",
         "dotenv": "^16.4.5",
         "firebase": "^10.12.0",
+        "lucide-react": "^1.62.0",
         "mapbox-gl": "^3.32.0",
         "react": "^18.3.1",
         "react-autosuggest": "^10.1.0",
@@ -38,7 +40,7 @@
         "lint:fix": "eslint src --ext .js,.jsx --fix",
         "format": "prettier --write \"src/**/*.{js,jsx,css}\" \"*.{json,md}\" \"docs/**/*.md\"",
         "format:check": "prettier --check \"src/**/*.{js,jsx,css}\" \"*.{json,md}\" \"docs/**/*.md\"",
-        "firebase:emulate": "firebase emulators:start --project default"
+        "firebase:emulate": "node functions/scripts/sync-shared-game-logic.js && firebase emulators:start --project default"
     },
     "browserslist": {
         "production": [

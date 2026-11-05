@@ -16,7 +16,7 @@ import PlayerTaskList from './PlayerTaskList';
 // Takes roomID as a prop for the same reason PlayerTaskList does.
 const PlayerTaskListModal = ({ isOpen, onClose, roomID }) => {
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="xl">
+        <Modal isOpen={isOpen} onClose={onClose} w="90%">
             <ModalOverlay />
             <ModalContent bg="#202030">
                 <ModalHeader color="#ffffff">Missions</ModalHeader>

@@ -6,6 +6,7 @@ const admin = require('firebase-admin');
 // admin.firestore binding).
 const { FieldValue } = require('firebase-admin/firestore');
 const { normalizePlayerName } = require('../vendor/game/playerNames');
+const { buildTargetGraph } = require('../vendor/game/targetGraph');
 
 if (admin.apps.length === 0) {
     admin.initializeApp();
@@ -14,8 +15,8 @@ if (admin.apps.length === 0) {
 const db = admin.firestore();
 
 /**
- * Creates a pending reconnect request for a player who already exists in
- * this room but whose current uid isn't the one that joined — mirrors
+ * Creates a pending request either to reconnect an existing player or to
+ * join a game that has already started — mirrors
  * submitKillPhoto.js's "create a pending item for GM judgment" shape
  * (read-then-create inside one transaction), not the plain read+write
  * originally sketched in docs/superpowers/specs/
@@ -23,9 +24,8 @@ const db = admin.firestore();
  * item" Cloud Function in this codebase already transacts this, so this
  * does too, for consistency.
  *
- * No host check — callable by anyone signed in, since this is exactly
- * the case where the caller has just lost whatever identity they had
- * before and cannot prove anything about themselves yet.
+ * No host check — callable by anyone signed in; the host reviews either
+ * request type before any player record or identity link is changed.
  * joinRoom.js is what already rejected this join attempt (gameStarted is
  * true); this function doesn't trust that and re-checks independently.
  */
@@ -38,11 +38,25 @@ exports.requestReconnect = functions.https.onCall(async (data, context) => {
     }
 
     const { roomId, playerName } = data;
-    if (!roomId || !playerName) {
+    if (
+        typeof roomId !== 'string' ||
+        typeof playerName !== 'string' ||
+        !roomId.trim() ||
+        !playerName.trim()
+    ) {
         throw new functions.https.HttpsError(
             'invalid-argument',
             'roomId and playerName are both required.'
         );
+    }
+    if (playerName.length > 16) {
+        throw new functions.https.HttpsError(
+            'invalid-argument',
+            'Player names must be 16 characters or fewer.'
+        );
+    }
+    if (roomId.includes('/')) {
+        throw new functions.https.HttpsError('invalid-argument', 'roomId must not contain "/".');
     }
 
     return db.runTransaction(async (transaction) => {
@@ -80,13 +94,14 @@ exports.requestReconnect = functions.https.onCall(async (data, context) => {
         }
 
         const trimmedLowercaseName = normalizePlayerName(playerName);
-        const playerSnapshot = await transaction.get(playersRef.doc(trimmedLowercaseName));
-        if (!playerSnapshot.exists) {
+        if (!trimmedLowercaseName) {
             throw new functions.https.HttpsError(
-                'not-found',
-                `No player named ${playerName} in this room.`
+                'invalid-argument',
+                'playerName must not be blank.'
             );
         }
+        const playerSnapshot = await transaction.get(playersRef.doc(trimmedLowercaseName));
+        const requestType = playerSnapshot.exists ? 'reconnect' : 'join';
 
         // Blocks the common accidental case (a flaky network causing a
         // retry, a double-tapped button, re-submitting the join form) —
@@ -112,9 +127,10 @@ exports.requestReconnect = functions.https.onCall(async (data, context) => {
 
         const requestRef = roomRef.collection('reconnectRequests').doc();
         transaction.create(requestRef, {
-            playerName: playerSnapshot.data().name,
+            playerName: playerSnapshot.exists ? playerSnapshot.data().name : playerName.trim(),
             trimmedNameLowerCase: trimmedLowercaseName,
             requestingUid: context.auth.uid,
+            requestType,
             status: 'pending',
             timestamp: FieldValue.serverTimestamp(),
         });
@@ -124,9 +140,10 @@ exports.requestReconnect = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Re-links an existing player document to a new uid and marks the
- * request approved — one transaction, so the player's uid, the room's
- * joinedUids, and the request's status all land together or not at all.
+ * Approves either a reconnect or a new mid-game join. New joins create
+ * their player doc and rebuild the live target graph atomically; reconnects
+ * relink the existing player doc. The player state, joinedUids, and request
+ * status land together or not at all.
  * Host-only, mirrors killPlayer.js's/removePlayer.js's host check
  * exactly.
  */
@@ -158,6 +175,12 @@ exports.approveReconnectRequest = functions.https.onCall(async (data, context) =
                 'Only the room host can approve a reconnect request.'
             );
         }
+        if (roomSnapshot.data().isGameActive === false || roomSnapshot.data().endedAt) {
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                'This room is no longer active.'
+            );
+        }
 
         const requestRef = roomRef.collection('reconnectRequests').doc(requestId);
         const requestSnapshot = await transaction.get(requestRef);
@@ -177,10 +200,19 @@ exports.approveReconnectRequest = functions.https.onCall(async (data, context) =
 
         const playerRef = roomRef.collection('players').doc(requestData.trimmedNameLowerCase);
         const playerSnapshot = await transaction.get(playerRef);
-        if (!playerSnapshot.exists) {
+        const isNewJoinRequest = requestData.requestType === 'join';
+        if (!isNewJoinRequest && !playerSnapshot.exists) {
             throw new functions.https.HttpsError(
                 'not-found',
                 'The player this request was for no longer exists.'
+            );
+        }
+        if (isNewJoinRequest && (!roomSnapshot.data().gameStarted || playerSnapshot.exists)) {
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                playerSnapshot.exists
+                    ? 'That player name has since been taken.'
+                    : 'This room has not started a game yet.'
             );
         }
 
@@ -206,12 +238,64 @@ exports.approveReconnectRequest = functions.https.onCall(async (data, context) =
             );
         }
 
-        transaction.update(playerRef, { uid: requestData.requestingUid });
-        transaction.delete(roomRef.collection('boundaryStatuses').doc(playerRef.id));
+        let livePlayers = [];
+        let graph = null;
+        if (isNewJoinRequest) {
+            const liveSnapshot = await transaction.get(
+                roomRef.collection('players').where('isAlive', '==', true)
+            );
+            if (liveSnapshot.empty) {
+                throw new functions.https.HttpsError(
+                    'failed-precondition',
+                    'No active players remain in this game.'
+                );
+            }
+            livePlayers = liveSnapshot.docs.map((doc) => ({
+                ref: doc.ref,
+                name: doc.data().name,
+            }));
+            graph = buildTargetGraph([
+                ...livePlayers.map((player) => player.name),
+                requestData.playerName,
+            ]);
+        }
+
+        if (isNewJoinRequest) {
+            transaction.create(playerRef, {
+                name: requestData.playerName,
+                trimmedNameLowerCase: requestData.trimmedNameLowerCase,
+                uid: requestData.requestingUid,
+                isAlive: true,
+                score: 10,
+                targets: graph.targets[requestData.playerName],
+                assassins: graph.assassins[requestData.playerName],
+                openSeason: false,
+            });
+            for (const player of livePlayers) {
+                transaction.update(player.ref, {
+                    targets: graph.targets[player.name],
+                    assassins: graph.assassins[player.name],
+                });
+            }
+        } else {
+            transaction.update(playerRef, { uid: requestData.requestingUid });
+            transaction.delete(roomRef.collection('boundaryStatuses').doc(playerRef.id));
+        }
         transaction.update(roomRef, {
             joinedUids: FieldValue.arrayUnion(requestData.requestingUid),
         });
         transaction.update(requestRef, { status: 'approved' });
+        if (isNewJoinRequest) {
+            transaction.create(roomRef.collection('playerMessages').doc(), {
+                type: 'broadcast',
+                recipient: null,
+                text: `${requestData.playerName} joined the game. Target assignments have been updated.`,
+                standings: null,
+                mission: null,
+                sender: null,
+                timestamp: FieldValue.serverTimestamp(),
+            });
+        }
     });
 });
 

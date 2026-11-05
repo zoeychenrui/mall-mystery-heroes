@@ -89,7 +89,7 @@ describe('MessageBubble', () => {
         mountBubble({
             type: 'powerUpPing',
             recipient: null,
-            text: '📍 bob has been pinged!',
+            text: '📍 bob has been pinged by alice!',
             pingedPlayer: 'bob',
             location: null,
             standings: null,
@@ -98,7 +98,7 @@ describe('MessageBubble', () => {
         });
 
         expect(screen.getByText('Ping')).toBeInTheDocument();
-        expect(screen.getByText('📍 bob has been pinged!')).toBeInTheDocument();
+        expect(screen.getByText('📍 bob has been pinged by alice!')).toBeInTheDocument();
         // Not mislabeled as a GM message.
         expect(screen.queryByText('GM:')).not.toBeInTheDocument();
     });
@@ -107,7 +107,7 @@ describe('MessageBubble', () => {
         const ping = (overrides = {}) => ({
             type: 'powerUpPing',
             recipient: null,
-            text: '📍 bob has been pinged!',
+            text: '📍 bob has been pinged by alice!',
             pingedPlayer: 'bob',
             pings: [
                 {
@@ -295,7 +295,9 @@ describe('MessageBubble', () => {
             target: null,
         });
 
-        expect(screen.getByText('Alice')).toBeInTheDocument();
+        expect(
+            screen.getAllByText((_, element) => element.textContent === 'Alice · Photo submission')
+        ).not.toHaveLength(0);
         expect(screen.queryByText(/going for/i)).not.toBeInTheDocument();
         expect(screen.getByAltText('Kill photo submission')).toHaveAttribute(
             'src',

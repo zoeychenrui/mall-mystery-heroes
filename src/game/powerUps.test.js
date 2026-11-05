@@ -10,8 +10,8 @@ const {
 const byId = (id) => POWER_UPS.find((p) => p.id === id);
 
 describe('POWER_UPS catalog', () => {
-    it('has the 8 items from the spec', () => {
-        expect(POWER_UPS).toHaveLength(8);
+    it('has the 7 currently available shop items', () => {
+        expect(POWER_UPS).toHaveLength(7);
     });
 
     it('only the picked-player ping and camera block need a target', () => {
@@ -81,14 +81,24 @@ describe('purchaseBlockReason', () => {
         ).toBeNull();
     });
 
-    it('allows the free ad item with zero points', () => {
-        const adItem = byId('watch-ad');
-        expect(adItem).toBeDefined();
+    it('blocks location items when the host has not enabled zones', () => {
         expect(
             purchaseBlockReason({
                 ...base,
-                item: adItem,
-                score: 0,
+                item: byId('global-ping-picked'),
+                targetName: 'alice',
+                boundaryEnabled: false,
+            })
+        ).toBe('Zones are not enabled');
+    });
+
+    it('allows location items when zones are enabled', () => {
+        expect(
+            purchaseBlockReason({
+                ...base,
+                item: byId('global-ping-picked'),
+                targetName: 'alice',
+                boundaryEnabled: true,
             })
         ).toBeNull();
     });
@@ -98,13 +108,13 @@ describe('purchaseBlockReason — eliminated players', () => {
     const base = { score: 100, cooldownEndsAtMs: null, nowMs: 1000, targetName: null };
 
     it('blocks an eliminated player even when they could otherwise afford it', () => {
-        expect(purchaseBlockReason({ ...base, item: byId('watch-ad'), isAlive: false })).toBe(
+        expect(purchaseBlockReason({ ...base, item: byId('horcrux'), isAlive: false })).toBe(
             "Eliminated players can't shop"
         );
     });
 
     it('allows an alive player', () => {
-        expect(purchaseBlockReason({ ...base, item: byId('watch-ad'), isAlive: true })).toBeNull();
+        expect(purchaseBlockReason({ ...base, item: byId('horcrux'), isAlive: true })).toBeNull();
     });
 });
 
@@ -166,12 +176,6 @@ describe('purchaseLogText', () => {
                 detail: 'pinged bob',
             })
         ).toBe(`alice bought ${byId('global-ping-random').name} (-3 pts) — pinged bob`);
-    });
-
-    it('leaves out the price for the free ad', () => {
-        expect(
-            purchaseLogText({ buyerName: 'alice', item: byId('watch-ad'), detail: '+3 points' })
-        ).toBe('alice bought Watch an ad — +3 points');
     });
 });
 
