@@ -781,7 +781,15 @@ git commit -m "Add reconnect-pending screen to the mobile app"
   and the avatar button + target-photo-viewer (Task 15) — this task
   stubs those as empty `<View>`s with a comment pointing at the task
   that fills each in, so later tasks have an exact mount point without
-  needing to re-read this whole file.
+  needing to re-read this whole file. Also produces `gameBoundary`
+  state (`{enabled, revision, vertices} | undefined`, from the room-doc
+  subscription), `players`, `missions`, and `playerData` (from the
+  player-doc subscription — includes `targets`, `isAlive`, `score`,
+  `powerUpCooldowns`, `horcrux`/`horcruxEndsAt`, `avatarUrl`,
+  `cameraBlockedUntil`, `pendingMysteryItem`, whatever the doc holds)
+  as in-scope state Tasks 9–15 read via props — not rendered by
+  anything in this task's own scope, but real outputs later tasks
+  depend on.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -848,14 +856,34 @@ missions/leaderboard/shop/avatar are explicitly out — later tasks):
 - The room-doc subscription, including the `handleSubscriptionError`
   pattern (clear the session via `playerSession.clearPlayerSession`,
   navigate back to `'Join'`) on a missing room or a permission error.
-- The player-doc subscription (only once `gameStarted` is true, same
-  gate as the web version), same `handleSubscriptionError` on a missing
-  player doc.
+  Also store the snapshot's `gameBoundary` field as its own piece of
+  state (`{enabled, revision, vertices}` or `undefined` if the room has
+  none yet) — this task has no UI of its own that reads it, but Tasks
+  11, 12, and 14 all consume it as a prop from `GameScreen`
+  (`gameBoundary?.enabled`, `gameBoundary?.revision`,
+  `gameBoundary?.vertices`), so it must exist here even though nothing
+  in this task's own scope displays it.
+- The player-doc subscription, gated only on `roomID && playerName` —
+  **not** on `gameStarted`. Read `src/pages/PlayerGame.js`'s current
+  code now and confirm this: it deliberately starts before the game
+  does, specifically so a player can set their avatar (Task 15) while
+  still in the waiting room, per that file's own comment. Same
+  `handleSubscriptionError` on a missing player doc.
 - The waiting-room state: while `!gameStarted`, render
-  `"Waiting for the host to start..."` and nothing else from the list
-  below (same as the web version — this is what makes `GameScreen`
-  double as both the waiting room and the main game screen, exactly
-  like `PlayerGame.js` does).
+  `"Waiting for the host to start..."`. **Do not assume this gates
+  everything else in the header/chat the way an earlier version of
+  this plan (and the player-doc subscription bullet above, before this
+  revision) once did** — read the current `PlayerGame.js` and
+  `PlayerGameHeader.js`/`PlayerGameStatusNotices.js` now for the real,
+  current gating: the header (Leave, Rules, avatar — Task 15) and the
+  chat feed/composer (Task 9) are rendered regardless of `gameStarted`
+  today, and each gated child (target display, location panel, shop)
+  checks its own precondition (`gameStarted`, `isGameActive`,
+  `playerData?.isAlive`, `gameBoundary?.enabled`) rather than one big
+  top-level conditional. This is what makes `GameScreen` double as
+  both the waiting room and the main game screen — by composing
+  already-self-gating children, not by wrapping a block in
+  `{gameStarted && ...}`.
 - The players-query and tasks-query subscriptions (needed by Task 9's
   chat composer and Task 13's missions list — mount them here, pass
   down as props to the stubbed child slots).
@@ -1150,15 +1178,24 @@ Expected: FAIL.
 
 Install `expo-image-picker` and `expo-image-manipulator`. Read the
 current `src/components/player_messages_components/MessageComposer.js`
-now: the camera button takes a `locationEnabled` prop (passed from
-`GameScreen` as `permissionState === 'granted'`, from Task 11's hook)
-and is disabled whenever `!locationEnabled`, in addition to the
-existing `disabled`/`!isGameActive`/`cameraBlocked` conditions — port
-this exact gate, even though it means the button stays disabled in a
-room with no boundary/zones enabled at all (boundaryless rooms never
-move `permissionState` past `'unknown'`, since Task 11's hook only
-starts tracking once a boundary exists) — that is the current,
-real behavior of the web app, not a bug this plan is fixing. On
+now: the camera button takes a `locationEnabled` prop, **defaulting to
+`true`** (`locationEnabled = true` in the web component's own
+signature — read the file now to confirm), and is disabled whenever
+`!locationEnabled`, in addition to the existing `disabled`/
+`!isGameActive`/`cameraBlocked` conditions. Port the prop and the gate
+with that same default — `GameScreen` has no real value to pass yet
+(Task 11, not this task, builds the location hook `permissionState`
+comes from), so `ChatComposer` must work correctly receiving nothing,
+exactly like the web component does before its own caller threads a
+real value. **Task 11 is responsible for changing `GameScreen` to pass
+the real `permissionState === 'granted'` value down** once its hook
+exists, at which point the gate starts actually doing something — note
+that this will mean the button stays disabled in a room with no
+boundary/zones enabled at all (boundaryless rooms never move
+`permissionState` past `'unknown'`, since Task 11's hook only starts
+tracking once a boundary exists); that is the current, real behavior
+of the web app, not a bug this plan is fixing, so Task 11 should not
+"fix" it. On
 tapping the camera button (disabled when `cameraBlocked`, same
 `isCameraBlocked(blockedUntilMs, nowMs)` check from the shared
 `src/game/powerUpEffects.js` as the web version): call
@@ -1217,18 +1254,36 @@ git commit -m "Add camera capture, compression, and kill/mission-photo submissio
   replacing the location stub from Task 7)
 
 **Interfaces:**
-- Consumes: Task 3's `callables.reportPlayerLocation` and
+- Consumes: Task 3's `callables.reportPlayerLocation` (the hook itself
+  — it only ever writes; read `src/hooks/useBoundaryLocation.js` now
+  and confirm it has no `dbCalls`/`onSnapshot` dependency of its own).
+  Separately, `GameScreen.js` itself (modified by this task, not the
+  hook) gains two more subscriptions using Task 3's
   `dbCalls.{fetchBoundaryStatusReferenceForPlayer,
-  fetchOutsideBoundaryStatusesQueryForRoom}`; the shared
-  `src/game/locationReportCadence.js` (`shouldSendFix`, `isPollDue`) and
-  `src/game/gameBoundary.js` (`deriveFreshStatus`, `isPositionFresh`,
-  `canSee`, `GAME_BOUNDARY_CONFIG`) (Task 2).
+  fetchOutsideBoundaryStatusesQueryForRoom}` — read
+  `src/pages/PlayerGame.js` now for exactly these two `useEffect`
+  blocks (`boundaryStatusDoc`, `otherOutsidePositions`), which the real
+  web app subscribes to directly in `PlayerGame.js`, not inside its
+  hook. Both tasks share `src/game/locationReportCadence.js`
+  (`shouldSendFix`, `isPollDue`, hook-only) and `src/game/gameBoundary.js`
+  (`deriveFreshStatus`, `isPositionFresh`, `canSee`,
+  `GAME_BOUNDARY_CONFIG` — the first two for the hook/panel, `canSee`
+  for the `GameScreen`-level position filtering below) (Task 2).
 - Produces: `useBoundaryLocation({roomID, boundaryRevision,
   boundaryEnabled, isGameActive, isAlive})` returns
   `{permissionState, ownPosition, requestPermission}` — same shape as
   the web hook (`lastResult` is dropped; nothing in this plan's scope
   reads it, same as the web version, where only `PlayerGame.js`'s own
-  internal bookkeeping touches it). Consumed by Task 12's map.
+  internal bookkeeping touches it). Separately, `GameScreen.js` now
+  also holds `boundaryStatusDoc`, `liveBoundaryStatus` (derived via
+  `deriveFreshStatus`), and `freshOtherOutsidePositions` (derived via
+  `canSee`/`isPositionFresh` against a `viewer` object built from
+  `ownPosition` + `boundaryStatusDoc?.status` — read `PlayerGame.js`'s
+  exact derivation now) as state/derived values. Task 12 consumes
+  `ownPosition`, `freshOtherOutsidePositions`, and the panel's
+  `mapStatusText` as props — Task 12 does **not** subscribe to
+  `fetchOutsideBoundaryStatusesQueryForRoom` itself; that would
+  duplicate this task's own subscription and double its read cost.
 
 - [ ] **Step 1: Write the failing tests for the hook**
 
@@ -1315,11 +1370,32 @@ web version).
 Run: `cd mobile && npx jest src/screens/components/LocationStatusPanel.test.js`
 Expected: PASS.
 
-- [ ] **Step 9: Mount both in `GameScreen.js`**
+- [ ] **Step 9: Mount the hook and the two additional subscriptions in
+  `GameScreen.js`, derive `liveBoundaryStatus`/
+  `freshOtherOutsidePositions`, mount the panel, and thread the real
+  `locationEnabled` value into `ChatComposer`**
 
-Same gating as the web version: mounted once `gameBoundary?.enabled`
-and the player is alive, independent of whether the map (Task 12) is
-open.
+Mount `useBoundaryLocation` the same gating as the web version
+(independent of whether the map, Task 12, is open). Add the
+`boundaryStatusDoc` subscription (`fetchBoundaryStatusReferenceForPlayer`,
+gated on `gameBoundary?.enabled && playerName` — its error callback
+does **not** trigger `handleSubscriptionError`, same as the web
+version, since a missing status doc before a player's first report is
+routine) and the `otherOutsidePositions` subscription
+(`fetchOutsideBoundaryStatusesQueryForRoom`, gated on
+`gameBoundary?.enabled`, excluding the viewer's own id). Derive
+`liveBoundaryStatus` (`deriveFreshStatus`) and
+`freshOtherOutsidePositions` (filter `otherOutsidePositions` through
+`canSee`/`isPositionFresh` against a `viewer` object built from
+`ownPosition` + `boundaryStatusDoc?.status`) exactly as
+`src/pages/PlayerGame.js` does — read its current code now for the
+exact derivation, it is render-time computation, not stored state.
+Mount `LocationStatusPanel` with the result. Also change the
+`locationEnabled` prop `GameScreen` passes to `ChatComposer` (Task 10
+left it at its own default, since this hook didn't exist yet) to the
+real `permissionState === 'granted'` — this is the one line in this
+task that makes Task 10's camera-button gate actually reflect live
+location status, matching the web app exactly.
 
 - [ ] **Step 10: Commit**
 
@@ -1344,9 +1420,11 @@ git commit -m "Add location/boundary status tracking and status panel to the mob
   Task 7)
 
 **Interfaces:**
-- Consumes: Task 11's `ownPosition`; Task 3's
-  `dbCalls.fetchOutsideBoundaryStatusesQueryForRoom`; the shared
-  `src/game/gameBoundary.js`'s `canSee`/`isPositionFresh` (Task 2).
+- Consumes: Task 11's `ownPosition`, `freshOtherOutsidePositions`, and
+  `mapStatusText` — all passed down as props from `GameScreen`; this
+  task does **not** subscribe to Firestore itself (see Task 11's
+  Interfaces for why `fetchOutsideBoundaryStatusesQueryForRoom` belongs
+  there, not here).
 - Produces: nothing consumed by later tasks.
 
 - [ ] **Step 1: Write the failing test**
@@ -1483,8 +1561,13 @@ git commit -m "Add missions list and leaderboard screens to the mobile app"
 
 **Interfaces:**
 - Consumes: Task 3's `callables.{purchasePowerUp, claimMysteryReward}`;
-  Task 7's `players` and the player doc's `score`/`cooldowns`/
-  `horcruxActive`/`pendingMysteryItem` fields, plus
+  Task 7's `players` and the player doc's `score`/`powerUpCooldowns`/
+  `horcrux`/`horcruxEndsAt`/`pendingMysteryItem` raw fields — this task
+  computes `horcruxActive` itself (`isHorcruxActive({horcrux,
+  horcruxEndsAtMs: horcruxEndsAt?.toMillis?.() ?? null}, Date.now())`,
+  same as the web version's `PlayerGame.js` does before handing the
+  result to its own shop modal — `horcruxActive` is a derived value,
+  not a field Task 7 stores or passes down); also
   `gameBoundary?.enabled === true` (passed down as `zonesEnabled` — see
   Step 3); the shared `src/game/powerUps.js`'s `POWER_UPS`,
   `cooldownRemaining`, `purchaseBlockReason` and
