@@ -299,7 +299,8 @@ every touched player and moved the replay itself server-side, into
 
 ## `rooms/{roomID}/playerMessages/{autoId}`
 
-Player-facing messages from `/whisper`, `/broadcast`, and `/leaderboard`
+Player-facing messages from `/whisper`, `/broadcast`, `/leaderboard`, and
+confirmed boundary exposure alerts
 (docs/superpowers/specs/2026-08-06-player-messaging-mobile-prep-design.md).
 **Designed to be read by a player-facing mobile app**, not by this
 codebase — unlike `photos` above, which now has a real in-app writer
@@ -524,9 +525,10 @@ A moderator-only log of confirmed boundary crossings. Written only by
 records, so an event exists if and only if its transition was committed.
 Written on the confirmation edge: one `outside` event per outside episode, and
 one `returnedInside` event when a confirmed-outside player comes back inside.
-These events are not written to `playerMessages`, so they are not broadcast to
-the public chat feed. No coordinates are stored here either, as with
-`boundaryStatuses`.
+An `outside` event is committed alongside a room-wide `powerUpPing` message
+with the current location snapshot, so players are notified and can open the
+ping on their map. The moderator-only event itself remains coordinate-free;
+the snapshot is in `playerMessages`, under its existing role-based read grant.
 
 Reads: the host only. Clients can never write here.
 

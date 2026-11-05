@@ -5,6 +5,7 @@ import enter from '../../assets/enter-green.png';
 import { executionContext, gameContext } from '../Contexts';
 import {
     addPlayerMessageForRoom,
+    fetchBoundaryStatusForPlayer,
     fetchAliveRosterForRoom,
     fetchPlayersByStatusForRoom,
     fetchTaskByIndexForRoom,
@@ -18,14 +19,18 @@ import {
 import commandCompletion from '../../game/commandCompletion';
 import RemapPlayers from '../RemapPlayers';
 import { completeMission } from '../completeMission';
-import { undoMissionCommand } from '../undoMissionCommand';
 import { executeKill } from '../executeKill';
 import { removePlayer } from '../removePlayer';
+import { undoMissionCommand } from '../undoMissionCommand';
 import { parseCommand, UNIMPLEMENTED_COMMANDS } from '../../game/commands';
 import { buildLeaderboardStandings } from '../../game/leaderboard';
 import { normalizePlayerName, resolvePlayerDisplayName } from '../../game/playerNames';
 import { playersNeedingConnections } from '../../game/targetGraph';
 import CreateAlert from '../CreateAlert';
+
+// CommonJS by design, matching the callable-side implementation used by
+// power-up location pings so command pings use the same snapshot shape.
+const { pingEntry } = require('../../game/powerUpEffects');
 
 // handling for command execution
 //
@@ -81,8 +86,6 @@ const handleCommandExecution = async (
         handleOpenSznended,
         handlePlayerRevive,
         handleTaskCompleted,
-        handleShowMissionCreation,
-        handleShowMissionList,
         handleShowLeaderboardView,
         addLog,
     } = xecutionContext; // retrieve contexts
@@ -197,6 +200,30 @@ const handleCommandExecution = async (
             case '/mission':
                 arg = args[0] ? args[0].toLowerCase() : '';
                 switch (arg) {
+                    case 'start':
+                        xecutionContext.handleShowMissionCreation?.();
+                        break;
+
+                    case 'view':
+                        xecutionContext.handleShowMissionList?.();
+                        break;
+
+                    case 'undo': {
+                        const announcement = 'Undo: the last mission completion was reverted';
+                        await undoMissionCommand(roomID);
+                        await addLog(announcement, 'blue.200');
+                        await addPlayerMessageForRoom(
+                            {
+                                type: 'broadcast',
+                                recipient: null,
+                                text: announcement,
+                                standings: null,
+                            },
+                            roomID
+                        );
+                        break;
+                    }
+
                     case 'done':
                         playerName = args[1] ? normalizePlayerName(args[1]) : '';
                         missionIndex = args[2] ? Number(args[2]) : -1;
@@ -285,25 +312,6 @@ const handleCommandExecution = async (
                         await updateIsCompleteToTrueForTaskByIndex(missionIndex, roomID);
                         createAlert('info', 'Completed', 'Task has been saved as completed', 1500);
                         handleTaskCompleted(task.title);
-                        break;
-                    case 'start':
-                        handleShowMissionCreation();
-                        break;
-                    case 'view':
-                        handleShowMissionList();
-                        break;
-                    case 'undo':
-                        await undoMissionCommand(roomID);
-                        await addLog('Undo: the last mission completion was reverted', 'blue.200');
-                        await addPlayerMessageForRoom(
-                            {
-                                type: 'broadcast',
-                                recipient: null,
-                                text: 'Undo: the last mission completion was reverted',
-                                standings: null,
-                            },
-                            roomID
-                        );
                         break;
                     default:
                         createAlert('error', 'Error', `Inavlid argument: ${args[0]}`, 1500);
@@ -397,6 +405,45 @@ const handleCommandExecution = async (
                     console.error(`${args[0]} is not dead`);
                 }
                 break;
+
+            case '/ping': {
+                const pingPlayerName = args[0] ? normalizePlayerName(args[0]) : '';
+                if (arrayOfPlayerNames.includes(pingPlayerName)) {
+                    const pingedName = resolvePlayerDisplayName(pingPlayerName, players);
+                    const boundaryStatus = await fetchBoundaryStatusForPlayer(
+                        pingPlayerName,
+                        roomID
+                    );
+                    const ping = pingEntry({
+                        name: pingedName,
+                        status: boundaryStatus
+                            ? {
+                                  lat: boundaryStatus.lat,
+                                  lng: boundaryStatus.lng,
+                                  accuracyMeters: boundaryStatus.accuracyMeters,
+                                  lastUsableMs:
+                                      boundaryStatus.lastUsableReceivedAt?.toMillis?.() ?? null,
+                              }
+                            : null,
+                        nowMs: Date.now(),
+                    });
+                    await addPlayerMessageForRoom(
+                        {
+                            type: 'powerUpPing',
+                            recipient: null,
+                            text: `📍 ${pingedName} has been pinged by the GM!`,
+                            pingedPlayer: pingedName,
+                            pings: [ping],
+                        },
+                        roomID
+                    );
+                    await addLog(`Location ping sent to everyone for ${pingedName}`, 'orange.400');
+                } else {
+                    createAlert('error', 'Error', `Player ${args[0] || ''} is invalid`, 1500);
+                    console.error(`Player ${args[0]} is invalid.`);
+                }
+                break;
+            }
 
             case '/whisper':
                 const whisperPlayerName = args[0] ? normalizePlayerName(args[0]) : '';
@@ -704,8 +751,8 @@ const styles = {
         justifyContent: 'center',
     },
     enterImage: {
-        width: '6%',
-        height: '70%',
+        width: '40px',
+        height: '40px',
     },
 };
 

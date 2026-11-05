@@ -20,7 +20,15 @@ import {
  * Closing without picking leaves that reward waiting on the server
  * (`pendingMysteryItem`); the shop offers it again.
  */
-const MysteryBoxReveal = ({ isOpen, label, needsTarget, pickablePlayers, onClaim, onClose }) => {
+const MysteryBoxReveal = ({
+    isOpen,
+    label,
+    needsTarget,
+    pickablePlayers,
+    unavailableMessage = '',
+    onClaim,
+    onClose,
+}) => {
     const [targetName, setTargetName] = useState('');
     const [isClaiming, setIsClaiming] = useState(false);
     const [error, setError] = useState(null);
@@ -68,13 +76,16 @@ const MysteryBoxReveal = ({ isOpen, label, needsTarget, pickablePlayers, onClaim
                                 <Button
                                     colorScheme="orange"
                                     w="100%"
-                                    isDisabled={!targetName || isClaiming}
+                                    isDisabled={
+                                        !targetName || isClaiming || Boolean(unavailableMessage)
+                                    }
                                     onClick={handleUse}
                                 >
                                     Use
                                 </Button>
                             </>
                         )}
+                        {unavailableMessage && <Text color="orange.200">{unavailableMessage}</Text>}
                         {error && <Text color="red.300">{error}</Text>}
                         <Button variant="outline" colorScheme="whiteAlpha" onClick={onClose}>
                             Close

@@ -45,8 +45,15 @@ const AbandonRoomButton = ({ roomID }) => {
 
     return (
         <>
-            <Button colorScheme="red" variant="outline" borderRadius="3xl" onClick={onOpen}>
-                Abandon Room
+            <Button
+                mx={2}
+                colorScheme="red"
+                borderRadius="3xl"
+                onClick={onOpen}
+                variant="ghost"
+                _hover={{ bg: 'red', color: 'white' }}
+            >
+                Restart Room
             </Button>
             <AlertDialog isOpen={isOpen} leastDestructiveRef={cancelRef} onClose={onClose}>
                 <AlertDialogOverlay />

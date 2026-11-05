@@ -83,6 +83,14 @@ Effects: assassin gains the target's full score (floored at 0); target's score
 is zeroed, `isAlive` set false, `openSeason` cleared; target is unmapped from the
 graph; affected neighbours are remapped; a modal shows the new assignments.
 
+### `/ping <player>`
+
+Announces the player's most recently recorded location to everyone in the
+player chat. The message includes a map link when the player view has maps
+available. If no location has been recorded, the ping says so. Tab completion
+suggests current player names; wrap a multi-word name in brackets (or accept
+the completion), for example `/ping [Jane Doe]`.
+
 ### `/revive <player>`
 
 Brings a dead player back and remaps them into the target graph.

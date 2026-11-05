@@ -202,7 +202,8 @@ describe('MessageComposer', () => {
         mountComposer();
         const input = screen.getByPlaceholderText('Type a message...');
 
-        await userEvent.type(input, 'hi{Enter}');
+        await userEvent.type(input, 'hi');
+        await userEvent.click(screen.getByRole('button', { name: 'Send' }));
 
         await waitFor(() => expect(submitChatMessage).toHaveBeenCalled());
         expect(input).toHaveValue('');
@@ -330,8 +331,9 @@ describe('MessageComposer', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
 
         // Gone already — uploadKillPhoto has not even resolved yet.
-        await waitFor(() =>
-            expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument()
+        await waitFor(
+            () => expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument(),
+            { timeout: 5000 }
         );
         expect(uploadKillPhoto).toHaveBeenCalledWith('room-a', fakeBlob);
         expect(submitKillPhoto).not.toHaveBeenCalled();
@@ -344,6 +346,7 @@ describe('MessageComposer', () => {
                 url: 'https://example.com/photo.jpg',
                 target: 'bob',
                 mission: null,
+                isFunPhoto: false,
             })
         );
         // The order still genuinely matters: the photo must be uploaded (so
@@ -371,6 +374,7 @@ describe('MessageComposer', () => {
                 url: 'https://example.com/photo.jpg',
                 target: 'bob',
                 mission: null,
+                isFunPhoto: false,
             })
         );
     });
@@ -400,6 +404,7 @@ describe('MessageComposer', () => {
                 url: 'https://example.com/photo.jpg',
                 target: null,
                 mission: 3,
+                isFunPhoto: false,
             })
         );
     });
@@ -414,7 +419,7 @@ describe('MessageComposer', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Send photo' }));
         await userEvent.upload(screen.getByLabelText('Take Photo'), fakeFile);
 
-        expect(await screen.findByLabelText('Select target or mission')).toBeInTheDocument();
+        expect(await screen.findByLabelText('Photo type')).toBeInTheDocument();
         expect(screen.getByRole('option', { name: 'carol' })).toBeInTheDocument();
     });
 

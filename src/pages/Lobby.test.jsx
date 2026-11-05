@@ -61,6 +61,11 @@ jest.mock('../components/firebase_calls/dbCalls', () => ({
     updateTargetsForPlayer: jest.fn(),
 }));
 
+// Chat rendering has its own coverage. Keep this page test focused on the
+// lobby roster and avoid coupling its Firestore snapshot fixture to chat's
+// docChanges() subscription contract.
+jest.mock('../components/player_messages_components/GMChatPanel', () => () => null);
+
 const asPlayerDocs = (names) => names.map((name) => ({ data: () => ({ name }) }));
 
 // PlayerRemove's <select> also renders each player's name as an <option>,
@@ -195,7 +200,7 @@ describe('the simplified layout', () => {
         expect(screen.getByText('Select player to remove')).toBeInTheDocument();
     });
 
-    it('always shows Abandon Room, even with no players joined yet', () => {
+    it('always shows Restart Room, even with no players joined yet', () => {
         onSnapshot.mockImplementation((queryOrRef, onNext) => {
             if (queryOrRef === 'room-ref') {
                 onNext({ data: () => ({ gameBoundary: undefined }) });
@@ -207,7 +212,7 @@ describe('the simplified layout', () => {
 
         mountLobby();
 
-        expect(screen.getByRole('button', { name: 'Abandon Room' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Restart Room' })).toBeInTheDocument();
     });
 
     it('logs out when Log Out is clicked', async () => {

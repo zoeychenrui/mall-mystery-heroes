@@ -73,7 +73,7 @@ exports.submitKillPhoto = functions.https.onCall(async (data, context) => {
         );
     }
 
-    const { roomId, url, target, mission } = data;
+    const { roomId, url, target, mission, isFunPhoto = false } = data;
     if (!roomId || !url) {
         throw new functions.https.HttpsError(
             'invalid-argument',
@@ -94,10 +94,10 @@ exports.submitKillPhoto = functions.https.onCall(async (data, context) => {
     // (docs/superpowers/specs/2026-09-02-player-selects-target-mission-design.md).
     const hasTarget = typeof target === 'string' && target.trim().length > 0;
     const hasMission = typeof mission === 'number' && Number.isInteger(mission);
-    if (hasTarget === hasMission) {
+    if (typeof isFunPhoto !== 'boolean' || (isFunPhoto ? hasTarget || hasMission : hasTarget === hasMission)) {
         throw new functions.https.HttpsError(
             'invalid-argument',
-            'Exactly one of target or mission must be provided.'
+            'Choose either a kill/mission claim or a fun photo.'
         );
     }
 
@@ -207,6 +207,7 @@ exports.submitKillPhoto = functions.https.onCall(async (data, context) => {
             assassin: assassinData.name,
             target: hasTarget ? target : null,
             mission: hasMission ? mission : null,
+            isFunPhoto,
             timestamp: FieldValue.serverTimestamp(),
             status: 'pending',
             originalPlayerData: null,
@@ -227,6 +228,7 @@ exports.submitKillPhoto = functions.https.onCall(async (data, context) => {
             photoUrl: url,
             assassin: assassinData.name,
             target: null,
+            isFunPhoto,
             timestamp: FieldValue.serverTimestamp(),
         });
     });

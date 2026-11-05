@@ -68,6 +68,9 @@ jest.mock('../components/endGame', () => ({ endGame: jest.fn() }));
 jest.mock('../components/firebase_calls/dbCalls', () => ({
     fetchPlayersQueryByDescendPointsThenIsAliveForRoom: jest.fn(() => 'players-query'),
     fetchLogsQueryByAscendingTimestampForRoom: jest.fn(() => 'logs-query'),
+    fetchTasksQueryForRoom: jest.fn(() => 'tasks-query'),
+    fetchTasksByCompletionForRoom: jest.fn(async () => ({ docs: [] })),
+    fetchPlayerMessagesQueryForRoom: jest.fn(() => 'messages-query'),
     fetchRoomReferenceForRoom: jest.fn(() => 'room-ref'),
     addLogForRoom: jest.fn(),
     addPlayerMessageForRoom: jest.fn(),

@@ -1,11 +1,24 @@
-import React, { useMemo } from 'react';
-import { Box, VStack, Flex } from '@chakra-ui/react';
+import React, { useMemo, useState } from 'react';
+import {
+    Box,
+    VStack,
+    Flex,
+    Image,
+    Modal,
+    ModalBody,
+    ModalCloseButton,
+    ModalContent,
+    ModalHeader,
+    ModalOverlay,
+    Text,
+} from '@chakra-ui/react';
 
 // Presentational — GameMasterView owns the live subscription and passes
 // players down, rather than this component subscribing independently
 // (docs/improvements.md item 13). Two live listeners on the same query would
 // double the reads for no benefit.
 const PlayersList = ({ players }) => {
+    const [selectedPlayer, setSelectedPlayer] = useState(null);
     // creates an array of mapped players
     const arrayOfPlayersListed = useMemo(
         () =>
@@ -13,8 +26,13 @@ const PlayersList = ({ players }) => {
                 <Flex sx={styles.playerContainer} key={player.name}>
                     <Flex sx={styles.playerWrapper}>
                         <Box
+                            as="button"
+                            type="button"
+                            onClick={() => setSelectedPlayer(player)}
+                            aria-label={`View ${player.name}'s photo`}
                             sx={{
                                 ...styles.playerNameWrapper,
+                                ...styles.playerNameButton,
                                 color: player.isAlive
                                     ? player.openSeason
                                         ? '#ffcc00'
@@ -52,9 +70,35 @@ const PlayersList = ({ players }) => {
     );
 
     return (
-        <Flex sx={styles.flexWrapper}>
-            <VStack sx={styles.vStackContainer}>{arrayOfPlayersListed}</VStack>
-        </Flex>
+        <>
+            <Flex sx={styles.flexWrapper}>
+                <VStack sx={styles.vStackContainer}>{arrayOfPlayersListed}</VStack>
+            </Flex>
+            <Modal
+                isOpen={Boolean(selectedPlayer)}
+                onClose={() => setSelectedPlayer(null)}
+                isCentered
+            >
+                <ModalOverlay />
+                <ModalContent bg="gray.800" color="white">
+                    <ModalHeader>{selectedPlayer?.name}</ModalHeader>
+                    <ModalCloseButton />
+                    <ModalBody pb={6} textAlign="center">
+                        {selectedPlayer?.avatarUrl ? (
+                            <Image
+                                src={selectedPlayer.avatarUrl}
+                                alt={`${selectedPlayer.name}'s photo`}
+                                maxH="65vh"
+                                mx="auto"
+                                borderRadius="lg"
+                            />
+                        ) : (
+                            <Text>This player has not added a photo yet.</Text>
+                        )}
+                    </ModalBody>
+                </ModalContent>
+            </Modal>
+        </>
     );
 };
 
@@ -103,9 +147,24 @@ const styles = {
     playerNameWrapper: {
         flex: 1,
         fontSize: '20px',
+        marginLeft: '8px',
         overflowX: 'hidden',
         whiteSpace: 'nowrap',
         textOverflow: 'ellipsis',
+    },
+    playerNameButton: {
+        display: 'block',
+        background: 'transparent',
+        border: 0,
+        color: 'inherit',
+        cursor: 'pointer',
+        font: 'inherit',
+        overflow: 'hidden',
+        textAlign: 'left',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        _hover: { textDecoration: 'underline' },
+        _focusVisible: { outline: '2px solid white', outlineOffset: '2px' },
     },
     playerScoreWrapper: {
         display: 'flex',

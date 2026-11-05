@@ -30,9 +30,9 @@ const HeaderExecution = ({ addLog, arrayOfAlivePlayers, allPlayerNames, gameBoun
     return (
         <HStack justifyContent="left" p="8px" h="100%" alignItems="center">
             <Image objectFit="cover" src={whiteLogo} alt="Logo" boxSize="36px" />
-            <Heading>Lobby #: {roomID}</Heading>
-            <Spacer />
-            <PlaybookLink />
+            <Heading fontSize="32px" fontWeight="bold" mr="32px">
+                Lobby #: {roomID}
+            </Heading>
             <GameBoundaryButton roomID={roomID} gameBoundary={gameBoundary} />
             <LivePlayerMapButton
                 roomID={roomID}
@@ -46,6 +46,8 @@ const HeaderExecution = ({ addLog, arrayOfAlivePlayers, allPlayerNames, gameBoun
                 players={livePlayerMapPlayers}
                 boundaryVertices={gameBoundary?.vertices ?? null}
             />
+            <PlaybookLink />
+            <Spacer />
             <ResetTargetsButton arrayOfPlayers={arrayOfAlivePlayers} addLog={addLog} />
             <Endgamebutton />
             <LogoutButton />

@@ -55,18 +55,19 @@ const KillPhotoModal = ({
     const killTargetOptions = combinedOptions.filter((option) => option.group === 'Kill Target');
     const missionOptions = combinedOptions.filter((option) => option.group === 'Mission');
 
+    // Prefer a real kill or mission claim whenever one is available. The
+    // player can explicitly switch to a fun photo in the same picker.
     const effectiveSelection =
-        combinedOptions.length === 1
-            ? combinedOptions[0].value
-            : combinedOptions.some((option) => option.value === selectedOption)
-              ? selectedOption
-              : '';
+        selectedOption === 'fun' ||
+        combinedOptions.some((option) => option.value === selectedOption)
+            ? selectedOption
+            : (combinedOptions[0]?.value ?? 'fun');
 
     return (
         <Modal isOpen={isOpen} onClose={onClose}>
             <ModalOverlay />
             <ModalContent bg="#202030">
-                <ModalHeader color="#ffffff">Submit a Kill Photo</ModalHeader>
+                <ModalHeader color="#ffffff">Submit a Photo</ModalHeader>
                 <ModalCloseButton aria-label="Close modal" />
                 <ModalBody>
                     {previewUrl && (
@@ -86,10 +87,9 @@ const KillPhotoModal = ({
                             <Text>Processing photo…</Text>
                         </Flex>
                     )}
-                    {combinedOptions.length > 1 ? (
+                    {combinedOptions.length > 0 ? (
                         <Select
-                            aria-label="Select target or mission"
-                            placeholder="Choose target or mission"
+                            aria-label="Photo type"
                             value={effectiveSelection}
                             onChange={(event) => setSelectedOption(event.target.value)}
                         >
@@ -111,16 +111,16 @@ const KillPhotoModal = ({
                                     ))}
                                 </optgroup>
                             )}
+                            <optgroup label="Socials">
+                                <option key="fun" value="fun">
+                                    Just for fun
+                                </option>
+                            </optgroup>
                         </Select>
-                    ) : combinedOptions.length === 0 ? (
-                        <Text color="gray.400">No open targets or missions for this player.</Text>
                     ) : (
-                        effectiveSelection &&
-                        (effectiveSelection.startsWith('mission:') ? (
-                            <Text>Mission: {missionOptions[0]?.label}</Text>
-                        ) : (
-                            <Text>Target: {killTargetOptions[0]?.label}</Text>
-                        ))
+                        <Text color="gray.400">
+                            No open targets or missions; this will be a fun photo.
+                        </Text>
                     )}
                 </ModalBody>
                 <ModalFooter>

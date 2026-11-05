@@ -129,7 +129,7 @@ const loadBuyer = async (transaction, roomId, uid) => {
         );
     }
     const buyerDoc = buyerSnapshot.docs[0];
-    return { roomRef, buyerDoc, buyer: buyerDoc.data() };
+    return { roomRef, room, buyerDoc, buyer: buyerDoc.data() };
 };
 
 // Reads another alive player picked by name. Rejects yourself, the dead,
@@ -206,7 +206,7 @@ const planEffect = async ({ transaction, roomRef, itemId, buyer, buyerDoc, targe
         playerMessage({
             type: 'powerUpPing',
             recipient,
-            text: pingMessageText({ itemId, pings }),
+            text: pingMessageText({ itemId, pings, buyerName: buyer.name }),
             pingedPlayer: recipient ? null : pings[0].name,
             pings,
         });
@@ -380,7 +380,11 @@ exports.purchasePowerUp = functions.https.onCall(async (data, context) => {
     await consumeRateLimit(roomId, context.auth.uid);
 
     return db.runTransaction(async (transaction) => {
-        const { roomRef, buyerDoc, buyer } = await loadBuyer(transaction, roomId, context.auth.uid);
+        const { roomRef, room, buyerDoc, buyer } = await loadBuyer(
+            transaction,
+            roomId,
+            context.auth.uid
+        );
         const nowMs = Date.now();
         const horcruxActive = horcruxActiveFor(buyer, nowMs);
 
@@ -392,6 +396,7 @@ exports.purchasePowerUp = functions.https.onCall(async (data, context) => {
             targetName,
             isAlive: buyer.isAlive,
             horcruxActive,
+            boundaryEnabled: room.gameBoundary?.enabled === true,
         });
         if (blockReason) reject(blockReason);
         if (item.id === 'mystery-box' && buyer.pendingMysteryItem) {
@@ -416,6 +421,20 @@ exports.purchasePowerUp = functions.https.onCall(async (data, context) => {
                 nowMs,
                 horcruxActive,
             });
+
+            // A location reward from the Mystery Box cannot be used when
+            // the host has not enabled game zones, so refund that reward.
+            if (
+                resolution.kind === 'item' &&
+                itemById(resolution.itemId).requiresGameBoundary === true &&
+                room.gameBoundary?.enabled !== true
+            ) {
+                resolution = {
+                    kind: 'refund',
+                    itemId: resolution.itemId,
+                    points: itemById(resolution.itemId).cost,
+                };
+            }
 
             if (resolution.kind === 'item' && itemById(resolution.itemId).needsTarget) {
                 // Picked after the reveal — see claimMysteryReward.
@@ -497,10 +516,20 @@ exports.claimMysteryReward = functions.https.onCall(async (data, context) => {
     await consumeRateLimit(roomId, context.auth.uid);
 
     return db.runTransaction(async (transaction) => {
-        const { roomRef, buyerDoc, buyer } = await loadBuyer(transaction, roomId, context.auth.uid);
+        const { roomRef, room, buyerDoc, buyer } = await loadBuyer(
+            transaction,
+            roomId,
+            context.auth.uid
+        );
         if (buyer.isAlive === false) reject("Eliminated players can't shop");
         const itemId = buyer.pendingMysteryItem;
         if (!itemId) reject('No mystery box reward to claim');
+        if (
+            itemById(itemId)?.requiresGameBoundary === true &&
+            room.gameBoundary?.enabled !== true
+        ) {
+            reject('Zones are not enabled');
+        }
         const nowMs = Date.now();
 
         const effect = await planEffect({

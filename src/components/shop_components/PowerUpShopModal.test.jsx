@@ -74,8 +74,22 @@ describe('PowerUpShopModal', () => {
     it('disables an item the player cannot afford', () => {
         renderShop({ score: 0 });
         expect(screen.getByRole('button', { name: 'Buy Horcrux' })).toBeDisabled();
-        // The free ad is still buyable with no points.
-        expect(screen.getByRole('button', { name: 'Buy Watch an ad' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Buy Mystery Box' })).toBeDisabled();
+    });
+
+    it('disables location items when zones are off', () => {
+        renderShop({ zonesEnabled: false });
+
+        for (const itemName of [
+            'Assassin Ping',
+            'Target Ping',
+            'Global Player Ping',
+            'Global Random Ping',
+        ]) {
+            expect(screen.getByRole('button', { name: `Buy ${itemName}` })).toBeDisabled();
+        }
+        expect(screen.getAllByText('Zones are not enabled')).toHaveLength(4);
+        expect(screen.getByRole('button', { name: 'Buy Mystery Box' })).toBeEnabled();
     });
 
     it('calls purchasePowerUp when Buy is clicked', async () => {
@@ -165,7 +179,7 @@ describe('PowerUpShopModal', () => {
             });
             renderShop();
 
-            await userEvent.click(screen.getByRole('button', { name: 'Buy Mystery box' }));
+            await userEvent.click(screen.getByRole('button', { name: 'Buy Mystery Box' }));
 
             expect(await screen.findByText('+5 points')).toBeInTheDocument();
             await userEvent.click(screen.getByRole('button', { name: 'Close' }));
@@ -178,7 +192,7 @@ describe('PowerUpShopModal', () => {
             });
             renderShop();
 
-            await userEvent.click(screen.getByRole('button', { name: 'Buy Mystery box' }));
+            await userEvent.click(screen.getByRole('button', { name: 'Buy Mystery Box' }));
             await userEvent.selectOptions(
                 await screen.findByLabelText('Pick a player for your reward'),
                 'Alice'

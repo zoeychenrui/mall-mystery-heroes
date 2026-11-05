@@ -48,6 +48,12 @@ exports.joinRoom = functions.https.onCall(async (data, context) => {
             'roomId and playerName are both required.'
         );
     }
+    if (playerName.length > 16) {
+        throw new functions.https.HttpsError(
+            'invalid-argument',
+            'Player names must be 16 characters or fewer.'
+        );
+    }
     if (roomId.includes('/')) {
         throw new functions.https.HttpsError('invalid-argument', 'roomId must not contain "/".');
     }
@@ -119,6 +125,15 @@ exports.joinRoom = functions.https.onCall(async (data, context) => {
         });
         transaction.update(roomRef, {
             joinedUids: FieldValue.arrayUnion(context.auth.uid),
+        });
+        transaction.create(roomRef.collection('playerMessages').doc(), {
+            type: 'broadcast',
+            recipient: null,
+            text: `${playerName.trim()} joined the game.`,
+            standings: null,
+            mission: null,
+            sender: null,
+            timestamp: FieldValue.serverTimestamp(),
         });
     });
 });

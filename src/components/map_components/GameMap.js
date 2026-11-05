@@ -150,6 +150,7 @@ const GameMap = ({
 
     const handleLoad = useCallback(
         (event) => {
+            console.log('triggering');
             const map = event.target;
             // Belt-and-suspenders: SATELLITE_STYLE/STANDARD_STYLE above
             // are already pre-globe style IDs, so this should already
@@ -159,6 +160,7 @@ const GameMap = ({
             map.setProjection('mercator');
             map.on('style.load', () => map.setProjection('mercator'));
             if (!hasFitRef.current && boundaryVertices && boundaryVertices.length > 0) {
+                console.log('GameMap: boundaryVertices provided, fitting to boundary');
                 const lats = boundaryVertices.map((p) => p.lat);
                 const lngs = boundaryVertices.map((p) => p.lng);
                 map.fitBounds(
@@ -170,6 +172,7 @@ const GameMap = ({
                 );
                 hasFitRef.current = true;
             } else if (!hasFitRef.current && fitTo) {
+                console.log('GameMap: fitTo provided, jumping to', fitTo);
                 // {lat, lng} — this app's coordinate convention
                 // everywhere else, unlike the Map's own `initialViewState`
                 // below, which is react-map-gl's own {longitude, latitude}
@@ -185,6 +188,7 @@ const GameMap = ({
                 // fire again on a later load event.
                 hasFitRef.current = true;
                 if (navigator.geolocation) {
+                    console.log('GameMap: requesting geolocation for initial map view');
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
                             map.jumpTo({
@@ -201,6 +205,7 @@ const GameMap = ({
                     );
                 }
             }
+            console.log('onMapLoad callback', onMapLoad);
             if (onMapLoad) onMapLoad(map);
         },
         [boundaryVertices, fitTo, onMapLoad]

@@ -18,6 +18,7 @@ import {
 } from '@chakra-ui/react';
 import {
     addLogForRoom,
+    addPlayerMessageForRoom,
     markGameAsStarted,
     updateAssassinsForPlayer,
     updateTargetsForPlayer,
@@ -91,6 +92,14 @@ const TargetGenerator = ({ arrayOfPlayers, roomID, handleLobbyRoom }) => {
         } catch (error) {
             console.error('Error adding log: ', error);
         }
+        try {
+            await addPlayerMessageForRoom(
+                { type: 'broadcast', recipient: null, text: 'Game has begun!', standings: null },
+                roomID
+            );
+        } catch (error) {
+            console.error('Error broadcasting game start: ', error);
+        }
         onClose();
         handleLobbyRoom();
     };
@@ -118,16 +127,13 @@ const TargetGenerator = ({ arrayOfPlayers, roomID, handleLobbyRoom }) => {
     ));
 
     return (
-        <div>
+        <>
             <Button
-                bg="black"
-                color="white"
-                variant="solid"
-                size="lg"
+                color="black"
                 borderRadius="3xl"
-                _hover={{ bg: 'white', color: 'black' }}
-                mt="8px"
+                _hover={{ opacity: 0.8 }}
                 onClick={handleClick}
+                size="lg"
             >
                 Begin Game
             </Button>
@@ -166,7 +172,7 @@ const TargetGenerator = ({ arrayOfPlayers, roomID, handleLobbyRoom }) => {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </div>
+        </>
     );
 };
 

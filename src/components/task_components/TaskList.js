@@ -1,12 +1,22 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { Tabs, Tab, Accordion, TabPanels, TabPanel, TabList } from '@chakra-ui/react';
+import {
+    Tabs,
+    Tab,
+    Accordion,
+    TabPanels,
+    TabPanel,
+    TabList,
+    Button,
+    Box,
+    Divider,
+} from '@chakra-ui/react';
 import TaskAccordion from './TaskAccordion';
 import { fetchTasksByCompletionForRoom, fetchTasksQueryForRoom } from '../firebase_calls/dbCalls';
 import { onSnapshot } from 'firebase/firestore';
 import CreateAlert from '../CreateAlert';
 import { gameContext } from '../Contexts';
 
-const TaskList = () => {
+const TaskList = ({ onStartMission }) => {
     const { roomID } = useContext(gameContext);
     const [arrayOfActiveTasks, setArrayOfActiveTasks] = useState([]);
     const [arrayOfInactiveTasks, setArrayOfInactiveTasks] = useState([]);
@@ -49,25 +59,37 @@ const TaskList = () => {
     });
 
     return (
-        <Tabs>
-            <TabList>
-                <Tab fontSize="sm" fontWeight="bold">
-                    {' '}
-                    Active ({arrayOfActiveTasks.length})
-                </Tab>
-                <Tab fontSize="sm" fontWeight="bold">
-                    Completed ({arrayOfInactiveTasks.length})
-                </Tab>
-            </TabList>
-            <TabPanels>
-                <TabPanel>
-                    <Accordion allowToggle>{listOfActiveTasks}</Accordion>
-                </TabPanel>
-                <TabPanel>
-                    <Accordion allowToggle>{listOfInactiveTasks}</Accordion>
-                </TabPanel>
-            </TabPanels>
-        </Tabs>
+        <Box display="flex" flexDirection="column" flex="1" minH={0}>
+            <Tabs display="flex" flexDirection="column" flex="1" minH={0} overflow="hidden">
+                <TabList flexShrink={0}>
+                    <Tab fontSize="sm" fontWeight="bold" w="50%">
+                        {' '}
+                        Active ({arrayOfActiveTasks.length})
+                    </Tab>
+                    <Tab fontSize="sm" fontWeight="bold" w="50%">
+                        Completed ({arrayOfInactiveTasks.length})
+                    </Tab>
+                </TabList>
+                <TabPanels flex="1" minH={0} overflow="hidden" px={1}>
+                    <TabPanel h="100%" overflowY="auto" px={2}>
+                        <Accordion allowToggle>{listOfActiveTasks}</Accordion>
+                    </TabPanel>
+                    <TabPanel h="100%" overflowY="auto" px={2}>
+                        <Accordion allowToggle>{listOfInactiveTasks}</Accordion>
+                    </TabPanel>
+                </TabPanels>
+            </Tabs>
+            <Divider />
+            <Button
+                borderRadius="3xl"
+                onClick={onStartMission}
+                colorScheme="blue"
+                my={2}
+                flexShrink={0}
+            >
+                Start Mission
+            </Button>
+        </Box>
     );
 };
 

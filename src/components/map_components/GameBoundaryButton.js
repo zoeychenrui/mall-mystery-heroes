@@ -14,9 +14,11 @@ const GameBoundaryButton = ({ roomID, gameBoundary }) => {
         <>
             <Button
                 colorScheme="teal"
-                variant="outline"
-                borderRadius="3xl"
+                size="md"
                 onClick={() => setIsOpen(true)}
+                mx={0}
+                borderRadius="3xl"
+                _hover={{ opacity: 0.8 }}
             >
                 {gameBoundary ? 'Edit Game Area' : 'Set Game Area'}
             </Button>

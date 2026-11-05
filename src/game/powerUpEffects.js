@@ -120,11 +120,11 @@ const pingEntry = ({ name, status, nowMs }) => {
 
 // The chat text for a ping. Global pings name who was pinged and never
 // the buyer; personal pings go only to the buyer.
-const pingMessageText = ({ itemId, pings }) => {
+const pingMessageText = ({ itemId, pings, buyerName }) => {
     const names = pings.map((ping) => ping.name).join(', ');
     if (itemId === 'ping-targets') return `📍 Your targets: ${names}`;
     if (itemId === 'ping-assassins') return `📍 Your assassins: ${names}`;
-    return `📍 ${names} has been pinged!`;
+    return `📍 ${names} has been pinged by ${buyerName}!`;
 };
 
 const ageText = (ms) => {

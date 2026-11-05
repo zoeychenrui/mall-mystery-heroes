@@ -206,7 +206,9 @@ describe('PlayerGame', () => {
 
         renderWaiting();
 
-        expect(screen.getByText('Alice joined Fluffy42317')).toBeInTheDocument();
+        expect(
+            screen.getByRole('heading', { name: /Alice.*Lobby Fluffy42317/ })
+        ).toBeInTheDocument();
         expect(screen.getByText('Waiting for the host to start...')).toBeInTheDocument();
     });
 
@@ -508,7 +510,8 @@ describe('PlayerGame', () => {
 
         renderWaiting();
 
-        expect(screen.getByText('Your target: Bob')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /Current target/ }));
+        expect(screen.getByText('Bob')).toBeInTheDocument();
         expect(
             screen.getByText(
                 'message-composer-stub roomID=Fluffy42317 playerName=Alice isGameActive=true players=[] missions=[]'
@@ -559,18 +562,20 @@ describe('PlayerGame', () => {
         expect(screen.getByTestId('pending-messages')).toHaveTextContent('[]');
     });
 
-    it('does not subscribe to the player doc while still waiting for the host', () => {
+    it('subscribes to the player doc while waiting so the player can set an avatar', () => {
         writePlayerSession('Fluffy42317', 'Alice');
         onSnapshot.mockImplementation((ref, callback) => {
             if (ref === 'room-ref') {
                 callback({ exists: () => true, data: () => ({ gameStarted: false }) });
+            } else if (ref === 'player-ref') {
+                callback({ exists: () => true, data: () => ({ isAlive: true, targets: [] }) });
             }
             return () => {};
         });
 
         renderWaiting();
 
-        expect(fetchPlayerReferenceForRoom).not.toHaveBeenCalled();
+        expect(fetchPlayerReferenceForRoom).toHaveBeenCalledWith('Alice', 'Fluffy42317');
     });
 
     it('shows a placeholder when alive but not yet assigned a target', () => {
@@ -602,10 +607,8 @@ describe('PlayerGame', () => {
 
         renderWaiting();
 
-        expect(screen.getByText("You've been eliminated")).toBeInTheDocument();
-        expect(
-            screen.getByText(/you may be revived if the host assigns you a revival mission/i)
-        ).toBeInTheDocument();
+        expect(screen.getByText(/you've been eliminated/i)).toBeInTheDocument();
+        expect(screen.getByText(/be on the lookout for revival missions/i)).toBeInTheDocument();
         expect(screen.queryByText(/your target/i)).not.toBeInTheDocument();
     });
 

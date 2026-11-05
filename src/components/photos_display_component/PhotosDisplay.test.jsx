@@ -130,124 +130,16 @@ beforeEach(() => {
 });
 
 describe('reconstructing judged photos from Firestore (improvements item 6)', () => {
-    it('can undo a photo approved in an earlier session, using its persisted snapshot', async () => {
-        // Nothing was clicked in this render — this photo's approval and its
-        // originalPlayerData snapshot both come purely from what Firestore
-        // reports, simulating a reload after the approval happened earlier.
+    it('does not show judged photos in the pending review queue', () => {
         mountWithSnapshot([
-            {
-                status: 'approved',
-                target: 'alice',
-                assassin: 'bob',
-                originalPlayerData: {
-                    alice: { score: 7, targets: ['carol'], assassins: ['dave'], isAlive: true },
-                },
-            },
+            { status: 'approved', target: 'alice', assassin: 'bob' },
+            { status: 'denied', target: null, assassin: 'carol' },
         ]);
 
-        await userEvent.click(screen.getByAltText('Undo'));
-
-        // The reversal (score/targets/assassins/isAlive, for every player
-        // killPlayer.js's transaction touched) now happens entirely inside
-        // the atomic undoKillPlayer Cloud Function — the client only needs
-        // to trigger it and log the result
-        // (docs/superpowers/specs/2026-08-16-full-kill-undo-design.md).
-        await waitFor(() => expect(undoKill).toHaveBeenCalledWith('room-a', 'photo-0'));
-        expect(executionHandlers.addLog).toHaveBeenCalledWith(
-            "Undo: alice's death by bob was reverted",
-            'blue.200'
-        );
-        // updatePhotoStatusForRoom is only for the deny-undo path now —
-        // undoKillPlayer's own transaction already resets status to
-        // 'pending' for an approval-undo.
-        expect(dbCalls.updatePhotoStatusForRoom).not.toHaveBeenCalled();
-    });
-
-    it('does nothing when there is no judged photo to undo', async () => {
-        mountWithSnapshot([{ status: 'pending', target: 'alice', assassin: 'bob' }]);
-
-        await userEvent.click(screen.getByAltText('Undo'));
-
+        expect(screen.getByText('No photos have been uploaded!')).toBeInTheDocument();
+        expect(screen.queryByAltText('Undo')).not.toBeInTheDocument();
         expect(undoKill).not.toHaveBeenCalled();
         expect(dbCalls.updatePhotoStatusForRoom).not.toHaveBeenCalled();
-    });
-
-    it('reverts a denied judgment by resetting status to pending, without calling undoKill', async () => {
-        mountWithSnapshot([
-            { status: 'denied', target: null, assassin: 'bob', originalPlayerData: null },
-        ]);
-
-        await userEvent.click(screen.getByAltText('Undo'));
-
-        await waitFor(() =>
-            expect(dbCalls.updatePhotoStatusForRoom).toHaveBeenCalledWith(
-                'room-a',
-                'photo-0',
-                'pending'
-            )
-        );
-        expect(executionHandlers.addLog).toHaveBeenCalledWith(
-            "Undo: denial of bob's kill attempt was reverted.",
-            'blue.200'
-        );
-        expect(undoKill).not.toHaveBeenCalled();
-    });
-
-    it('posts a chat message when undoing an approved kill', async () => {
-        mountWithSnapshot([
-            {
-                status: 'approved',
-                target: 'alice',
-                assassin: 'bob',
-                originalPlayerData: {
-                    alice: { score: 7, targets: ['carol'], assassins: ['dave'], isAlive: true },
-                },
-            },
-        ]);
-
-        await userEvent.click(screen.getByAltText('Undo'));
-
-        await waitFor(() =>
-            expect(dbCalls.addPlayerMessageForRoom).toHaveBeenCalledWith(
-                {
-                    type: 'killResult',
-                    recipient: null,
-                    text: "Undo: alice's death by bob was reverted",
-                    standings: null,
-                    mission: null,
-                    sender: null,
-                    assassin: 'bob',
-                    target: 'alice',
-                    outcome: 'undoneApproval',
-                },
-                'room-a'
-            )
-        );
-    });
-
-    it('posts a chat message when undoing a denial', async () => {
-        mountWithSnapshot([
-            { status: 'denied', target: null, assassin: 'bob', originalPlayerData: null },
-        ]);
-
-        await userEvent.click(screen.getByAltText('Undo'));
-
-        await waitFor(() =>
-            expect(dbCalls.addPlayerMessageForRoom).toHaveBeenCalledWith(
-                {
-                    type: 'killResult',
-                    recipient: null,
-                    text: "Undo: denial of bob's kill attempt was reverted.",
-                    standings: null,
-                    mission: null,
-                    sender: null,
-                    assassin: 'bob',
-                    target: null,
-                    outcome: 'undoneDenial',
-                },
-                'room-a'
-            )
-        );
     });
 });
 
@@ -646,7 +538,7 @@ describe('the player’s own claim, not a moderator pick', () => {
     it('does nothing when Approve is clicked on a photo with no claim at all', async () => {
         mountWithSnapshot([{ status: 'pending', target: null, mission: null, assassin: 'bob' }]);
 
-        expect(screen.getByText('No target selected.')).toBeInTheDocument();
+        expect(screen.getByText("bob's fun photo")).toBeInTheDocument();
 
         await userEvent.click(screen.getByAltText('Approve'));
 
@@ -935,39 +827,22 @@ describe('approving a photo as a mission completion', () => {
         );
     });
 
-    it('undoes a mission-approved photo for real, instead of showing the placeholder', async () => {
+    it('does not put an already-judged mission photo back in the pending queue', () => {
         mountWithSnapshot([
             { status: 'approved', mission: 1, assassin: 'bob', originalPlayerData: null },
         ]);
 
-        await userEvent.click(screen.getByAltText('Undo'));
-
-        await waitFor(() =>
-            expect(undoMissionPhotoApproval).toHaveBeenCalledWith('room-a', 'photo-0')
-        );
-        expect(executionHandlers.addLog).toHaveBeenCalledWith(
-            'Undo: the last mission completion was reverted',
-            'blue.200'
-        );
-        expect(dbCalls.addPlayerMessageForRoom).toHaveBeenCalledWith(
-            {
-                type: 'broadcast',
-                recipient: null,
-                text: 'Undo: the last mission completion was reverted',
-                standings: null,
-            },
-            'room-a'
-        );
+        expect(screen.getByText('No photos have been uploaded!')).toBeInTheDocument();
+        expect(screen.queryByAltText('Undo')).not.toBeInTheDocument();
+        expect(undoMissionPhotoApproval).not.toHaveBeenCalled();
     });
 
-    it('shows an error alert when undoing a mission-approved photo fails', async () => {
-        undoMissionPhotoApproval.mockRejectedValueOnce(new Error('nothing to undo'));
+    it('does not offer an undo action for an already-judged mission photo', () => {
         mountWithSnapshot([
             { status: 'approved', mission: 1, assassin: 'bob', originalPlayerData: null },
         ]);
 
-        await userEvent.click(screen.getByAltText('Undo'));
-
-        expect(await screen.findByText(/nothing to undo/i)).toBeInTheDocument();
+        expect(screen.queryByAltText('Undo')).not.toBeInTheDocument();
+        expect(undoMissionPhotoApproval).not.toHaveBeenCalled();
     });
 });

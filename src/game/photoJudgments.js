@@ -26,7 +26,13 @@ export const splitPhotosByStatus = (photos) => {
         .map((photo) => ({
             photo,
             action:
-                photo.status === 'denied' ? 'deny' : photo.mission != null ? 'missionPass' : 'pass',
+                photo.status === 'denied'
+                    ? 'deny'
+                    : photo.isFunPhoto
+                      ? 'funPass'
+                      : photo.mission != null
+                        ? 'missionPass'
+                        : 'pass',
             originalPlayerData: photo.originalPlayerData,
         }));
 
