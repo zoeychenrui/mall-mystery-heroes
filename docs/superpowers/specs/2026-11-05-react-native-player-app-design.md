@@ -260,6 +260,36 @@ is cleared and the player lands on the join screen instead. No new
 Firestore reads or backend behavior — this changes only what screen the
 app shows first.
 
+## Rollout and submission logistics
+
+- **The web player experience stays live.** `PlayerGame.js`,
+  `JoinGame.js`, `ReconnectPending.js`, and everything they depend on
+  are not retired or redirected once the app ships — the website
+  remains a working fallback (e.g. for a player who hasn't installed
+  the app yet, or before an Android build exists) indefinitely. No
+  sunset/removal task belongs in the implementation plan.
+- **App Store review access: a standing demo room.** Apple's reviewers
+  need to get past the join screen, which requires a real game code —
+  there is no "skip login" mode for reviewers. The moderator will
+  maintain a permanent demo room (a fixed game code, left in an active,
+  joinable state) for this purpose, rather than relying on written
+  reviewer notes alone. The implementation plan should flag, for the
+  moderator to confirm at submission time, that this demo room's code
+  is included in the App Store Connect submission's reviewer notes, and
+  should check whether `cleanupEndedRooms` (the scheduled function that
+  deletes ended rooms) could ever sweep it — if it only acts on rooms
+  where `isGameActive` has been `false` for some time, a permanently
+  active demo room is already safe from that and needs no special
+  casing; if not, the plan should call that out as something to fix or
+  work around, not silently reproduce the sweep.
+- **Apple Developer Program and Google Play Console accounts don't
+  exist yet.** Both need to be created before a store submission can
+  happen. Apple's enrollment in particular can take a day or two to
+  clear, so the implementation plan should list "enroll in both
+  programs" as an early, start-it-and-move-on task — not a blocker for
+  building or for the moderator's own dev-client testing, which needs
+  neither account.
+
 ## What's explicitly out of scope, even as nice-to-haves
 
 Raised and deliberately deferred during brainstorming, listed here so a
