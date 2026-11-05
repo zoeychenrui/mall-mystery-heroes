@@ -120,21 +120,38 @@ that those pages use), gets a native equivalent:
      kill-photo submissions, mission/revival announcements, power-up
      ping/notice messages — everything `MessageBubble.js` renders today.
    - Chat composer: send a text message; take or pick a photo, claim it
-     against a target or an open mission, and submit it
-     (`submitChatMessage`/`submitKillPhoto`, unchanged).
+     against a target, an open mission, or nothing ("just for fun"),
+     and submit it (`submitChatMessage`/`submitKillPhoto`, unchanged).
    - Missions list (read-only — players never edit missions).
    - Leaderboard (standings, read-only).
    - Power-up shop, when alive and the game is active: watch-ad,
      ping-targets, ping-assassins, global-ping-picked,
      global-ping-random, block-camera, horcrux, mystery-box — the same
      catalog `src/game/powerUps.js` already defines, called through the
-     same `purchasePowerUp`/`claimMysteryReward` endpoints.
+     same `purchasePowerUp`/`claimMysteryReward` endpoints, gated the
+     same way on whether the room's boundary ("zones") is enabled.
+   - Player avatars: capture/replace your own photo (written directly
+     to your own player doc, already permitted by an existing
+     `firestore.rules` clause — no Cloud Function involved), shown next
+     to your name and on each of your targets; tapping a target's
+     avatar opens a full view of their photo, or a note that they
+     haven't added one yet.
+   - A Game Rules modal — static help text (targets, missions/points,
+     avatars, zones, shop, safety, what happens if you're eliminated).
    - Leave game, with the same confirm-dialog warning.
 5. **Game-ended state** — the same banner/notice telling players to head
    back, with chat staying open afterward.
 
 Nothing on this list is new; this is the existing player experience,
-rebuilt as a native app.
+rebuilt as a native app. (Items 4's avatars, Game Rules modal, and
+"just for fun" photo option were added to this list after the design
+doc was first written and approved — the player-facing web app grew
+them while this doc's author was working from a stale local checkout.
+See the implementation plan's Global Constraints for the full account;
+the fix was to re-read the real current code and extend this list to
+match, not to re-run the whole brainstorming conversation, since these
+are squarely covered by the same "full parity" decision already made
+below.)
 
 ## How it's built
 
