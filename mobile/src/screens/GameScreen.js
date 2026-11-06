@@ -9,6 +9,10 @@ import * as callables from '../firebase/callables';
 import * as playerSession from '../utils/playerSession';
 import ChatFeed from './components/ChatFeed';
 import ChatComposer from './components/ChatComposer';
+import LocationStatusPanel, { deriveBoundaryDisplay } from './components/LocationStatusPanel';
+import useBoundaryLocation from '../hooks/useBoundaryLocation';
+import { deriveFreshStatus, isPositionFresh, canSee } from '../../../src/game/gameBoundary';
+import { normalizePlayerName, resolvePlayerDisplayName } from '../../../src/game/playerNames';
 
 // The player's in-game screen — a port of the web app's src/pages/PlayerGame.js
 // plus the pieces of it that live in src/components/player_game/
@@ -48,6 +52,14 @@ const GameScreen = ({ route, navigation }) => {
     // it is '' and the player-doc subscription below simply waits — the same
     // state the web is in when the stored session belongs to another room.
     const [playerName, setPlayerName] = useState('');
+    // This player's own rooms/{roomID}/boundaryStatuses doc — the server's
+    // evaluation of their reports. null until it exists (before the first
+    // report) or while the boundary is disabled.
+    const [boundaryStatusDoc, setBoundaryStatusDoc] = useState(null);
+    // Every other currently-"outside" player's status doc, stored RAW —
+    // freshness is applied at render time against nowMs (see below).
+    const [otherOutsidePositions, setOtherOutsidePositions] = useState([]);
+    const [nowMs, setNowMs] = useState(Date.now());
 
     // Used by Task 14's shop slot. purchasePowerUp enforces the same rules
     // server-side; this only hides the entry point. `=== true` keeps it
@@ -190,6 +202,137 @@ const GameScreen = ({ route, navigation }) => {
         return () => unsubscribe();
     }, [roomID, gameStarted]);
 
+    // A local ticker, so freshness re-evaluates even with no new Firestore
+    // snapshot — a stale fix must stop showing as "inside"/"outside" on its
+    // own, purely from time passing. Same as src/pages/PlayerGame.js.
+    useEffect(() => {
+        const intervalId = setInterval(() => setNowMs(Date.now()), 1000);
+        return () => clearInterval(intervalId);
+    }, []);
+
+    // This player's own boundary-status doc, once the boundary is enabled
+    // and the player's name is known. Subscribed here, not inside
+    // useBoundaryLocation (which only ever writes), exactly like the web —
+    // so the displayed status survives a relaunch before this session has
+    // reported anything. The error callback deliberately does NOT call
+    // handleSubscriptionError: a missing or not-yet-permitted status doc
+    // (e.g. before this player's first report) is routine, not a sign this
+    // session no longer belongs here.
+    useEffect(() => {
+        if (!roomID || !gameBoundary?.enabled || !playerName) {
+            setBoundaryStatusDoc(null);
+            return undefined;
+        }
+        const unsubscribe = onSnapshot(
+            dbCalls.fetchBoundaryStatusReferenceForPlayer(playerName, roomID),
+            (snapshot) => setBoundaryStatusDoc(snapshot.exists() ? snapshot.data() : null),
+            () => setBoundaryStatusDoc(null)
+        );
+        return () => unsubscribe();
+    }, [roomID, gameBoundary?.enabled, playerName]);
+
+    // Every other currently-exposed ("outside") player, for this player's
+    // map (Task 12 reads freshOtherOutsidePositions below as a prop and does
+    // not subscribe itself). Mounted whenever the boundary is enabled,
+    // regardless of whether the map is open. The query is already filtered
+    // to status == 'outside'; the viewer's own id is still excluded here as
+    // a belt-and-braces measure. Same as the web, its error just empties the
+    // list rather than leaving the game.
+    //
+    // One deliberate difference from the web: this also waits for
+    // playerName. The web reads it synchronously, so it is known on the
+    // very first render; here it arrives from AsyncStorage a moment later,
+    // and without this gate the query would subscribe once with '' (unable
+    // to exclude the player's own doc) and then immediately resubscribe —
+    // a wasted read of every outside status on every mount.
+    useEffect(() => {
+        if (!roomID || !gameBoundary?.enabled || !playerName) {
+            setOtherOutsidePositions([]);
+            return undefined;
+        }
+        const unsubscribe = onSnapshot(
+            dbCalls.fetchOutsideBoundaryStatusesQueryForRoom(roomID),
+            (snapshot) => {
+                const next = [];
+                snapshot.docs.forEach((statusDoc) => {
+                    if (statusDoc.id === normalizePlayerName(playerName)) return; // never yourself
+                    const data = statusDoc.data();
+                    next.push({
+                        id: statusDoc.id,
+                        lat: data.lat,
+                        lng: data.lng,
+                        accuracyM: data.accuracyMeters ?? 0,
+                        status: data.status,
+                        lastUsableMs: data.lastUsableReceivedAt?.toMillis?.() ?? null,
+                    });
+                });
+                setOtherOutsidePositions(next);
+            },
+            () => setOtherOutsidePositions([])
+        );
+        return () => unsubscribe();
+    }, [roomID, gameBoundary?.enabled, playerName]);
+
+    // Mounted always, independent of whether the map (Task 12) is open —
+    // closing the map must not stop location reporting. Same gating as the
+    // web: isAlive defaults to true before the player doc has loaded.
+    const { permissionState, ownPosition, requestPermission } = useBoundaryLocation({
+        roomID,
+        boundaryRevision: gameBoundary?.revision ?? null,
+        boundaryEnabled: gameBoundary?.enabled ?? false,
+        isGameActive,
+        isAlive: playerData?.isAlive ?? true,
+    });
+
+    // Render-time derivations, not stored state — exactly as
+    // src/pages/PlayerGame.js does them — so a position or status goes
+    // stale purely from nowMs advancing, with no new snapshot needed.
+    //
+    // The viewer and each target go through canSee, which classifies both
+    // with the same outside check. Freshness and finite coordinates stay
+    // here: they decide whether a marker can be drawn at all.
+    const viewer = {
+        id: playerName ? normalizePlayerName(playerName) : null,
+        lat: ownPosition?.lat,
+        lng: ownPosition?.lng,
+        accuracyM: ownPosition?.accuracyM,
+        status: boundaryStatusDoc?.status,
+    };
+    // Not rendered yet — Task 12's map reads it for its other-player markers.
+    const freshOtherOutsidePositions = otherOutsidePositions
+        .filter(
+            (position) =>
+                canSee(viewer, position, gameBoundary?.vertices) &&
+                isPositionFresh(position.lastUsableMs, nowMs) &&
+                Number.isFinite(position.lat) &&
+                Number.isFinite(position.lng)
+        )
+        .map((position) => ({
+            id: position.id,
+            lat: position.lat,
+            lng: position.lng,
+            label: resolvePlayerDisplayName(position.id, players),
+            alwaysShowLabel: true,
+        }));
+
+    const liveBoundaryStatus = boundaryStatusDoc
+        ? deriveFreshStatus(
+              {
+                  status: boundaryStatusDoc.status,
+                  reason: boundaryStatusDoc.reason,
+                  lastUsableMs: boundaryStatusDoc.lastUsableReceivedAt?.toMillis() ?? null,
+                  boundaryRevision: boundaryStatusDoc.boundaryRevision,
+                  uid: boundaryStatusDoc.uid,
+              },
+              nowMs,
+              { currentRevision: gameBoundary?.revision, currentUid: auth.currentUser?.uid }
+          )
+        : { status: 'unavailable', reason: 'no_fix' };
+
+    // Status words for the panel and (Task 12) the map's status line —
+    // boundaryDisplay.mapStatusText — so both always agree.
+    const boundaryDisplay = deriveBoundaryDisplay({ liveBoundaryStatus, boundaryStatusDoc, nowMs });
+
     const handleConfirmLeave = async () => {
         try {
             await callables.leaveGame(roomID);
@@ -310,12 +453,26 @@ const GameScreen = ({ route, navigation }) => {
             )}
 
             <View style={styles.body}>
-                {/* Tasks 11-12: location/boundary panel + map modal.
+                {/* Location/boundary status (PlayerBoundaryPanel.js).
                     Self-gates on gameBoundary?.enabled and
-                    playerData?.isAlive ?? true (PlayerBoundaryPanel.js).
-                    Reads roomID, playerName, isGameActive, players,
-                    gameBoundary.{enabled, revision, vertices}. */}
-                <View />
+                    playerData?.isAlive ?? true. Task 12 mounts the map
+                    modal beside it, reading ownPosition,
+                    freshOtherOutsidePositions,
+                    boundaryDisplay.mapStatusText, nowMs, and
+                    gameBoundary.vertices. */}
+                <LocationStatusPanel
+                    enabled={gameBoundary?.enabled === true}
+                    isAlive={playerData?.isAlive ?? true}
+                    permissionState={permissionState}
+                    requestPermission={requestPermission}
+                    liveBoundaryStatus={liveBoundaryStatus}
+                    isApproachingExposure={boundaryDisplay.isApproachingExposure}
+                    secondsUntilExposed={boundaryDisplay.secondsUntilExposed}
+                    statusText={boundaryDisplay.statusText}
+                    unavailableText={boundaryDisplay.unavailableText}
+                    lastCheckTime={boundaryDisplay.lastCheckTime}
+                    showUnavailableRetry={boundaryDisplay.showUnavailableRetry}
+                />
                 <ChatFeed
                     roomID={roomID}
                     playerName={playerName}
@@ -333,10 +490,10 @@ const GameScreen = ({ route, navigation }) => {
                 cameraBlockedUntil={playerData?.cameraBlockedUntil ?? null}
                 onOptimisticSend={handleOptimisticSend}
                 onOptimisticSendFailed={handleOptimisticSendFailed}
-                // locationEnabled isn't threaded here yet — ChatComposer's
-                // own default (true) applies until Task 11 builds the
-                // location-permission hook `permissionState` comes from and
-                // this passes permissionState === 'granted' down.
+                // Same as the web's MessageComposer wiring: photos need live
+                // location, so the camera stays off until this device has
+                // actually produced a fix ('granted' is set on the first one).
+                locationEnabled={permissionState === 'granted'}
             />
         </SafeAreaView>
     );

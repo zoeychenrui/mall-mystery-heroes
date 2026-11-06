@@ -1,7 +1,8 @@
 import { Alert } from 'react-native';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { collection, doc, onSnapshot, query } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
+import * as Location from 'expo-location';
 import * as callables from '../firebase/callables';
 import * as playerSession from '../utils/playerSession';
 import GameScreen from './GameScreen';
@@ -21,6 +22,18 @@ jest.mock('../firebase/firebaseConfig', () => ({
 jest.mock('../firebase/callables', () => ({
     leaveGame: jest.fn(),
     submitChatMessage: jest.fn(),
+    reportPlayerLocation: jest.fn(),
+}));
+// Task 11's useBoundaryLocation (mounted by GameScreen) calls expo-location,
+// whose native module doesn't exist under Jest. Driven per-test where the
+// permission/position flow matters; otherwise it simply never starts (no
+// test presses Enable Location unless it means to).
+jest.mock('expo-location', () => ({
+    requestForegroundPermissionsAsync: jest.fn(),
+    getForegroundPermissionsAsync: jest.fn(),
+    watchPositionAsync: jest.fn(),
+    getCurrentPositionAsync: jest.fn(),
+    Accuracy: { High: 4 },
 }));
 jest.mock('firebase/firestore');
 jest.mock('firebase/auth', () => ({
@@ -38,6 +51,13 @@ const TASKS_PATH = 'rooms/ROOM1/tasks';
 // Task 9's ChatFeed subscribes here too, as soon as roomID/playerName are
 // both known — regardless of gameStarted/isGameActive.
 const MESSAGES_PATH = 'rooms/ROOM1/playerMessages';
+// Task 11: the player's own status doc and the room's outside-players
+// query — both only once gameBoundary.enabled is true.
+const OWN_STATUS_PATH = 'rooms/ROOM1/boundaryStatuses/alice';
+const OUTSIDE_STATUSES_PATH = 'rooms/ROOM1/boundaryStatuses';
+
+// A Firestore-Timestamp-shaped stub.
+const ts = (ms) => ({ toMillis: () => ms, toDate: () => new Date(ms) });
 
 // Give dbCalls' doc()/collection()/query() calls a recognizable return value
 // (the path they were built from), so each onSnapshot call can be told apart
@@ -51,7 +71,7 @@ const tagRefsByPath = () => {
 // Drives every listener GameScreen mounts from one table of snapshot data,
 // keyed by ref path. Returns a per-path record of how many times each was
 // subscribed and its unsubscribe mock.
-const driveSnapshots = ({ room, player }) => {
+const driveSnapshots = ({ room, player, ownStatus = null, outsideStatuses = [] }) => {
     const listeners = {};
     onSnapshot.mockImplementation((ref, onNext) => {
         const unsubscribe = jest.fn();
@@ -62,6 +82,12 @@ const driveSnapshots = ({ room, player }) => {
             onNext({ exists: () => true, data: () => room });
         } else if (ref.path === PLAYER_PATH) {
             onNext({ exists: () => true, data: () => player });
+        } else if (ref.path === OWN_STATUS_PATH) {
+            onNext({ exists: () => ownStatus !== null, data: () => ownStatus ?? undefined });
+        } else if (ref.path === OUTSIDE_STATUSES_PATH) {
+            onNext({
+                docs: outsideStatuses.map(({ id, ...data }) => ({ id, data: () => data })),
+            });
         } else {
             // Covers the players/tasks queries (which read .docs) and
             // ChatFeed's playerMessages query (which reads .docChanges()).
@@ -217,5 +243,159 @@ describe('GameScreen', () => {
         expectResetToJoin(navigation);
         expect(playerSession.clearPlayerSession).toHaveBeenCalled();
         consoleSpy.mockRestore();
+    });
+
+    describe('location/boundary status (Task 11)', () => {
+        const ENABLED_BOUNDARY = { enabled: true, revision: 3, vertices: [] };
+
+        beforeEach(() => {
+            Location.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+            Location.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+            Location.getCurrentPositionAsync.mockReturnValue(new Promise(() => {}));
+            callables.reportPlayerLocation.mockResolvedValue({ status: 'inside', reason: null });
+        });
+
+        it('subscribes to the own status doc and the outside query only once the boundary is enabled, and tears both down once', async () => {
+            const listeners = driveSnapshots({
+                room: { gameStarted: true, isGameActive: true, gameBoundary: ENABLED_BOUNDARY },
+                player: { isAlive: true, targets: [] },
+            });
+            const { unmount } = await renderScreen();
+            await waitFor(() =>
+                expect(Object.keys(listeners).sort()).toEqual(
+                    [
+                        ROOM_PATH,
+                        PLAYER_PATH,
+                        PLAYERS_PATH,
+                        TASKS_PATH,
+                        MESSAGES_PATH,
+                        OWN_STATUS_PATH,
+                        OUTSIDE_STATUSES_PATH,
+                    ].sort()
+                )
+            );
+            await unmount();
+            Object.values(listeners).forEach(({ subscribeCount, unsubscribes }) => {
+                expect(subscribeCount).toBe(1);
+                expect(unsubscribes[0]).toHaveBeenCalledTimes(1);
+            });
+        });
+
+        it('does not subscribe to either boundary listener while the boundary is disabled', async () => {
+            const listeners = driveSnapshots({
+                room: {
+                    gameStarted: true,
+                    isGameActive: true,
+                    gameBoundary: { ...ENABLED_BOUNDARY, enabled: false },
+                },
+                player: { isAlive: true },
+            });
+            await renderScreen();
+            await waitFor(() => expect(listeners[PLAYER_PATH]?.subscribeCount).toBe(1));
+            expect(listeners[OWN_STATUS_PATH]).toBeUndefined();
+            expect(listeners[OUTSIDE_STATUSES_PATH]).toBeUndefined();
+        });
+
+        it('does NOT leave the game when the own status doc subscription errors', async () => {
+            onSnapshot.mockImplementation((ref, onNext, onError) => {
+                if (ref.path === ROOM_PATH) {
+                    onNext({
+                        exists: () => true,
+                        data: () => ({
+                            gameStarted: true,
+                            isGameActive: true,
+                            gameBoundary: ENABLED_BOUNDARY,
+                        }),
+                    });
+                } else if (ref.path === PLAYER_PATH) {
+                    onNext({ exists: () => true, data: () => ({ isAlive: true }) });
+                } else if (ref.path === OWN_STATUS_PATH || ref.path === OUTSIDE_STATUSES_PATH) {
+                    onError(new Error('permission-denied'));
+                } else {
+                    onNext({ docs: [], docChanges: () => [] });
+                }
+                return jest.fn();
+            });
+            const navigation = makeNavigation();
+            const { findByText } = await renderScreen(navigation);
+            // Still on the game screen, showing the no-status-yet state.
+            await findByText('Enable Location');
+            expect(navigation.reset).not.toHaveBeenCalled();
+            expect(playerSession.clearPlayerSession).not.toHaveBeenCalled();
+        });
+
+        it('renders the live status derived from the own status doc', async () => {
+            driveSnapshots({
+                room: { gameStarted: true, isGameActive: true, gameBoundary: ENABLED_BOUNDARY },
+                player: { isAlive: true },
+                ownStatus: {
+                    status: 'outside',
+                    reason: null,
+                    lastUsableReceivedAt: ts(Date.now()),
+                    boundaryRevision: 3,
+                },
+            });
+            const { findByText } = await renderScreen();
+            await findByText(
+                'You are outside the game area — your location is visible to everyone until you return.'
+            );
+        });
+
+        it('shows a stale own status as unavailable', async () => {
+            driveSnapshots({
+                room: { gameStarted: true, isGameActive: true, gameBoundary: ENABLED_BOUNDARY },
+                player: { isAlive: true },
+                ownStatus: {
+                    status: 'inside',
+                    reason: null,
+                    lastUsableReceivedAt: ts(Date.now() - 120000),
+                    boundaryRevision: 3,
+                },
+            });
+            const { findByText, queryByText } = await renderScreen();
+            // permissionState is still 'unknown', so the unavailable box is
+            // suppressed and the prompt shows instead — and never "inside".
+            await findByText('Enable Location');
+            expect(queryByText('In game area.')).toBeNull();
+        });
+
+        it('hides the panel for an eliminated player', async () => {
+            driveSnapshots({
+                room: { gameStarted: true, isGameActive: true, gameBoundary: ENABLED_BOUNDARY },
+                player: { isAlive: false },
+            });
+            const { findByText, queryByText } = await renderScreen();
+            await findByText("YOU'VE BEEN ELIMINATED");
+            expect(queryByText('Enable Location')).toBeNull();
+        });
+
+        it('passes the live permission state to the camera button: off until this device has a fix, on after', async () => {
+            let deliverFix;
+            Location.watchPositionAsync.mockImplementation(async (options, onSuccess) => {
+                deliverFix = onSuccess;
+                return { remove: jest.fn() };
+            });
+            driveSnapshots({
+                room: { gameStarted: true, isGameActive: true, gameBoundary: ENABLED_BOUNDARY },
+                player: { isAlive: true },
+            });
+            const { findByLabelText, getByRole } = await renderScreen();
+
+            await findByLabelText('Send photo (enable location first)');
+
+            await fireEvent.press(getByRole('button', { name: 'Enable Location' }));
+            await waitFor(() => expect(deliverFix).toBeDefined());
+            await act(async () => {
+                deliverFix({
+                    coords: { latitude: 40, longitude: -74, accuracy: 10 },
+                    timestamp: Date.now(),
+                });
+            });
+
+            await findByLabelText('Send photo');
+            expect(callables.reportPlayerLocation).toHaveBeenCalledWith(
+                expect.objectContaining({ roomId: 'ROOM1', boundaryRevision: 3, lat: 40 })
+            );
+        });
     });
 });
