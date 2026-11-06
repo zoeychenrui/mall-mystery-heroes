@@ -1,22 +1,9 @@
-import { Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import JoinScreen from '../screens/JoinScreen';
 import ReconnectPendingScreen from '../screens/ReconnectPendingScreen';
-
-// 'Game' is registered here so JoinScreen (and now ReconnectPendingScreen)
-// can navigate to it by name, but its real screen is Task 7's job — this
-// placeholder exists only so the app doesn't crash on navigation before
-// that task lands, and gets replaced wholesale (not merged) once the real
-// screen exists.
-function GamePlaceholder() {
-    return (
-        <View>
-            <Text>Game screen — real screen lands in Task 7.</Text>
-        </View>
-    );
-}
+import GameScreen from '../screens/GameScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -30,7 +17,14 @@ export default function RootNavigator() {
                 <Stack.Navigator initialRouteName="Join">
                     <Stack.Screen name="Join" component={JoinScreen} />
                     <Stack.Screen name="ReconnectPending" component={ReconnectPendingScreen} />
-                    <Stack.Screen name="Game" component={GamePlaceholder} />
+                    {/* GameScreen draws its own header (name, lobby, Rules,
+                        Leave), like the web page, and handles its own safe
+                        area — so no stack header on top of it. */}
+                    <Stack.Screen
+                        name="Game"
+                        component={GameScreen}
+                        options={{ headerShown: false }}
+                    />
                 </Stack.Navigator>
             </NavigationContainer>
         </SafeAreaProvider>
