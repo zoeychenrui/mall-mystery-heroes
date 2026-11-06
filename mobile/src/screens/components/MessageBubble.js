@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { normalizePlayerName } from '../../../../src/game/playerNames';
 import { formatMessageTime } from '../../../../src/utils/formatMessageTime';
+import LeaderboardModal, { StandingLine } from './LeaderboardModal';
 
 // RN port of src/components/player_messages_components/MessageBubble.js.
 // One message's rendering, branching on `message.type` the same way the
@@ -17,6 +18,7 @@ const captureTime = (ms) =>
 
 const MessageBubble = ({ message, playerName, onShowPings }) => {
     const [isPhotoOpen, setIsPhotoOpen] = useState(false);
+    const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
     const mission = message.mission ?? {};
     // Only 'chat' messages have a sender to compare — every other type
     // (whisper/broadcast/leaderboard/mission) is GM-authored and has no
@@ -60,16 +62,29 @@ const MessageBubble = ({ message, playerName, onShowPings }) => {
     }
 
     if (message.type === 'gameEndedLeaderboard') {
-        // Full final-standings view, GameEndedLeaderboardBubble.js on the
-        // web — shares the leaderboard-standings shape with the regular
-        // leaderboard modal. In scope for Task 13. Stubbed as plain text
-        // until then.
+        // Port of GameEndedLeaderboardBubble.js: top three inline, the full
+        // standings behind a button. Lines and modal share StandingLine
+        // with LeaderboardModal.js so the copy can't drift.
+        const standings = message.standings ?? [];
         return (
             <View style={styles.card}>
                 <Text style={styles.cardTitle}>Final Standings</Text>
-                <Text style={styles.cardText}>
-                    Game ended — the full leaderboard view is coming soon.
-                </Text>
+                {standings.slice(0, 3).map((entry, index) => (
+                    <StandingLine key={entry.name} entry={entry} index={index} />
+                ))}
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="View full leaderboard"
+                    style={styles.leaderboardButton}
+                    onPress={() => setIsLeaderboardOpen(true)}
+                >
+                    <Text style={styles.leaderboardButtonText}>View Full Leaderboard</Text>
+                </Pressable>
+                <LeaderboardModal
+                    isOpen={isLeaderboardOpen}
+                    onClose={() => setIsLeaderboardOpen(false)}
+                    standings={standings}
+                />
                 {time && <Text style={styles.subtleText}>{time}</Text>}
             </View>
         );
@@ -368,6 +383,19 @@ const styles = StyleSheet.create({
     },
     fallbackText: {
         color: '#FFFFFF',
+    },
+    leaderboardButton: {
+        backgroundColor: GRAY_400,
+        borderRadius: 4,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        alignSelf: 'flex-start',
+        marginTop: 4,
+    },
+    leaderboardButtonText: {
+        color: '#1A202C',
+        fontWeight: 'bold',
+        fontSize: 12,
     },
 });
 

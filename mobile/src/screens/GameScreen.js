@@ -11,9 +11,12 @@ import ChatFeed from './components/ChatFeed';
 import ChatComposer from './components/ChatComposer';
 import GameMapModal from './components/GameMapModal';
 import LocationStatusPanel, { deriveBoundaryDisplay } from './components/LocationStatusPanel';
+import MissionsModal from './components/MissionsModal';
+import LeaderboardModal from './components/LeaderboardModal';
 import useBoundaryLocation from '../hooks/useBoundaryLocation';
 import { deriveFreshStatus, isPositionFresh, canSee } from '../../../src/game/gameBoundary';
 import { normalizePlayerName, resolvePlayerDisplayName } from '../../../src/game/playerNames';
+import { buildLeaderboardStandings } from '../../../src/game/leaderboard';
 
 // The player's in-game screen — a port of the web app's src/pages/PlayerGame.js
 // plus the pieces of it that live in src/components/player_game/
@@ -41,6 +44,8 @@ const GameScreen = ({ route, navigation }) => {
     // {enabled, revision, vertices}, or undefined if the room has none yet.
     const [gameBoundary, setGameBoundary] = useState(undefined);
     const [areRulesOpen, setAreRulesOpen] = useState(false);
+    const [isMissionsOpen, setIsMissionsOpen] = useState(false);
+    const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
     // This player's own chat sends that ChatComposer has fired off but
     // Firestore hasn't confirmed yet — callables.submitChatMessage writes
     // server-side, so this device no longer gets an automatic local echo
@@ -467,9 +472,22 @@ const GameScreen = ({ route, navigation }) => {
                         // gameBoundary?.enabled (zonesEnabled).
                         <View />
                     )}
-                    {/* Task 13: Missions and Leaderboard entry points +
-                        their modals. Reads roomID, players. */}
-                    <View />
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="View missions"
+                        style={styles.headerButton}
+                        onPress={() => setIsMissionsOpen(true)}
+                    >
+                        <Text style={styles.headerButtonText}>Missions</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="View leaderboard"
+                        style={styles.headerButton}
+                        onPress={() => setIsLeaderboardOpen(true)}
+                    >
+                        <Text style={styles.headerButtonText}>Leaderboard</Text>
+                    </TouchableOpacity>
                     {gameBoundary?.enabled === true && (
                         // Tasks 11-12: "View Game Map" entry point
                         // (PlayerGameHeader.js's IconButton aria-label
@@ -487,6 +505,16 @@ const GameScreen = ({ route, navigation }) => {
             </View>
 
             <GameRulesModal visible={areRulesOpen} onClose={() => setAreRulesOpen(false)} />
+            <MissionsModal
+                isOpen={isMissionsOpen}
+                onClose={() => setIsMissionsOpen(false)}
+                missions={missions}
+            />
+            <LeaderboardModal
+                isOpen={isLeaderboardOpen}
+                onClose={() => setIsLeaderboardOpen(false)}
+                standings={buildLeaderboardStandings(players)}
+            />
             <GameMapModal
                 isOpen={isMapOpen}
                 onClose={handleMapClose}
