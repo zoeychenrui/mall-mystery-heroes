@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polygon } from 'react-native-maps';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // RN port of the web's read-only player map: src/components/map_components/
 // {GameMap.js, PlayerMapModal.js}. Shows the published game area, this
@@ -76,17 +77,32 @@ const GameMapModal = ({
     return (
         <Modal visible={isOpen} onRequestClose={onClose} animationType="slide">
             <View style={styles.container}>
-                <View style={styles.header}>
-                    <Text style={styles.title}>Game Area</Text>
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Close modal"
-                        onPress={onClose}
-                        style={styles.closeButton}
-                    >
-                        <Text style={styles.closeText}>✕</Text>
-                    </Pressable>
-                </View>
+                {/* Unlike a screen reached through React Navigation, this
+                    Modal is not `transparent` — it renders genuinely
+                    full-screen, over the status bar/notch, so nothing here
+                    gets safe-area handling for free. Only the header needs
+                    it (that's what overlapped the status bar/clock on a
+                    real device); the map below is fine bleeding to the
+                    screen edges, so only the header is wrapped, with
+                    `edges={['top']}` since the bottom inset doesn't apply
+                    here. */}
+                <SafeAreaView
+                    testID="map-header-safe-area"
+                    edges={['top']}
+                    style={styles.headerSafeArea}
+                >
+                    <View style={styles.header}>
+                        <Text style={styles.title}>Game Area</Text>
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Close modal"
+                            onPress={onClose}
+                            style={styles.closeButton}
+                        >
+                            <Text style={styles.closeText}>✕</Text>
+                        </Pressable>
+                    </View>
+                </SafeAreaView>
                 {statusText && (
                     <View style={styles.statusBanner}>
                         <Text style={styles.statusText}>{statusText}</Text>
@@ -140,6 +156,9 @@ const GameMapModal = ({
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: '#202030',
+    },
+    headerSafeArea: {
         backgroundColor: '#202030',
     },
     header: {

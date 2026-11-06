@@ -13,7 +13,7 @@
  *
  * @testing-library/react-native v14's render/fireEvent are async.
  */
-import { render, screen, fireEvent } from '@testing-library/react-native';
+import { render, screen, fireEvent, within } from '@testing-library/react-native';
 import GameMapModal from './GameMapModal';
 
 const mockAnimateToRegion = jest.fn();
@@ -140,6 +140,29 @@ describe('GameMapModal', () => {
     it('is not visible when isOpen is false', async () => {
         await renderModal({ isOpen: false });
         expect(screen.queryByTestId('game-map-view')).toBeNull();
+    });
+
+    it('renders the header inside a top-edge SafeAreaView, so it clears the status bar/notch in the full-screen (non-transparent) Modal', async () => {
+        await renderModal();
+        const headerSafeArea = screen.getByTestId('map-header-safe-area');
+        // Confirms this is the real react-native-safe-area-context native
+        // view (RNCSafeAreaView), not a plain View that merely borrows the
+        // name — a plain View wouldn't know about insets at all.
+        expect(headerSafeArea.type).toBe('RNCSafeAreaView');
+        // Real device bug: this Modal is not `transparent`, so unlike a
+        // screen reached through React Navigation it gets no safe-area
+        // handling for free — the header (title + close button) rendered
+        // up under the iOS status bar/clock with the close button
+        // unreachable. Only `top` is requested; the map below is fine
+        // bleeding to the screen edges.
+        expect(headerSafeArea.props.edges).toEqual({
+            top: 'additive',
+            left: 'off',
+            right: 'off',
+            bottom: 'off',
+        });
+        expect(within(headerSafeArea).getByText('Game Area')).toBeTruthy();
+        expect(within(headerSafeArea).getByLabelText('Close modal')).toBeTruthy();
     });
 
     it('calls onClose when the close button is pressed', async () => {
