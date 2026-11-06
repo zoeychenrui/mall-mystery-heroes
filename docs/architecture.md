@@ -20,9 +20,9 @@ no backend of our own — see [Cloud Functions](#cloud-functions) below.
 │   src/)             │◀────────│  · Auth (email/password,     │
 │  React SPA          │         │    Google, anonymous)        │
 └─────────────────────┘         │  · Firestore  (game state)   │
-                                 │  · Storage    (kill photos,  │
+                                │  · Storage    (kill photos,  │
 ┌─────────────────────┐         │    avatars)                  │
-│  Player mobile app  │────────▶│  · Functions  (16 callables, │
+│  Player mobile app  │────────▶│  · Functions  (19 callables, │
 │  (this repo,        │         │    1 scheduled)              │
 │   mobile/)          │◀────────│                              │
 │  React Native/Expo  │         └──────────────────────────────┘
