@@ -13,10 +13,12 @@ import GameMapModal from './components/GameMapModal';
 import LocationStatusPanel, { deriveBoundaryDisplay } from './components/LocationStatusPanel';
 import MissionsModal from './components/MissionsModal';
 import LeaderboardModal from './components/LeaderboardModal';
+import PowerUpShopModal from './components/PowerUpShopModal';
 import useBoundaryLocation from '../hooks/useBoundaryLocation';
 import { deriveFreshStatus, isPositionFresh, canSee } from '../../../src/game/gameBoundary';
 import { normalizePlayerName, resolvePlayerDisplayName } from '../../../src/game/playerNames';
 import { buildLeaderboardStandings } from '../../../src/game/leaderboard';
+import { isHorcruxActive } from '../../../src/game/powerUpEffects';
 
 // The player's in-game screen — a port of the web app's src/pages/PlayerGame.js
 // plus the pieces of it that live in src/components/player_game/
@@ -46,6 +48,7 @@ const GameScreen = ({ route, navigation }) => {
     const [areRulesOpen, setAreRulesOpen] = useState(false);
     const [isMissionsOpen, setIsMissionsOpen] = useState(false);
     const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+    const [isShopOpen, setIsShopOpen] = useState(false);
     // This player's own chat sends that ChatComposer has fired off but
     // Firestore hasn't confirmed yet — callables.submitChatMessage writes
     // server-side, so this device no longer gets an automatic local echo
@@ -350,6 +353,17 @@ const GameScreen = ({ route, navigation }) => {
     // boundaryDisplay.mapStatusText — so both always agree.
     const boundaryDisplay = deriveBoundaryDisplay({ liveBoundaryStatus, boundaryStatusDoc, nowMs });
 
+    // Derived the same way the web's PlayerGame.js does before handing it to
+    // its own shop modal — not a field the player doc stores or Task 7
+    // passes down.
+    const horcruxActive = isHorcruxActive(
+        {
+            horcrux: playerData?.horcrux,
+            horcruxEndsAtMs: playerData?.horcruxEndsAt?.toMillis?.() ?? null,
+        },
+        nowMs
+    );
+
     // The map's own-position marker only ever shows a fix fresh enough to
     // trust — same freshnessMs window as every other position on this
     // screen (isPositionFresh), applied here rather than inside
@@ -465,12 +479,14 @@ const GameScreen = ({ route, navigation }) => {
                         <View />
                     )}
                     {canShop && (
-                        // Task 14: shop entry point + PowerUpShopModal.
-                        // Reads canShop, roomID, playerName, players,
-                        // playerData.{score, powerUpCooldowns, horcrux,
-                        // horcruxEndsAt, pendingMysteryItem},
-                        // gameBoundary?.enabled (zonesEnabled).
-                        <View />
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="Open shop"
+                            style={styles.headerButton}
+                            onPress={() => setIsShopOpen(true)}
+                        >
+                            <Text style={styles.headerButtonText}>Shop</Text>
+                        </TouchableOpacity>
                     )}
                     <TouchableOpacity
                         accessibilityRole="button"
@@ -514,6 +530,20 @@ const GameScreen = ({ route, navigation }) => {
                 isOpen={isLeaderboardOpen}
                 onClose={() => setIsLeaderboardOpen(false)}
                 standings={buildLeaderboardStandings(players)}
+            />
+            <PowerUpShopModal
+                isOpen={isShopOpen}
+                onClose={() => setIsShopOpen(false)}
+                roomID={roomID}
+                playerName={playerName}
+                score={playerData?.score}
+                cooldowns={playerData?.powerUpCooldowns ?? {}}
+                players={players}
+                horcruxActive={horcruxActive}
+                zonesEnabled={gameBoundary?.enabled === true}
+                pendingMysteryItem={playerData?.pendingMysteryItem ?? null}
+                purchasePowerUp={callables.purchasePowerUp}
+                claimMysteryReward={callables.claimMysteryReward}
             />
             <GameMapModal
                 isOpen={isMapOpen}
