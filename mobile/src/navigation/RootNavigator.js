@@ -3,24 +3,17 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import JoinScreen from '../screens/JoinScreen';
+import ReconnectPendingScreen from '../screens/ReconnectPendingScreen';
 
-// 'ReconnectPending' and 'Game' are registered here so JoinScreen can
-// navigate to them by name, but their real screens are Tasks 7 and 6's
-// jobs respectively — these placeholders exist only so the app doesn't
-// crash on navigation before those tasks land, and get replaced wholesale
-// (not merged) once the real screens exist.
-function ReconnectPendingPlaceholder() {
-    return (
-        <View>
-            <Text>Reconnect pending — real screen lands in Task 7.</Text>
-        </View>
-    );
-}
-
+// 'Game' is registered here so JoinScreen (and now ReconnectPendingScreen)
+// can navigate to it by name, but its real screen is Task 7's job — this
+// placeholder exists only so the app doesn't crash on navigation before
+// that task lands, and gets replaced wholesale (not merged) once the real
+// screen exists.
 function GamePlaceholder() {
     return (
         <View>
-            <Text>Game screen — real screen lands in Task 6.</Text>
+            <Text>Game screen — real screen lands in Task 7.</Text>
         </View>
     );
 }
@@ -36,7 +29,7 @@ export default function RootNavigator() {
                     session (auto-resume). */}
                 <Stack.Navigator initialRouteName="Join">
                     <Stack.Screen name="Join" component={JoinScreen} />
-                    <Stack.Screen name="ReconnectPending" component={ReconnectPendingPlaceholder} />
+                    <Stack.Screen name="ReconnectPending" component={ReconnectPendingScreen} />
                     <Stack.Screen name="Game" component={GamePlaceholder} />
                 </Stack.Navigator>
             </NavigationContainer>
