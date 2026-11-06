@@ -212,7 +212,7 @@ describe('ChatComposer', () => {
     });
 
     describe('camera capture flow', () => {
-        it('renders an enabled camera button by default (locationEnabled defaults to true)', async () => {
+        it('renders an enabled camera button by default', async () => {
             await mountComposer();
 
             expect(screen.getByLabelText('Send photo').props.accessibilityState.disabled).toBe(
@@ -220,13 +220,12 @@ describe('ChatComposer', () => {
             );
         });
 
-        it('disables and relabels the camera button when locationEnabled is false', async () => {
+        it('leaves the camera button enabled even when location is not enabled', async () => {
             await mountComposer({ locationEnabled: false });
 
-            expect(
-                screen.getByLabelText('Send photo (enable location first)').props
-                    .accessibilityState.disabled
-            ).toBe(true);
+            expect(screen.getByLabelText('Send photo').props.accessibilityState.disabled).toBe(
+                false
+            );
         });
 
         it('disables and relabels the camera button while blocked', async () => {

@@ -38,13 +38,6 @@ const ChatComposer = ({
     // From this player's own doc — set when someone uses "Block a player's
     // camera" on them (purchasePowerUp.js).
     cameraBlockedUntil = null,
-    // GameScreen has no real value to pass yet — Task 11 builds the
-    // location-permission hook `permissionState` comes from and wires
-    // `permissionState === 'granted'` down here. Defaulting to `true`
-    // matches the web MessageComposer.js's own `locationEnabled = true`
-    // default exactly, so this component works correctly receiving
-    // nothing in the meantime.
-    locationEnabled = true,
 }) => {
     const [text, setText] = useState('');
     const blockedUntilMs = toMs(cameraBlockedUntil);
@@ -74,7 +67,11 @@ const ChatComposer = ({
     // with zero targets (true of every dead player) can still submit a
     // photo — the moderator's combined target/mission dropdown may still
     // have an open mission to offer them even with no live kill target.
-    const photoDisabled = disabled || !isGameActive || cameraBlocked || !locationEnabled;
+    // Unlike the web's MessageComposer.js, this button is never gated on
+    // location being enabled — tapping it always drives the native camera-
+    // permission prompt (handleCameraPress) rather than sitting inert,
+    // since on a phone there's no reason capture should wait on location.
+    const photoDisabled = disabled || !isGameActive || cameraBlocked;
 
     const handleSend = async () => {
         const trimmed = text.trim();
@@ -233,13 +230,7 @@ const ChatComposer = ({
             />
             <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={
-                    !locationEnabled
-                        ? 'Send photo (enable location first)'
-                        : cameraBlocked
-                          ? 'Send photo (camera blocked)'
-                          : 'Send photo'
-                }
+                accessibilityLabel={cameraBlocked ? 'Send photo (camera blocked)' : 'Send photo'}
                 accessibilityState={{ disabled: photoDisabled }}
                 disabled={photoDisabled}
                 onPress={handleCameraPress}

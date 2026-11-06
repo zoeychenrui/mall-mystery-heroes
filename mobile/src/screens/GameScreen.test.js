@@ -456,7 +456,7 @@ describe('GameScreen', () => {
             expect(queryByText('Enable Location')).toBeNull();
         });
 
-        it('passes the live permission state to the camera button: off until this device has a fix, on after', async () => {
+        it('requests a location fix and reports it once granted', async () => {
             let deliverFix;
             Location.watchPositionAsync.mockImplementation(async (options, onSuccess) => {
                 deliverFix = onSuccess;
@@ -466,9 +466,7 @@ describe('GameScreen', () => {
                 room: { gameStarted: true, isGameActive: true, gameBoundary: ENABLED_BOUNDARY },
                 player: { isAlive: true },
             });
-            const { findByLabelText, getByRole } = await renderScreen();
-
-            await findByLabelText('Send photo (enable location first)');
+            const { getByRole } = await renderScreen();
 
             await fireEvent.press(getByRole('button', { name: 'Enable Location' }));
             await waitFor(() => expect(deliverFix).toBeDefined());
@@ -479,7 +477,6 @@ describe('GameScreen', () => {
                 });
             });
 
-            await findByLabelText('Send photo');
             expect(callables.reportPlayerLocation).toHaveBeenCalledWith(
                 expect.objectContaining({ roomId: 'ROOM1', boundaryRevision: 3, lat: 40 })
             );

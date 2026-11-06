@@ -767,10 +767,6 @@ const GameScreen = ({ route, navigation }) => {
                     cameraBlockedUntil={playerData?.cameraBlockedUntil ?? null}
                     onOptimisticSend={handleOptimisticSend}
                     onOptimisticSendFailed={handleOptimisticSendFailed}
-                    // Same as the web's MessageComposer wiring: photos need live
-                    // location, so the camera stays off until this device has
-                    // actually produced a fix ('granted' is set on the first one).
-                    locationEnabled={permissionState === 'granted'}
                 />
             </KeyboardAvoidingView>
         </SafeAreaView>
