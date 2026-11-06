@@ -215,6 +215,7 @@ const TEAL_700 = '#285E61'; // chat bubble, mine
 const BLUE_900 = '#1A365D'; // chat bubble, theirs
 const GRAY_700 = '#2D3748'; // killPhoto/mission/leaderboard bubble bg
 const GRAY_400 = '#A0AEC0'; // whisper border, timestamp text
+const GRAY_300 = '#CBD5E0'; // powerUpPing's per-ping name/location line
 const PURPLE_900 = '#322659'; // broadcast bubble bg
 const PURPLE_400 = '#9F7AEA'; // broadcast bubble border
 const WHITE_ALPHA_100 = 'rgba(255, 255, 255, 0.06)'; // whisper bubble bg
@@ -279,7 +280,7 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
     },
     pingDetailText: {
-        color: '#E2E8F0',
+        color: GRAY_300,
         fontSize: 13,
     },
     subtleInlineText: {
