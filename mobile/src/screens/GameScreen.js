@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { onSnapshot } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
@@ -568,7 +579,10 @@ const GameScreen = ({ route, navigation }) => {
                             style={styles.headerButton}
                             onPress={() => setIsShopOpen(true)}
                         >
-                            <Text style={styles.headerButtonText}>Shop</Text>
+                            <Image
+                                source={require('../../assets/icons/shop-white.png')}
+                                style={styles.headerButtonIcon}
+                            />
                         </TouchableOpacity>
                     )}
                     <TouchableOpacity
@@ -577,7 +591,10 @@ const GameScreen = ({ route, navigation }) => {
                         style={styles.headerButton}
                         onPress={() => setIsMissionsOpen(true)}
                     >
-                        <Text style={styles.headerButtonText}>Missions</Text>
+                        <Image
+                            source={require('../../assets/icons/mission-white.png')}
+                            style={styles.headerButtonIcon}
+                        />
                     </TouchableOpacity>
                     <TouchableOpacity
                         accessibilityRole="button"
@@ -585,7 +602,10 @@ const GameScreen = ({ route, navigation }) => {
                         style={styles.headerButton}
                         onPress={() => setIsLeaderboardOpen(true)}
                     >
-                        <Text style={styles.headerButtonText}>Leaderboard</Text>
+                        <Image
+                            source={require('../../assets/icons/leaderboard-white.png')}
+                            style={styles.headerButtonIcon}
+                        />
                     </TouchableOpacity>
                     {gameBoundary?.enabled === true && (
                         // Tasks 11-12: "View Game Map" entry point
@@ -597,7 +617,10 @@ const GameScreen = ({ route, navigation }) => {
                             style={styles.headerButton}
                             onPress={() => setIsMapOpen(true)}
                         >
-                            <Text style={styles.headerButtonText}>Map</Text>
+                            <Image
+                                source={require('../../assets/icons/location-white.png')}
+                                style={styles.headerButtonIcon}
+                            />
                         </TouchableOpacity>
                     )}
                 </View>
@@ -664,48 +687,61 @@ const GameScreen = ({ route, navigation }) => {
                 </View>
             )}
 
-            <View style={styles.body}>
-                {/* Location/boundary status (PlayerBoundaryPanel.js).
-                    Self-gates on gameBoundary?.enabled and
-                    playerData?.isAlive ?? true. GameMapModal (Task 12) is
-                    mounted above, outside this panel, reading
-                    freshOwnPosition, freshOtherOutsidePositions plus
-                    pingPositions, and boundaryDisplay.mapStatusText. */}
-                <LocationStatusPanel
-                    enabled={gameBoundary?.enabled === true}
-                    isAlive={playerData?.isAlive ?? true}
-                    permissionState={permissionState}
-                    requestPermission={requestPermission}
-                    liveBoundaryStatus={liveBoundaryStatus}
-                    isApproachingExposure={boundaryDisplay.isApproachingExposure}
-                    secondsUntilExposed={boundaryDisplay.secondsUntilExposed}
-                    statusText={boundaryDisplay.statusText}
-                    unavailableText={boundaryDisplay.unavailableText}
-                    lastCheckTime={boundaryDisplay.lastCheckTime}
-                    showUnavailableRetry={boundaryDisplay.showUnavailableRetry}
-                />
-                <ChatFeed
+            {/* Keyboard avoidance: the header/status-notices above are
+                normal (non-absolute) siblings, so KeyboardAvoidingView's
+                own onLayout measures this view's actual on-screen position
+                already below them — no keyboardVerticalOffset is needed to
+                avoid double-counting the header or the SafeAreaView's
+                insets. Wraps body+composer (not the header/notices above)
+                so only the part that needs to rise above the keyboard
+                does. */}
+            <KeyboardAvoidingView
+                style={styles.keyboardAvoiding}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+                <View style={styles.body}>
+                    {/* Location/boundary status (PlayerBoundaryPanel.js).
+                        Self-gates on gameBoundary?.enabled and
+                        playerData?.isAlive ?? true. GameMapModal (Task 12) is
+                        mounted above, outside this panel, reading
+                        freshOwnPosition, freshOtherOutsidePositions plus
+                        pingPositions, and boundaryDisplay.mapStatusText. */}
+                    <LocationStatusPanel
+                        enabled={gameBoundary?.enabled === true}
+                        isAlive={playerData?.isAlive ?? true}
+                        permissionState={permissionState}
+                        requestPermission={requestPermission}
+                        liveBoundaryStatus={liveBoundaryStatus}
+                        isApproachingExposure={boundaryDisplay.isApproachingExposure}
+                        secondsUntilExposed={boundaryDisplay.secondsUntilExposed}
+                        statusText={boundaryDisplay.statusText}
+                        unavailableText={boundaryDisplay.unavailableText}
+                        lastCheckTime={boundaryDisplay.lastCheckTime}
+                        showUnavailableRetry={boundaryDisplay.showUnavailableRetry}
+                    />
+                    <ChatFeed
+                        roomID={roomID}
+                        playerName={playerName}
+                        pendingMessages={pendingMessages}
+                        onPendingMessageConfirmed={handlePendingMessageConfirmed}
+                        onShowPings={isMapAvailable ? handleShowPings : undefined}
+                    />
+                </View>
+                <ChatComposer
                     roomID={roomID}
                     playerName={playerName}
-                    pendingMessages={pendingMessages}
-                    onPendingMessageConfirmed={handlePendingMessageConfirmed}
-                    onShowPings={isMapAvailable ? handleShowPings : undefined}
+                    isGameActive={isGameActive}
+                    players={players}
+                    missions={missions}
+                    cameraBlockedUntil={playerData?.cameraBlockedUntil ?? null}
+                    onOptimisticSend={handleOptimisticSend}
+                    onOptimisticSendFailed={handleOptimisticSendFailed}
+                    // Same as the web's MessageComposer wiring: photos need live
+                    // location, so the camera stays off until this device has
+                    // actually produced a fix ('granted' is set on the first one).
+                    locationEnabled={permissionState === 'granted'}
                 />
-            </View>
-            <ChatComposer
-                roomID={roomID}
-                playerName={playerName}
-                isGameActive={isGameActive}
-                players={players}
-                missions={missions}
-                cameraBlockedUntil={playerData?.cameraBlockedUntil ?? null}
-                onOptimisticSend={handleOptimisticSend}
-                onOptimisticSendFailed={handleOptimisticSendFailed}
-                // Same as the web's MessageComposer wiring: photos need live
-                // location, so the camera stays off until this device has
-                // actually produced a fix ('granted' is set on the first one).
-                locationEnabled={permissionState === 'granted'}
-            />
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 };
@@ -845,6 +881,11 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontWeight: 'bold',
     },
+    headerButtonIcon: {
+        width: 24,
+        height: 24,
+        resizeMode: 'contain',
+    },
     actionRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -921,6 +962,10 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontWeight: 'bold',
         textAlign: 'center',
+    },
+    keyboardAvoiding: {
+        flex: 1,
+        minHeight: 0,
     },
     body: {
         flex: 1,

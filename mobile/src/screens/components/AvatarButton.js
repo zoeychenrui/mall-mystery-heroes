@@ -92,7 +92,7 @@ const AvatarButton = ({ playerName, roomID, avatarUrl, size = 40 }) => {
             });
         } catch (error) {
             console.error('Could not update avatar:', error);
-            Alert.alert('Could not save your photo', 'Please try again.');
+            Alert.alert('Could not save your photo', error.message || 'Please try again.');
         } finally {
             setBusy(false);
         }

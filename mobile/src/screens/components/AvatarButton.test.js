@@ -145,7 +145,7 @@ describe('AvatarButton', () => {
         await fireEvent.press(screen.getByLabelText('Add my photo'));
 
         await waitFor(() =>
-            expect(alertSpy).toHaveBeenCalledWith('Could not save your photo', 'Please try again.')
+            expect(alertSpy).toHaveBeenCalledWith('Could not save your photo', 'network error')
         );
         expect(updateDoc).not.toHaveBeenCalled();
         alertSpy.mockRestore();

@@ -96,19 +96,24 @@ describe('ChatComposer', () => {
         );
     });
 
-    it('sends the typed message when the keyboard submit (Enter) fires', async () => {
+    // Task 16 QA fix: a multiline TextInput's onSubmitEditing doesn't
+    // reliably fire on iOS regardless of returnKeyType, and real-device
+    // testing found the return key showing as a blue "send" arrow that did
+    // nothing when pressed. The dedicated Send button is the only way to
+    // send now — return should behave like a normal return key (insert a
+    // newline), so the TextInput no longer wires up onSubmitEditing/
+    // returnKeyType="send"/blurOnSubmit at all.
+    it('does not send on the keyboard submit event — only the Send button sends', async () => {
         await mountComposer();
         const input = screen.getByPlaceholderText('Type a message...');
 
         await fireEvent.changeText(input, 'hi');
         await fireEvent(input, 'submitEditing');
 
-        await waitFor(() =>
-            expect(callables.submitChatMessage).toHaveBeenCalledWith({
-                roomId: 'room-a',
-                text: 'hi',
-            })
-        );
+        expect(callables.submitChatMessage).not.toHaveBeenCalled();
+        expect(input.props.onSubmitEditing).toBeUndefined();
+        expect(input.props.returnKeyType).toBeUndefined();
+        expect(input.props.blurOnSubmit).toBeUndefined();
     });
 
     it('does not send a blank or whitespace-only message', async () => {
@@ -313,9 +318,7 @@ describe('ChatComposer', () => {
 
             await fireEvent.press(screen.getByLabelText('Send photo'));
 
-            expect(
-                screen.getByText('Could not read that photo. Try taking it again.')
-            ).toBeTruthy();
+            expect(screen.getByText('bad file')).toBeTruthy();
             expect(screen.queryByLabelText('Kill photo preview')).toBeNull();
         });
 

@@ -150,7 +150,9 @@ const ChatComposer = ({
             // to build, just actually use it.
             console.error('Error capturing photo:', captureError);
             setPreviewUri(null);
-            setPhotoError('Could not read that photo. Try taking it again.');
+            setPhotoError(
+                captureError.message || 'Could not read that photo. Try taking it again.'
+            );
             setIsPhotoModalOpen(true);
         }
     };
@@ -207,9 +209,6 @@ const ChatComposer = ({
                 editable={!disabled}
                 maxLength={500}
                 multiline
-                returnKeyType="send"
-                blurOnSubmit={false}
-                onSubmitEditing={handleSend}
             />
             <Pressable
                 accessibilityRole="button"

@@ -40,7 +40,22 @@ const JoinScreen = ({ navigation }) => {
             await playerSession.writePlayerSession(trimmedRoomId, playerName);
             navigation.navigate('Game', { roomID: trimmedRoomId });
         } catch (err) {
-            if (err.message !== 'This game has already started.') {
+            // Firebase Functions client errors carry a stable `.code` like
+            // 'functions/failed-precondition', but NOT a stable `.message`:
+            // the mobile app's firebase SDK (^13.2.0) appends the raw HTTP
+            // status to the description inside _errorForResponse
+            // (@firebase/functions), e.g. "This game has already started.
+            // [400]" — the website's older firebase SDK (^10.12.0) does not
+            // do this, which is why an exact-string check against the bare
+            // backend message (joinRoom.js's HttpsError('failed-precondition',
+            // 'This game has already started.')) worked there but not here.
+            // Match on the code plus a substring check instead, so this
+            // keeps working regardless of exactly how a given SDK version
+            // formats the description.
+            const isAlreadyStarted =
+                err.code === 'functions/failed-precondition' &&
+                err.message?.includes('This game has already started.');
+            if (!isAlreadyStarted) {
                 setErrorMessage(err.message);
                 return;
             }
