@@ -60,7 +60,7 @@ const JoinScreen = ({ navigation }) => {
     };
 
     return (
-        <View style={styles.container}>
+        <View testID="join-screen" style={styles.container}>
             <Text style={styles.heading}>Join Game</Text>
             {errorMessage ? (
                 <View style={styles.errorBox}>

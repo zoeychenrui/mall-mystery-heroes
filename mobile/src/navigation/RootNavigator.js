@@ -7,14 +7,14 @@ import GameScreen from '../screens/GameScreen';
 
 const Stack = createNativeStackNavigator();
 
-export default function RootNavigator() {
+// initialRouteName/initialParams let App.js's launch-time session check
+// (Task 8) choose 'Game' (with {roomID}) instead of the 'Join' default, once
+// it knows whether a stored session plus a signed-in user both exist.
+export default function RootNavigator({ initialRouteName = 'Join', initialParams }) {
     return (
         <SafeAreaProvider>
             <NavigationContainer>
-                {/* 'Join' is the initial route for now; Task 8 replaces this
-                    with a conditional decision based on a stored player
-                    session (auto-resume). */}
-                <Stack.Navigator initialRouteName="Join">
+                <Stack.Navigator initialRouteName={initialRouteName}>
                     <Stack.Screen name="Join" component={JoinScreen} />
                     <Stack.Screen name="ReconnectPending" component={ReconnectPendingScreen} />
                     {/* GameScreen draws its own header (name, lobby, Rules,
@@ -24,6 +24,7 @@ export default function RootNavigator() {
                         name="Game"
                         component={GameScreen}
                         options={{ headerShown: false }}
+                        initialParams={initialRouteName === 'Game' ? initialParams : undefined}
                     />
                 </Stack.Navigator>
             </NavigationContainer>

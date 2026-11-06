@@ -192,7 +192,10 @@ const GameScreen = ({ route, navigation }) => {
     };
 
     return (
-        <SafeAreaView style={[styles.screen, !isGameActive && styles.screenEnded]}>
+        <SafeAreaView
+            testID="game-screen"
+            style={[styles.screen, !isGameActive && styles.screenEnded]}
+        >
             {/* Header — always mounted, waiting room included
                 (PlayerGameHeader.js). */}
             <View style={styles.header}>
