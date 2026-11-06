@@ -9,6 +9,7 @@ import * as callables from '../firebase/callables';
 import * as playerSession from '../utils/playerSession';
 import ChatFeed from './components/ChatFeed';
 import ChatComposer from './components/ChatComposer';
+import GameMapModal from './components/GameMapModal';
 import LocationStatusPanel, { deriveBoundaryDisplay } from './components/LocationStatusPanel';
 import useBoundaryLocation from '../hooks/useBoundaryLocation';
 import { deriveFreshStatus, isPositionFresh, canSee } from '../../../src/game/gameBoundary';
@@ -60,6 +61,16 @@ const GameScreen = ({ route, navigation }) => {
     // freshness is applied at render time against nowMs (see below).
     const [otherOutsidePositions, setOtherOutsidePositions] = useState([]);
     const [nowMs, setNowMs] = useState(Date.now());
+    // Task 12's map. isMapOpen/pingPositions are lifted here (not inside
+    // GameMapModal) for the same reason as the web's PlayerGame.js: a ping
+    // card's "View on map" (ChatFeed -> MessageBubble's powerUpPing branch)
+    // needs to both set positions to show AND open the map in one user
+    // action, and pingPositions must survive the map opening/closing via the
+    // normal "View Game Map" entry point too.
+    const [isMapOpen, setIsMapOpen] = useState(false);
+    // Positions from a ping card's "View on map", shown alongside the live
+    // ones until the map closes. Snapshots — never updated.
+    const [pingPositions, setPingPositions] = useState([]);
 
     // Used by Task 14's shop slot. purchasePowerUp enforces the same rules
     // server-side; this only hides the entry point. `=== true` keeps it
@@ -298,7 +309,8 @@ const GameScreen = ({ route, navigation }) => {
         accuracyM: ownPosition?.accuracyM,
         status: boundaryStatusDoc?.status,
     };
-    // Not rendered yet — Task 12's map reads it for its other-player markers.
+    // Task 12's map reads this for its live other-player markers, alongside
+    // any snapshotted ping positions (pingPositions, below).
     const freshOtherOutsidePositions = otherOutsidePositions
         .filter(
             (position) =>
@@ -332,6 +344,43 @@ const GameScreen = ({ route, navigation }) => {
     // Status words for the panel and (Task 12) the map's status line —
     // boundaryDisplay.mapStatusText — so both always agree.
     const boundaryDisplay = deriveBoundaryDisplay({ liveBoundaryStatus, boundaryStatusDoc, nowMs });
+
+    // The map's own-position marker only ever shows a fix fresh enough to
+    // trust — same freshnessMs window as every other position on this
+    // screen (isPositionFresh), applied here rather than inside
+    // GameMapModal so it stays purely presentational. Mirrors the web's
+    // PlayerBoundaryPanel.js, which does this same check right before
+    // handing ownPosition to PlayerMapModal.
+    const freshOwnPosition =
+        ownPosition && isPositionFresh(ownPosition.acquiredAtMs, nowMs) ? ownPosition : null;
+
+    // The map exists only under this condition — same gate as the "View
+    // Game Map" entry point below — so a ping card's "View on map" offers
+    // itself only then too.
+    const isMapAvailable = isGameActive && gameBoundary?.enabled === true && (playerData?.isAlive ?? true);
+
+    // A ping card's "View on map" (ChatFeed -> MessageBubble's
+    // powerUpPing branch): snapshots the pinged players' positions and
+    // opens the map, exactly like the web's handleShowPings.
+    const handleShowPings = useCallback((pings) => {
+        setPingPositions(
+            (pings ?? [])
+                .filter((ping) => Number.isFinite(ping.lat) && Number.isFinite(ping.lng))
+                .map((ping) => ({
+                    id: `ping-${ping.name}`,
+                    lat: ping.lat,
+                    lng: ping.lng,
+                    label: `📍 ${ping.name}`,
+                    alwaysShowLabel: true,
+                }))
+        );
+        setIsMapOpen(true);
+    }, []);
+
+    const handleMapClose = useCallback(() => {
+        setPingPositions([]);
+        setIsMapOpen(false);
+    }, []);
 
     const handleConfirmLeave = async () => {
         try {
@@ -422,13 +471,30 @@ const GameScreen = ({ route, navigation }) => {
                         their modals. Reads roomID, players. */}
                     <View />
                     {gameBoundary?.enabled === true && (
-                        // Tasks 11-12: "View Game Map" entry point.
-                        <View />
+                        // Tasks 11-12: "View Game Map" entry point
+                        // (PlayerGameHeader.js's IconButton aria-label
+                        // "View Game Map").
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="View Game Map"
+                            style={styles.headerButton}
+                            onPress={() => setIsMapOpen(true)}
+                        >
+                            <Text style={styles.headerButtonText}>Map</Text>
+                        </TouchableOpacity>
                     )}
                 </View>
             </View>
 
             <GameRulesModal visible={areRulesOpen} onClose={() => setAreRulesOpen(false)} />
+            <GameMapModal
+                isOpen={isMapOpen}
+                onClose={handleMapClose}
+                boundaryVertices={gameBoundary?.vertices ?? []}
+                ownPosition={freshOwnPosition}
+                otherPositions={[...freshOtherOutsidePositions, ...pingPositions]}
+                statusText={boundaryDisplay.mapStatusText}
+            />
 
             {/* Status notices (PlayerGameStatusNotices.js). */}
             {isGameActive && !gameStarted && (
@@ -455,11 +521,10 @@ const GameScreen = ({ route, navigation }) => {
             <View style={styles.body}>
                 {/* Location/boundary status (PlayerBoundaryPanel.js).
                     Self-gates on gameBoundary?.enabled and
-                    playerData?.isAlive ?? true. Task 12 mounts the map
-                    modal beside it, reading ownPosition,
-                    freshOtherOutsidePositions,
-                    boundaryDisplay.mapStatusText, nowMs, and
-                    gameBoundary.vertices. */}
+                    playerData?.isAlive ?? true. GameMapModal (Task 12) is
+                    mounted above, outside this panel, reading
+                    freshOwnPosition, freshOtherOutsidePositions plus
+                    pingPositions, and boundaryDisplay.mapStatusText. */}
                 <LocationStatusPanel
                     enabled={gameBoundary?.enabled === true}
                     isAlive={playerData?.isAlive ?? true}
@@ -478,7 +543,7 @@ const GameScreen = ({ route, navigation }) => {
                     playerName={playerName}
                     pendingMessages={pendingMessages}
                     onPendingMessageConfirmed={handlePendingMessageConfirmed}
-                    // Task 12 wires onShowPings once the map exists.
+                    onShowPings={isMapAvailable ? handleShowPings : undefined}
                 />
             </View>
             <ChatComposer

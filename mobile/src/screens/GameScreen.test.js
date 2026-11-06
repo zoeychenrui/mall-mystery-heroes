@@ -71,7 +71,17 @@ const tagRefsByPath = () => {
 // Drives every listener GameScreen mounts from one table of snapshot data,
 // keyed by ref path. Returns a per-path record of how many times each was
 // subscribed and its unsubscribe mock.
-const driveSnapshots = ({ room, player, ownStatus = null, outsideStatuses = [] }) => {
+const driveSnapshots = ({
+    room,
+    player,
+    ownStatus = null,
+    outsideStatuses = [],
+    // 'powerUpPing'/'chat'/etc. message docs, delivered as one 'added'
+    // docChanges() batch on first subscribe — same shape ChatFeed.test.js
+    // builds (asDocChanges), for Task 12 tests that need a ping card's
+    // "View on map" button to actually render.
+    messages = [],
+}) => {
     const listeners = {};
     onSnapshot.mockImplementation((ref, onNext) => {
         const unsubscribe = jest.fn();
@@ -87,6 +97,15 @@ const driveSnapshots = ({ room, player, ownStatus = null, outsideStatuses = [] }
         } else if (ref.path === OUTSIDE_STATUSES_PATH) {
             onNext({
                 docs: outsideStatuses.map(({ id, ...data }) => ({ id, data: () => data })),
+            });
+        } else if (ref.path === MESSAGES_PATH && messages.length > 0) {
+            onNext({
+                docChanges: () =>
+                    messages.map((message, index) => ({
+                        type: 'added',
+                        newIndex: index,
+                        doc: { id: `message-${index}`, data: () => message },
+                    })),
             });
         } else {
             // Covers the players/tasks queries (which read .docs) and
@@ -396,6 +415,92 @@ describe('GameScreen', () => {
             expect(callables.reportPlayerLocation).toHaveBeenCalledWith(
                 expect.objectContaining({ roomId: 'ROOM1', boundaryRevision: 3, lat: 40 })
             );
+        });
+    });
+
+    // GameMapModal.js itself (presentational, no Firebase of its own) has
+    // its own full test suite — these only cover the wiring this file owns:
+    // the "View Game Map" entry point, and handleShowPings/handleMapClose
+    // threading a ping card's positions through to the real modal.
+    // 'react-native-maps' is replaced project-wide by
+    // mobile/__mocks__/react-native-maps.js (no native module exists under
+    // Jest), whose MapView/Marker render as plain Views carrying their
+    // testID/children straight through.
+    describe('map (Task 12)', () => {
+        const ENABLED_BOUNDARY = { enabled: true, revision: 1, vertices: [{ lat: 1, lng: 2 }] };
+
+        beforeEach(() => {
+            Location.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+            Location.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' });
+            Location.getCurrentPositionAsync.mockReturnValue(new Promise(() => {}));
+        });
+
+        it('shows the "View Game Map" entry point only once the boundary is enabled', async () => {
+            const listeners = driveSnapshots({
+                room: {
+                    gameStarted: true,
+                    isGameActive: true,
+                    gameBoundary: { ...ENABLED_BOUNDARY, enabled: false },
+                },
+                player: { isAlive: true },
+            });
+            const { queryByLabelText } = await renderScreen();
+            await waitFor(() => expect(listeners[PLAYER_PATH]?.subscribeCount).toBe(1));
+            expect(queryByLabelText('View Game Map')).toBeNull();
+        });
+
+        it('opens the map modal from the "View Game Map" entry point, and closes it again', async () => {
+            driveSnapshots({
+                room: { gameStarted: true, isGameActive: true, gameBoundary: ENABLED_BOUNDARY },
+                player: { isAlive: true },
+            });
+            const { findByLabelText, queryByTestId } = await renderScreen();
+            expect(queryByTestId('game-map-view')).toBeNull();
+
+            await fireEvent.press(await findByLabelText('View Game Map'));
+            await waitFor(() => expect(queryByTestId('game-map-view')).toBeTruthy());
+
+            await fireEvent.press(await findByLabelText('Close modal'));
+            await waitFor(() => expect(queryByTestId('game-map-view')).toBeNull());
+        });
+
+        it('opens the map with a ping card\'s positions via "View on map"', async () => {
+            driveSnapshots({
+                room: { gameStarted: true, isGameActive: true, gameBoundary: ENABLED_BOUNDARY },
+                player: { isAlive: true },
+                messages: [
+                    {
+                        type: 'powerUpPing',
+                        text: 'Someone pinged',
+                        source: 'shopPurchase',
+                        pings: [{ name: 'carol', lat: 5, lng: 6, capturedAtMs: Date.now() }],
+                    },
+                ],
+            });
+
+            const { findByLabelText, findByTestId, findByText } = await renderScreen();
+            await fireEvent.press(await findByLabelText('View on map'));
+            await findByTestId('game-map-view');
+            expect(await findByText('📍 carol')).toBeTruthy();
+        });
+
+        it('does not offer "View on map" once the game has ended', async () => {
+            driveSnapshots({
+                room: { gameStarted: true, isGameActive: false, gameBoundary: ENABLED_BOUNDARY },
+                player: { isAlive: true },
+                messages: [
+                    {
+                        type: 'powerUpPing',
+                        text: 'Someone pinged',
+                        source: 'shopPurchase',
+                        pings: [{ name: 'carol', lat: 5, lng: 6, capturedAtMs: Date.now() }],
+                    },
+                ],
+            });
+
+            const { queryByLabelText, findByText } = await renderScreen();
+            await findByText('Someone pinged');
+            expect(queryByLabelText('View on map')).toBeNull();
         });
     });
 });
