@@ -7,6 +7,8 @@ import { auth } from '../firebase/firebaseConfig';
 import * as dbCalls from '../firebase/dbCalls';
 import * as callables from '../firebase/callables';
 import * as playerSession from '../utils/playerSession';
+import ChatFeed from './components/ChatFeed';
+import ChatComposer from './components/ChatComposer';
 
 // The player's in-game screen — a port of the web app's src/pages/PlayerGame.js
 // plus the pieces of it that live in src/components/player_game/
@@ -34,6 +36,13 @@ const GameScreen = ({ route, navigation }) => {
     // {enabled, revision, vertices}, or undefined if the room has none yet.
     const [gameBoundary, setGameBoundary] = useState(undefined);
     const [areRulesOpen, setAreRulesOpen] = useState(false);
+    // This player's own chat sends that ChatComposer has fired off but
+    // Firestore hasn't confirmed yet — callables.submitChatMessage writes
+    // server-side, so this device no longer gets an automatic local echo
+    // of its own write. Lifted here since ChatFeed (which renders them)
+    // and ChatComposer (which adds them) are siblings with no other
+    // shared state, mirroring src/pages/PlayerGame.js.
+    const [pendingMessages, setPendingMessages] = useState([]);
     // The web reads the session synchronously from localStorage; AsyncStorage
     // is promise-based, so the name arrives a moment after mount. Until then
     // it is '' and the player-doc subscription below simply waits — the same
@@ -55,6 +64,26 @@ const GameScreen = ({ route, navigation }) => {
             cancelled = true;
         };
     }, [roomID]);
+
+    useEffect(() => {
+        setPendingMessages([]);
+    }, [roomID]);
+
+    const handleOptimisticSend = useCallback((message) => {
+        setPendingMessages((previous) => [...previous, message]);
+    }, []);
+
+    const handleOptimisticSendFailed = useCallback((id) => {
+        setPendingMessages((previous) => previous.filter((message) => message.id !== id));
+    }, []);
+
+    // ChatFeed calls this once per real, server-confirmed chat message it
+    // sees from this player — oldest pending entry first, so the hand-off
+    // from "my local preview" to "the real thing" never needs to match on
+    // content, just consume in the order they were sent.
+    const handlePendingMessageConfirmed = useCallback(() => {
+        setPendingMessages((previous) => previous.slice(1));
+    }, []);
 
     // Shared by the room and player-doc subscriptions: a permission error or
     // the watched doc disappearing both mean this session no longer belongs
@@ -287,14 +316,22 @@ const GameScreen = ({ route, navigation }) => {
                     Reads roomID, playerName, isGameActive, players,
                     gameBoundary.{enabled, revision, vertices}. */}
                 <View />
-                {/* Task 9: chat feed. Mounted regardless of gameStarted or
-                    isGameActive. Reads roomID, playerName. */}
-                <View style={styles.chatSlot} />
+                <ChatFeed
+                    roomID={roomID}
+                    playerName={playerName}
+                    pendingMessages={pendingMessages}
+                    onPendingMessageConfirmed={handlePendingMessageConfirmed}
+                    // Task 12 wires onShowPings once the map exists.
+                />
             </View>
-            {/* Task 9: chat composer. Mounted regardless of gameStarted or
-                isGameActive. Reads roomID, playerName, isGameActive, players,
-                missions, playerData?.cameraBlockedUntil. */}
-            <View />
+            <ChatComposer
+                roomID={roomID}
+                playerName={playerName}
+                onOptimisticSend={handleOptimisticSend}
+                onOptimisticSendFailed={handleOptimisticSendFailed}
+                // Task 10 adds the camera button plus the isGameActive/
+                // players/missions/cameraBlockedUntil props it needs.
+            />
         </SafeAreaView>
     );
 };
@@ -477,9 +514,6 @@ const styles = StyleSheet.create({
     body: {
         flex: 1,
         minHeight: 0,
-    },
-    chatSlot: {
-        flex: 1,
     },
     modalOverlay: {
         flex: 1,

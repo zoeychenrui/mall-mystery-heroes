@@ -20,6 +20,7 @@ jest.mock('../firebase/firebaseConfig', () => ({
 }));
 jest.mock('../firebase/callables', () => ({
     leaveGame: jest.fn(),
+    submitChatMessage: jest.fn(),
 }));
 jest.mock('firebase/firestore');
 jest.mock('firebase/auth', () => ({
@@ -34,6 +35,9 @@ const ROOM_PATH = 'rooms/ROOM1';
 const PLAYER_PATH = 'rooms/ROOM1/players/alice';
 const PLAYERS_PATH = 'rooms/ROOM1/players';
 const TASKS_PATH = 'rooms/ROOM1/tasks';
+// Task 9's ChatFeed subscribes here too, as soon as roomID/playerName are
+// both known — regardless of gameStarted/isGameActive.
+const MESSAGES_PATH = 'rooms/ROOM1/playerMessages';
 
 // Give dbCalls' doc()/collection()/query() calls a recognizable return value
 // (the path they were built from), so each onSnapshot call can be told apart
@@ -59,7 +63,9 @@ const driveSnapshots = ({ room, player }) => {
         } else if (ref.path === PLAYER_PATH) {
             onNext({ exists: () => true, data: () => player });
         } else {
-            onNext({ docs: [] });
+            // Covers the players/tasks queries (which read .docs) and
+            // ChatFeed's playerMessages query (which reads .docChanges()).
+            onNext({ docs: [], docChanges: () => [] });
         }
         return unsubscribe;
     });
@@ -97,7 +103,7 @@ describe('GameScreen', () => {
         const { unmount } = await renderScreen();
         await waitFor(() =>
             expect(Object.keys(listeners).sort()).toEqual(
-                [ROOM_PATH, PLAYER_PATH, PLAYERS_PATH, TASKS_PATH].sort()
+                [ROOM_PATH, PLAYER_PATH, PLAYERS_PATH, TASKS_PATH, MESSAGES_PATH].sort()
             )
         );
         await unmount();
