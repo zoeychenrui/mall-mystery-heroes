@@ -1,7 +1,7 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polygon } from 'react-native-maps';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // RN port of the web's read-only player map: src/components/map_components/
 // {GameMap.js, PlayerMapModal.js}. Shows the published game area, this
@@ -55,10 +55,7 @@ const GameMapModal = ({
     statusText,
 }) => {
     const mapRef = useRef(null);
-
-    // Nothing to render, nothing to mount, while closed — keeps a native
-    // MapView from sitting mounted off-screen between opens.
-    if (!isOpen) return null;
+    const insets = useSafeAreaInsets();
 
     const handleRecenter = () => {
         if (!mapRef.current || !ownPosition) return;
@@ -68,6 +65,22 @@ const GameMapModal = ({
             ...RECENTER_DELTA,
         });
     };
+
+    // Auto-center once, the moment a fresh position becomes available
+    // while the map is open — otherwise the map opens on MapView's bare
+    // default region (center of nowhere) until the player notices and
+    // taps Recenter themselves. Runs again any time ownPosition's
+    // identity changes (e.g. the map was opened before a fix existed,
+    // then one arrives), not on every position update, so it never fights
+    // a player who has since panned away.
+    useEffect(() => {
+        if (isOpen) handleRecenter();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, ownPosition]);
+
+    // Nothing to render, nothing to mount, while closed — keeps a native
+    // MapView from sitting mounted off-screen between opens.
+    if (!isOpen) return null;
 
     const polygonCoordinates = boundaryVertices.map((point) => ({
         latitude: point.lat,
@@ -83,13 +96,17 @@ const GameMapModal = ({
                     gets safe-area handling for free. Only the header needs
                     it (that's what overlapped the status bar/clock on a
                     real device); the map below is fine bleeding to the
-                    screen edges, so only the header is wrapped, with
-                    `edges={['top']}` since the bottom inset doesn't apply
-                    here. */}
-                <SafeAreaView
+                    screen edges, so only the header gets the top inset as
+                    padding. `useSafeAreaInsets()` is used here rather than
+                    the `SafeAreaView` component — the component remeasures
+                    its own native window on mount, which this Modal's
+                    separate native window did unreliably right after the
+                    OS's location-permission prompt had just been shown and
+                    dismissed; the hook reads the already-correct value
+                    from the stable SafeAreaProvider context instead. */}
+                <View
                     testID="map-header-safe-area"
-                    edges={['top']}
-                    style={styles.headerSafeArea}
+                    style={[styles.headerSafeArea, { paddingTop: insets.top }]}
                 >
                     <View style={styles.header}>
                         <Text style={styles.title}>Game Area</Text>
@@ -102,7 +119,7 @@ const GameMapModal = ({
                             <Text style={styles.closeText}>✕</Text>
                         </Pressable>
                     </View>
-                </SafeAreaView>
+                </View>
                 {statusText && (
                     <View style={styles.statusBanner}>
                         <Text style={styles.statusText}>{statusText}</Text>

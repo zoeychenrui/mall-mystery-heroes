@@ -14,6 +14,7 @@
  * @testing-library/react-native v14's render/fireEvent are async.
  */
 import { render, screen, fireEvent, within } from '@testing-library/react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import GameMapModal from './GameMapModal';
 
 const mockAnimateToRegion = jest.fn();
@@ -142,27 +143,45 @@ describe('GameMapModal', () => {
         expect(screen.queryByTestId('game-map-view')).toBeNull();
     });
 
-    it('renders the header inside a top-edge SafeAreaView, so it clears the status bar/notch in the full-screen (non-transparent) Modal', async () => {
-        await renderModal();
-        const headerSafeArea = screen.getByTestId('map-header-safe-area');
-        // Confirms this is the real react-native-safe-area-context native
-        // view (RNCSafeAreaView), not a plain View that merely borrows the
-        // name — a plain View wouldn't know about insets at all.
-        expect(headerSafeArea.type).toBe('RNCSafeAreaView');
+    it('pads the header by the top safe-area inset, so it clears the status bar/notch in the full-screen (non-transparent) Modal', async () => {
         // Real device bug: this Modal is not `transparent`, so unlike a
         // screen reached through React Navigation it gets no safe-area
         // handling for free — the header (title + close button) rendered
         // up under the iOS status bar/clock with the close button
-        // unreachable. Only `top` is requested; the map below is fine
-        // bleeding to the screen edges.
-        expect(headerSafeArea.props.edges).toEqual({
-            top: 'additive',
-            left: 'off',
-            right: 'off',
-            bottom: 'off',
-        });
+        // unreachable. Reads the inset from context (useSafeAreaInsets)
+        // rather than relying on the SafeAreaView component to remeasure
+        // this Modal's own native window — that remeasurement was found to
+        // be unreliable right after the OS's location-permission prompt
+        // had just been shown and dismissed.
+        await render(
+            <SafeAreaInsetsContext.Provider value={{ top: 47, bottom: 0, left: 0, right: 0 }}>
+                <GameMapModal
+                    isOpen
+                    onClose={jest.fn()}
+                    boundaryVertices={RING}
+                    ownPosition={null}
+                    otherPositions={[]}
+                />
+            </SafeAreaInsetsContext.Provider>
+        );
+        const headerSafeArea = screen.getByTestId('map-header-safe-area');
+        expect(headerSafeArea.props.style).toEqual(
+            expect.arrayContaining([expect.objectContaining({ paddingTop: 47 })])
+        );
         expect(within(headerSafeArea).getByText('Game Area')).toBeTruthy();
         expect(within(headerSafeArea).getByLabelText('Close modal')).toBeTruthy();
+    });
+
+    it('auto-centers on the own position once it becomes available, without waiting for Recenter to be pressed', async () => {
+        await renderModal({ ownPosition: { lat: 10, lng: 20, accuracyM: 12 } });
+        expect(mockAnimateToRegion).toHaveBeenCalledWith(
+            expect.objectContaining({ latitude: 10, longitude: 20 })
+        );
+    });
+
+    it('does not try to auto-center when there is no own position yet', async () => {
+        await renderModal({ ownPosition: null });
+        expect(mockAnimateToRegion).not.toHaveBeenCalled();
     });
 
     it('calls onClose when the close button is pressed', async () => {
