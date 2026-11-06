@@ -14,6 +14,8 @@ import LocationStatusPanel, { deriveBoundaryDisplay } from './components/Locatio
 import MissionsModal from './components/MissionsModal';
 import LeaderboardModal from './components/LeaderboardModal';
 import PowerUpShopModal from './components/PowerUpShopModal';
+import AvatarButton, { AvatarCircle } from './components/AvatarButton';
+import TargetPhotoModal from './components/TargetPhotoModal';
 import useBoundaryLocation from '../hooks/useBoundaryLocation';
 import { deriveFreshStatus, isPositionFresh, canSee } from '../../../src/game/gameBoundary';
 import { normalizePlayerName, resolvePlayerDisplayName } from '../../../src/game/playerNames';
@@ -79,6 +81,15 @@ const GameScreen = ({ route, navigation }) => {
     // Positions from a ping card's "View on map", shown alongside the live
     // ones until the map closes. Snapshots — never updated.
     const [pingPositions, setPingPositions] = useState([]);
+    // Task 15's target list (header accordion) + target-photo viewer.
+    // isTargetsListOpen mirrors PlayerGameHeader.js's isTargetsAccordionOpen
+    // (RN has no Accordion primitive, so this is a plain show/hide toggle).
+    // selectedTarget is either a full {name, avatarUrl} from `players`, or
+    // just {name} when the target isn't found there yet (same fallback as
+    // the web's `target || { name: targetName }`).
+    const [isTargetsListOpen, setIsTargetsListOpen] = useState(false);
+    const [selectedTarget, setSelectedTarget] = useState(null);
+    const [isTargetPhotoOpen, setIsTargetPhotoOpen] = useState(false);
 
     // Used by Task 14's shop slot. purchasePowerUp enforces the same rules
     // server-side; this only hides the entry point. `=== true` keeps it
@@ -376,7 +387,8 @@ const GameScreen = ({ route, navigation }) => {
     // The map exists only under this condition — same gate as the "View
     // Game Map" entry point below — so a ping card's "View on map" offers
     // itself only then too.
-    const isMapAvailable = isGameActive && gameBoundary?.enabled === true && (playerData?.isAlive ?? true);
+    const isMapAvailable =
+        isGameActive && gameBoundary?.enabled === true && (playerData?.isAlive ?? true);
 
     // A ping card's "View on map" (ChatFeed -> MessageBubble's
     // powerUpPing branch): snapshots the pinged players' positions and
@@ -400,6 +412,21 @@ const GameScreen = ({ route, navigation }) => {
         setPingPositions([]);
         setIsMapOpen(false);
     }, []);
+
+    // Opens TargetPhotoModal for one of this player's targets — same
+    // resolution the web's target button onClick does (PlayerGameHeader.js):
+    // prefer the matching entry from `players` (it carries avatarUrl), but
+    // fall back to just the name if that target isn't in `players` yet.
+    const handleTargetPress = useCallback(
+        (targetName) => {
+            const target = players.find(
+                (player) => normalizePlayerName(player.name) === normalizePlayerName(targetName)
+            );
+            setSelectedTarget(target || { name: targetName });
+            setIsTargetPhotoOpen(true);
+        },
+        [players]
+    );
 
     const handleConfirmLeave = async () => {
         try {
@@ -465,18 +492,74 @@ const GameScreen = ({ route, navigation }) => {
                 </View>
 
                 {isGameActive && gameStarted && playerData?.isAlive && (
-                    // Task 15: target list (accordion) + target-photo viewer.
-                    // Reads playerData.targets and players (for each
-                    // target's avatarUrl). Owns its own "Waiting for your
-                    // target..." empty state.
-                    <View />
+                    // RN port of PlayerGameHeader.js's target-list
+                    // accordion — a plain show/hide toggle here (no
+                    // Accordion primitive in RN) wrapping a wrapping row of
+                    // per-target buttons, each opening TargetPhotoModal.
+                    <View style={styles.targetsBox}>
+                        {(playerData.targets ?? []).length > 0 ? (
+                            <>
+                                <TouchableOpacity
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Current targets"
+                                    onPress={() => setIsTargetsListOpen((open) => !open)}
+                                >
+                                    <Text style={styles.targetsHeading}>
+                                        Current target
+                                        {playerData.targets.length === 1 ? '' : 's'}
+                                        {playerData.targets.length > 1
+                                            ? ` (${playerData.targets.length})`
+                                            : ''}
+                                    </Text>
+                                    {isTargetsListOpen && (
+                                        <Text style={styles.targetsHint}>
+                                            Tap a target to view their photo
+                                        </Text>
+                                    )}
+                                </TouchableOpacity>
+                                {isTargetsListOpen && (
+                                    <View style={styles.targetsRow}>
+                                        {playerData.targets.map((targetName) => {
+                                            const target = players.find(
+                                                (player) =>
+                                                    normalizePlayerName(player.name) ===
+                                                    normalizePlayerName(targetName)
+                                            );
+                                            return (
+                                                <TouchableOpacity
+                                                    key={targetName}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={`View ${targetName}'s photo`}
+                                                    style={styles.targetButton}
+                                                    onPress={() => handleTargetPress(targetName)}
+                                                >
+                                                    <AvatarCircle
+                                                        uri={target?.avatarUrl}
+                                                        name={targetName}
+                                                        size={24}
+                                                    />
+                                                    <Text style={styles.targetButtonText}>
+                                                        {targetName}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                )}
+                            </>
+                        ) : (
+                            <Text style={styles.targetsHeading}>Waiting for your target...</Text>
+                        )}
+                    </View>
                 )}
 
                 <View style={styles.actionRow}>
                     {playerData && (
-                        // Task 15: avatar button (add/change my photo).
-                        // Reads playerData.avatarUrl, playerName, roomID.
-                        <View />
+                        <AvatarButton
+                            playerName={playerName}
+                            roomID={roomID}
+                            avatarUrl={playerData.avatarUrl}
+                        />
                     )}
                     {canShop && (
                         <TouchableOpacity
@@ -521,6 +604,11 @@ const GameScreen = ({ route, navigation }) => {
             </View>
 
             <GameRulesModal visible={areRulesOpen} onClose={() => setAreRulesOpen(false)} />
+            <TargetPhotoModal
+                isOpen={isTargetPhotoOpen}
+                onClose={() => setIsTargetPhotoOpen(false)}
+                target={selectedTarget}
+            />
             <MissionsModal
                 isOpen={isMissionsOpen}
                 onClose={() => setIsMissionsOpen(false)}
@@ -761,6 +849,43 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
+    },
+    targetsBox: {
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+        backgroundColor: '#322659', // purple.900-ish
+        borderWidth: 1,
+        borderColor: '#4B3E82', // purple.700-ish
+        borderRadius: 12,
+    },
+    targetsHeading: {
+        color: '#FFFFFF',
+        fontSize: 13,
+        fontWeight: 'bold',
+    },
+    targetsHint: {
+        color: 'rgba(255, 255, 255, 0.64)', // whiteAlpha.600
+        fontSize: 11,
+        marginTop: 2,
+    },
+    targetsRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 4,
+        marginTop: 8,
+    },
+    targetButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    },
+    targetButtonText: {
+        color: '#FFFFFF',
+        fontSize: 13,
     },
     waitingBox: {
         margin: 16,
