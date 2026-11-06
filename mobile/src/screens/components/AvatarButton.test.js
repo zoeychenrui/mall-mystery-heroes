@@ -36,6 +36,7 @@ jest.mock('../../firebase/storageCalls', () => ({
 }));
 jest.mock('expo-image-picker', () => ({
     launchCameraAsync: jest.fn(),
+    requestCameraPermissionsAsync: jest.fn(),
     CameraType: { front: 'front' },
 }));
 jest.mock('expo-image-manipulator', () => ({
@@ -52,6 +53,7 @@ beforeEach(() => {
     jest.clearAllMocks();
     dbCalls.fetchPlayerReferenceForRoom.mockReturnValue(PLAYER_REF);
     storageCalls.uploadPlayerAvatar.mockResolvedValue('https://example.com/avatar.jpg');
+    ImagePicker.requestCameraPermissionsAsync.mockResolvedValue({ status: 'granted' });
     ImagePicker.launchCameraAsync.mockResolvedValue({
         canceled: false,
         assets: [{ uri: CAPTURED_URI, width: 1200, height: 900 }],
@@ -123,6 +125,33 @@ describe('AvatarButton', () => {
                 avatarUrl: 'https://example.com/avatar.jpg',
             })
         );
+    });
+
+    it('requests camera permission before launching the camera', async () => {
+        await mountButton();
+
+        await fireEvent.press(screen.getByLabelText('Add my photo'));
+
+        expect(ImagePicker.requestCameraPermissionsAsync).toHaveBeenCalled();
+        await waitFor(() => expect(ImagePicker.launchCameraAsync).toHaveBeenCalled());
+    });
+
+    it('alerts and never launches the camera when permission is denied', async () => {
+        ImagePicker.requestCameraPermissionsAsync.mockResolvedValue({ status: 'denied' });
+        const Alert = require('react-native').Alert;
+        const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+        await mountButton();
+
+        await fireEvent.press(screen.getByLabelText('Add my photo'));
+
+        expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();
+        expect(alertSpy).toHaveBeenCalledWith(
+            'Camera access needed',
+            'Camera access is needed to take a photo. Enable it in Settings and try again.'
+        );
+        expect(storageCalls.uploadPlayerAvatar).not.toHaveBeenCalled();
+        expect(updateDoc).not.toHaveBeenCalled();
+        alertSpy.mockRestore();
     });
 
     it('does nothing when the camera capture is canceled', async () => {

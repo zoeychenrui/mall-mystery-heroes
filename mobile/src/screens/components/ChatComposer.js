@@ -115,6 +115,27 @@ const ChatComposer = ({
 
     const handleCameraPress = async () => {
         try {
+            // launchCameraAsync only checks whether camera permission has
+            // already been granted — if it hasn't, it rejects immediately
+            // without ever showing iOS's native permission dialog (confirmed
+            // from expo-image-picker's own native iOS source,
+            // ImagePickerModule.swift's launchCameraAsync: it guards on
+            // `hasGrantedPermission` and never calls anything that prompts).
+            // requestCameraPermissionsAsync is the function that actually
+            // shows that dialog the first time, and safely returns the
+            // already-decided status on every call after that (it never
+            // re-prompts once the user has answered), so there's no need to
+            // cache the result ourselves — calling it unconditionally here
+            // is as cheap as checking a cached flag would be.
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+                setPreviewUri(null);
+                setPhotoError(
+                    'Camera access is needed to take a photo. Enable it in Settings and try again.'
+                );
+                setIsPhotoModalOpen(true);
+                return;
+            }
             const result = await ImagePicker.launchCameraAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
             });

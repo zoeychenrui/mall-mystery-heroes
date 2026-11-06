@@ -34,6 +34,7 @@ jest.mock('../../firebase/storageCalls', () => ({
 }));
 jest.mock('expo-image-picker', () => ({
     launchCameraAsync: jest.fn(),
+    requestCameraPermissionsAsync: jest.fn(),
     MediaTypeOptions: { Images: 'Images' },
 }));
 jest.mock('expo-image-manipulator', () => ({
@@ -50,6 +51,7 @@ beforeEach(() => {
     callables.submitChatMessage.mockResolvedValue(undefined);
     callables.submitKillPhoto.mockResolvedValue(undefined);
     storageCalls.uploadKillPhoto.mockResolvedValue('https://example.com/photo.jpg');
+    ImagePicker.requestCameraPermissionsAsync.mockResolvedValue({ status: 'granted' });
     // A landscape asset (width > height, both already under MAX_DIMENSION)
     // by default, so scale is 1 and the resize call's width/height equal
     // the asset's own — the portrait/over-sized case is covered by its own
@@ -300,6 +302,30 @@ describe('ChatComposer', () => {
                 [{ resize: { width: 720, height: 1600 } }],
                 { compress: 0.8, format: 'jpeg' }
             );
+        });
+
+        it('requests camera permission before launching the camera', async () => {
+            await mountComposer();
+
+            await fireEvent.press(screen.getByLabelText('Send photo'));
+
+            expect(ImagePicker.requestCameraPermissionsAsync).toHaveBeenCalled();
+            await waitFor(() => expect(ImagePicker.launchCameraAsync).toHaveBeenCalled());
+        });
+
+        it('opens the modal with a clear message and never launches the camera when permission is denied', async () => {
+            ImagePicker.requestCameraPermissionsAsync.mockResolvedValue({ status: 'denied' });
+            await mountComposer();
+
+            await fireEvent.press(screen.getByLabelText('Send photo'));
+
+            expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();
+            expect(
+                screen.getByText(
+                    'Camera access is needed to take a photo. Enable it in Settings and try again.'
+                )
+            ).toBeTruthy();
+            expect(screen.queryByLabelText('Kill photo preview')).toBeNull();
         });
 
         it('does nothing when the camera capture is canceled', async () => {
