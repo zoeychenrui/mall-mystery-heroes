@@ -44,18 +44,21 @@ export default function App() {
                 subscribe();
             })
             .catch((err) => {
-                // 'already-exists' means THIS uid already joined (e.g. a
-                // relaunch under the same persisted anonymous identity) —
-                // fine, the join already happened, proceed to subscribe.
-                // Any other code (e.g. 'failed-precondition' for "this
-                // game has already started") means this uid is still not
-                // a player, and the room read will still be denied.
-                if (err.code === 'functions/already-exists') {
-                    setStatus('already joined — subscribing to room...');
-                    subscribe();
-                    return;
-                }
-                setError(`${err.code}: ${err.message}`);
+                // A rejected join (already joined on a relaunch under the
+                // same persisted anonymous identity — 'already-exists' —
+                // or the room having since started, which the server
+                // checks before even looking at joinedUids, so a player
+                // who legitimately already joined before the game
+                // started gets the exact same 'failed-precondition'
+                // "already started" rejection on every later relaunch)
+                // isn't necessarily fatal: this test identity may already
+                // be a valid player from an earlier successful join.
+                // Just try subscribing — the room read's own permission
+                // check is the real, authoritative test of whether this
+                // identity actually has access, not this join call's
+                // success/failure.
+                setStatus(`join rejected (${err.code}) — trying to subscribe anyway...`);
+                subscribe();
             });
 
         function subscribe() {
