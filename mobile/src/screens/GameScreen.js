@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
     Alert,
+    BackHandler,
     Image,
     KeyboardAvoidingView,
     Modal,
@@ -468,6 +469,36 @@ const GameScreen = ({ route, navigation }) => {
             ]
         );
     };
+
+    // Android has no equivalent of options.gestureEnabled (RootNavigator.js's
+    // comment on the Game screen — @react-navigation/native-stack@7 documents
+    // gestureEnabled as iOS-only): NavigationContainer installs its own
+    // global hardwareBackPress listener (@react-navigation/native's
+    // useBackButton.native.js) that calls navigation.goBack() whenever
+    // canGoBack(), completely independent of any per-screen gesture setting.
+    // Left alone, Android's hardware/gesture back button would still pop
+    // this screen straight back to Join, same bug as the iOS swipe. React
+    // Native's BackHandler invokes listeners most-recently-added first and
+    // stops at the first one returning true, so this listener — added for as
+    // long as this screen is mounted — runs before NavigationContainer's and
+    // suppresses the pop; opening the same Leave-confirmation dialog the
+    // header's Leave button uses, rather than silently doing nothing.
+    //
+    // A plain mount-based effect, not React Navigation's useFocusEffect:
+    // RootNavigator.js's stack only ever has Join, ReconnectPending, or Game
+    // on top (nothing is ever pushed on top of Game itself), so this screen
+    // is focused for exactly as long as it's mounted — tracking focus
+    // separately would add nothing here. It also keeps this component free
+    // of the useNavigation()/NavigationContext dependency useFocusEffect
+    // requires, consistent with how the rest of this file only ever uses the
+    // `navigation` prop it's handed, never the hook.
+    useEffect(() => {
+        const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+            handleLeavePress();
+            return true;
+        });
+        return () => subscription.remove();
+    }, []);
 
     return (
         <SafeAreaView

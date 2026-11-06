@@ -1,4 +1,4 @@
-import { Alert } from 'react-native';
+import { Alert, BackHandler } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { collection, doc, onSnapshot, query } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
@@ -132,11 +132,35 @@ const expectResetToJoin = (navigation) => {
 const renderScreen = (navigation = makeNavigation()) =>
     render(<GameScreen route={{ params: { roomID: 'ROOM1' } }} navigation={navigation} />);
 
+// Same mocking approach as useBoundaryLocation.test.js's AppState.addEventListener
+// spy (there's no native BackHandler module under Jest either): captures
+// every 'hardwareBackPress' listener GameScreen registers so a test can fire
+// it directly, the same way a real Android back-button press would.
+let hardwareBackPressListeners;
+const fireHardwareBackPress = () =>
+    hardwareBackPressListeners.map((listener) => listener()).some(Boolean);
+
 beforeEach(() => {
     jest.clearAllMocks();
     tagRefsByPath();
     playerSession.readPlayerSession.mockResolvedValue({ roomID: 'ROOM1', playerName: 'Alice' });
     playerSession.clearPlayerSession.mockResolvedValue(undefined);
+
+    hardwareBackPressListeners = [];
+    jest.spyOn(BackHandler, 'addEventListener').mockImplementation((type, listener) => {
+        if (type === 'hardwareBackPress') hardwareBackPressListeners.push(listener);
+        return {
+            remove: jest.fn(() => {
+                hardwareBackPressListeners = hardwareBackPressListeners.filter(
+                    (entry) => entry !== listener
+                );
+            }),
+        };
+    });
+});
+
+afterEach(() => {
+    jest.restoreAllMocks();
 });
 
 describe('GameScreen', () => {
@@ -262,6 +286,50 @@ describe('GameScreen', () => {
         expectResetToJoin(navigation);
         expect(playerSession.clearPlayerSession).toHaveBeenCalled();
         consoleSpy.mockRestore();
+    });
+
+    // Task 16 QA follow-up: Android's hardware back button isn't covered by
+    // RootNavigator.js's gestureEnabled: false (that option is iOS-only —
+    // see its comment on the Game screen), because NavigationContainer
+    // installs its own global hardwareBackPress listener that pops the
+    // stack independent of any per-screen gesture setting. GameScreen must
+    // intercept the hardware back press itself and open the same
+    // Leave-confirmation dialog the header's Leave button uses, rather than
+    // letting it silently pop the screen (same bypass-Leave bug as the iOS
+    // swipe-back).
+    describe('hardware back button (Task 16 QA)', () => {
+        it('opens the Leave confirmation instead of navigating away, and consumes the event', async () => {
+            driveSnapshots({
+                room: { gameStarted: false, isGameActive: true },
+                player: { isAlive: true },
+            });
+            const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+            const navigation = makeNavigation();
+            await renderScreen(navigation);
+
+            let consumed;
+            await act(() => {
+                consumed = fireHardwareBackPress();
+            });
+
+            expect(consumed).toBe(true);
+            const [title] = alertSpy.mock.calls.at(-1);
+            expect(title).toBe('WARNING');
+            expect(navigation.reset).not.toHaveBeenCalled();
+            expect(navigation.navigate).not.toHaveBeenCalled();
+            alertSpy.mockRestore();
+        });
+
+        it('removes the hardwareBackPress listener on unmount', async () => {
+            driveSnapshots({
+                room: { gameStarted: false, isGameActive: true },
+                player: { isAlive: true },
+            });
+            const { unmount } = await renderScreen();
+            expect(hardwareBackPressListeners.length).toBe(1);
+            await unmount();
+            expect(hardwareBackPressListeners.length).toBe(0);
+        });
     });
 
     describe('location/boundary status (Task 11)', () => {

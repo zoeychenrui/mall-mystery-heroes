@@ -26,6 +26,7 @@ jest.mock('../utils/playerSession', () => ({
 }));
 
 const callables = require('../firebase/callables');
+const playerSession = require('../utils/playerSession');
 
 describe('JoinScreen', () => {
     // @testing-library/react-native v14's `render` and `fireEvent` are both
@@ -69,5 +70,41 @@ describe('JoinScreen', () => {
             roomID: 'ABC123',
             requestId: 'req-1',
         });
+    });
+
+    // Deeper real-device repro (Task 16 QA follow-up): the player never
+    // actually left — they swiped back out of GameScreen, which (before
+    // this fix) bypassed the Leave flow entirely, so their uid stayed in
+    // the room's joinedUids and their stored session stayed intact. The
+    // above fallback kicks in exactly as before, but requestReconnect.js's
+    // own joinedUids guard then rejects it too, because this device is
+    // already a valid player — not someone who needs a reconnect link. That
+    // rejection must be treated as a successful rejoin, not surfaced as an
+    // error. Error shape matches requestReconnect.js's real
+    // HttpsError('failed-precondition', 'This device is already signed in
+    // as a player in this room.'), with the mobile SDK's own "[status]"
+    // suffix appended (same reformatting as the "already started" case).
+    it('rejoins automatically when requestReconnect reports the device is already a valid player', async () => {
+        const alreadyStartedError = new Error('This game has already started. [400]');
+        alreadyStartedError.code = 'functions/failed-precondition';
+        callables.joinRoom.mockRejectedValueOnce(alreadyStartedError);
+        const alreadyAPlayerError = new Error(
+            'This device is already signed in as a player in this room. [400]'
+        );
+        alreadyAPlayerError.code = 'functions/failed-precondition';
+        callables.requestReconnect.mockRejectedValueOnce(alreadyAPlayerError);
+        const navigate = jest.fn();
+
+        const { getByPlaceholderText, getByText, queryByText } = await render(
+            <JoinScreen navigation={{ navigate }} />
+        );
+        await fireEvent.changeText(getByPlaceholderText('Game ID'), 'abc123');
+        await fireEvent.changeText(getByPlaceholderText('Your name'), 'Alice');
+        await fireEvent.press(getByText('Join'));
+
+        expect(callables.requestReconnect).toHaveBeenCalledWith('ABC123', 'Alice');
+        expect(playerSession.writePlayerSession).toHaveBeenCalledWith('ABC123', 'Alice');
+        expect(navigate).toHaveBeenCalledWith('Game', { roomID: 'ABC123' });
+        expect(queryByText(alreadyAPlayerError.message)).toBeNull();
     });
 });

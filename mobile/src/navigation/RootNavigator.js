@@ -19,11 +19,24 @@ export default function RootNavigator({ initialRouteName = 'Join', initialParams
                     <Stack.Screen name="ReconnectPending" component={ReconnectPendingScreen} />
                     {/* GameScreen draws its own header (name, lobby, Rules,
                         Leave), like the web page, and handles its own safe
-                        area — so no stack header on top of it. */}
+                        area — so no stack header on top of it.
+                        gestureEnabled: false (Task 16 QA, real-device bug):
+                        iOS's native swipe-back gesture used to pop this
+                        screen straight back to Join without running any of
+                        GameScreen's cleanup (no Leave flow, no
+                        clearPlayerSession) — the player's uid stayed in the
+                        room's joinedUids and their stored session stayed
+                        intact, leaving them stuck when they tried to
+                        rejoin. The only way off this screen now is the
+                        explicit Leave button/confirmation below. This is
+                        iOS-only (@react-navigation/native-stack@7's own
+                        gestureEnabled doc: "Only supported on iOS"); see
+                        GameScreen.js's BackHandler listener for why Android
+                        needs its own, separate fix. */}
                     <Stack.Screen
                         name="Game"
                         component={GameScreen}
-                        options={{ headerShown: false }}
+                        options={{ headerShown: false, gestureEnabled: false }}
                         initialParams={initialRouteName === 'Game' ? initialParams : undefined}
                     />
                 </Stack.Navigator>

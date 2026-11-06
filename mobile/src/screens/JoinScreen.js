@@ -67,6 +67,26 @@ const JoinScreen = ({ navigation }) => {
                     requestId: data.requestId,
                 });
             } catch (reconnectErr) {
+                // reconnectRequest.js's own joinedUids guard (docs/improvements.md
+                // item 66) rejects with this when the caller's uid is
+                // ALREADY in the room's joinedUids — which is exactly what
+                // happens after the real Task 16 QA repro: the player swiped
+                // back out of GameScreen (bypassing Leave, so neither their
+                // uid nor their stored session was ever cleared) and is now
+                // resubmitting the join form as the same, still-valid
+                // player. There was never an identity problem to resolve
+                // here, so don't show this as an error — rejoin exactly like
+                // a normal successful join would. Same code+substring
+                // matching approach as the "already started" check above,
+                // for the same SDK-reformats-the-message reason.
+                const isAlreadyAPlayer =
+                    reconnectErr.code === 'functions/failed-precondition' &&
+                    reconnectErr.message?.includes('already signed in as a player');
+                if (isAlreadyAPlayer) {
+                    await playerSession.writePlayerSession(trimmedRoomId, playerName);
+                    navigation.navigate('Game', { roomID: trimmedRoomId });
+                    return;
+                }
                 setErrorMessage(reconnectErr.message);
             }
         } finally {
