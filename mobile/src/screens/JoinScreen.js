@@ -8,7 +8,9 @@ import {
     View,
 } from 'react-native';
 import { signInAnonymously } from 'firebase/auth';
+import { getDocs } from 'firebase/firestore';
 import { auth } from '../firebase/firebaseConfig';
+import * as dbCalls from '../firebase/dbCalls';
 import * as callables from '../firebase/callables';
 import * as playerSession from '../utils/playerSession';
 
@@ -83,7 +85,34 @@ const JoinScreen = ({ navigation }) => {
                     reconnectErr.code === 'functions/failed-precondition' &&
                     reconnectErr.message?.includes('already signed in as a player');
                 if (isAlreadyAPlayer) {
-                    await playerSession.writePlayerSession(trimmedRoomId, playerName);
+                    // requestReconnect.js's guard only proves this uid owns
+                    // SOME player doc in the room — it never checked the
+                    // `playerName` just typed into the form against it. An
+                    // already-joined player could type ANY other in-room
+                    // player's name here (names are visible on the
+                    // leaderboard) and, without this lookup, would be
+                    // signed in and navigated into Game under that OTHER
+                    // player's identity — a read-only but real information
+                    // leak, since GameScreen's player-doc subscription has
+                    // no way to tell the typed name apart from the real
+                    // one. Look up which player doc this uid actually
+                    // owns and use ITS stored `name`, never the typed
+                    // string, for both the session and the navigation.
+                    const ownedPlayerSnapshot = await getDocs(
+                        dbCalls.fetchPlayerByUidQueryForRoom(auth.currentUser.uid, trimmedRoomId)
+                    );
+                    if (ownedPlayerSnapshot.docs.length !== 1) {
+                        // Zero docs means the "already signed in" guard and
+                        // this lookup disagree about reality; more than one
+                        // means this uid somehow owns two player docs in
+                        // the room. Both are states this recovery branch
+                        // has no safe guess for — fail into the normal
+                        // error path rather than picking a name.
+                        setErrorMessage(reconnectErr.message);
+                        return;
+                    }
+                    const ownedPlayerName = ownedPlayerSnapshot.docs[0].data().name;
+                    await playerSession.writePlayerSession(trimmedRoomId, ownedPlayerName);
                     navigation.navigate('Game', { roomID: trimmedRoomId });
                     return;
                 }

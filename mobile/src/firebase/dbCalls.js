@@ -81,3 +81,22 @@ export const fetchPlayerMessagesQueryForRoom = (roomID) => {
 export const fetchReconnectRequestReferenceForRoom = (requestId, roomID) => {
     return doc(db, 'rooms', roomID, 'reconnectRequests', requestId);
 };
+
+// A query for whichever player doc this uid actually owns in the room, by
+// `uid` rather than by a client-typed name — the only trustworthy way to
+// find "who am I in this room." JoinScreen.js's requestReconnect fallback
+// needs this: requestReconnect.js's "already signed in as a player" guard
+// only proves this uid owns SOME player doc here, never that it owns the
+// one named in whatever the player just typed, so that typed name must
+// never be used to decide identity. Mirrors joinRoom.js's/
+// reconnectRequest.js's own `playersRef.where('uid', '==', uid)` query
+// server-side. firestore.rules' `players/{playerId}` `allow read:
+// isHostOrPlayerOfRoom(roomId)` grant is query-shape-independent (it only
+// depends on the {roomId} path segment and the caller's own auth, never on
+// resource.data), so it already authorizes this filtered list the same way
+// it authorizes the unfiltered fetchPlayersQueryByDescendPointsThenIsAliveForRoom
+// query above — no rules change needed.
+export const fetchPlayerByUidQueryForRoom = (uid, roomID) => {
+    const playerCollectionRef = collection(db, 'rooms', roomID, 'players');
+    return query(playerCollectionRef, where('uid', '==', uid));
+};

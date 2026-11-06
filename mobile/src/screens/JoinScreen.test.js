@@ -24,11 +24,34 @@ jest.mock('../firebase/callables', () => ({
 jest.mock('../utils/playerSession', () => ({
     writePlayerSession: jest.fn(),
 }));
+jest.mock('firebase/firestore', () => ({
+    getDocs: jest.fn(),
+}));
+jest.mock('../firebase/dbCalls', () => ({
+    fetchPlayerByUidQueryForRoom: jest.fn(() => 'the-query'),
+}));
 
 const callables = require('../firebase/callables');
 const playerSession = require('../utils/playerSession');
+const { getDocs } = require('firebase/firestore');
+const dbCalls = require('../firebase/dbCalls');
+
+// A fake QuerySnapshot shaped like what getDocs resolves to — only `.docs`
+// is read by JoinScreen.js's recovery branch.
+const snapshotWithDocs = (...datas) => ({
+    docs: datas.map((data) => ({ data: () => data })),
+});
 
 describe('JoinScreen', () => {
+    // Without this, mock.calls accumulate across tests in this file (no
+    // global clearMocks is configured in jest.config.js) — the "fails
+    // safely" tests below assert writePlayerSession/navigate were NOT
+    // called, which only means something with a clean slate per test.
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+
     // @testing-library/react-native v14's `render` and `fireEvent` are both
     // async by default now (see its "Migration to 14.0" notes) — await
     // both rather than destructuring/reading off an unresolved Promise.
@@ -93,6 +116,7 @@ describe('JoinScreen', () => {
         );
         alreadyAPlayerError.code = 'functions/failed-precondition';
         callables.requestReconnect.mockRejectedValueOnce(alreadyAPlayerError);
+        getDocs.mockResolvedValueOnce(snapshotWithDocs({ name: 'Alice' }));
         const navigate = jest.fn();
 
         const { getByPlaceholderText, getByText, queryByText } = await render(
@@ -103,8 +127,79 @@ describe('JoinScreen', () => {
         await fireEvent.press(getByText('Join'));
 
         expect(callables.requestReconnect).toHaveBeenCalledWith('ABC123', 'Alice');
+        expect(dbCalls.fetchPlayerByUidQueryForRoom).toHaveBeenCalledWith('test-uid', 'ABC123');
         expect(playerSession.writePlayerSession).toHaveBeenCalledWith('ABC123', 'Alice');
         expect(navigate).toHaveBeenCalledWith('Game', { roomID: 'ABC123' });
         expect(queryByText(alreadyAPlayerError.message)).toBeNull();
+    });
+
+    // The actual vulnerability this recovery branch was exploitable for:
+    // requestReconnect.js's "already signed in" guard fires purely off the
+    // caller's OWN uid — it never checks the typed `playerName` against it.
+    // An already-joined player could type a DIFFERENT real in-room player's
+    // name (visible on the leaderboard) and land in Game under that other
+    // player's identity, reading their targets/mission state/kill photos.
+    // The fix: look up which player doc this uid actually owns and use ITS
+    // stored `name`, never the typed string. Typed name and owned name
+    // deliberately differ here — the owned one must win.
+    it('uses the uid-owned player doc name, not the typed name, when they differ', async () => {
+        const alreadyStartedError = new Error('This game has already started. [400]');
+        alreadyStartedError.code = 'functions/failed-precondition';
+        callables.joinRoom.mockRejectedValueOnce(alreadyStartedError);
+        const alreadyAPlayerError = new Error(
+            'This device is already signed in as a player in this room. [400]'
+        );
+        alreadyAPlayerError.code = 'functions/failed-precondition';
+        callables.requestReconnect.mockRejectedValueOnce(alreadyAPlayerError);
+        getDocs.mockResolvedValueOnce(snapshotWithDocs({ name: 'RealOwner' }));
+        const navigate = jest.fn();
+
+        const { getByPlaceholderText, getByText } = await render(
+            <JoinScreen navigation={{ navigate }} />
+        );
+        await fireEvent.changeText(getByPlaceholderText('Game ID'), 'abc123');
+        // Typed as someone else's name — e.g. an already-joined player
+        // probing another real player visible on the leaderboard.
+        await fireEvent.changeText(getByPlaceholderText('Your name'), 'SomeoneElse');
+        await fireEvent.press(getByText('Join'));
+
+        expect(playerSession.writePlayerSession).toHaveBeenCalledWith('ABC123', 'RealOwner');
+        expect(playerSession.writePlayerSession).not.toHaveBeenCalledWith(
+            'ABC123',
+            'SomeoneElse'
+        );
+        expect(navigate).toHaveBeenCalledWith('Game', { roomID: 'ABC123' });
+    });
+
+    // Zero docs (the "already signed in" guard and this lookup disagree
+    // about reality) or more than one (this uid somehow owns two player
+    // docs in the room) are both states this recovery branch has no safe
+    // guess for — it must fail into the normal error path instead of
+    // picking a name.
+    it.each([
+        ['zero matching docs', []],
+        ['more than one matching doc', [{ name: 'Alice' }, { name: 'AliceAgain' }]],
+    ])('falls through to the error message when getDocs returns %s', async (_label, datas) => {
+        const alreadyStartedError = new Error('This game has already started. [400]');
+        alreadyStartedError.code = 'functions/failed-precondition';
+        callables.joinRoom.mockRejectedValueOnce(alreadyStartedError);
+        const alreadyAPlayerError = new Error(
+            'This device is already signed in as a player in this room. [400]'
+        );
+        alreadyAPlayerError.code = 'functions/failed-precondition';
+        callables.requestReconnect.mockRejectedValueOnce(alreadyAPlayerError);
+        getDocs.mockResolvedValueOnce(snapshotWithDocs(...datas));
+        const navigate = jest.fn();
+
+        const { getByPlaceholderText, getByText, findByText } = await render(
+            <JoinScreen navigation={{ navigate }} />
+        );
+        await fireEvent.changeText(getByPlaceholderText('Game ID'), 'abc123');
+        await fireEvent.changeText(getByPlaceholderText('Your name'), 'Alice');
+        await fireEvent.press(getByText('Join'));
+
+        expect(await findByText(alreadyAPlayerError.message)).toBeTruthy();
+        expect(playerSession.writePlayerSession).not.toHaveBeenCalled();
+        expect(navigate).not.toHaveBeenCalledWith('Game', { roomID: 'ABC123' });
     });
 });
