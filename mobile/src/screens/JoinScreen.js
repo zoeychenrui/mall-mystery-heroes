@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import {
     ActivityIndicator,
+    Keyboard,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     View,
 } from 'react-native';
 import { signInAnonymously } from 'firebase/auth';
@@ -124,42 +126,54 @@ const JoinScreen = ({ navigation }) => {
     };
 
     return (
-        <View testID="join-screen" style={styles.container}>
-            <Text style={styles.heading}>Join Game</Text>
-            {errorMessage ? (
-                <View style={styles.errorBox}>
-                    <Text style={styles.errorText}>{errorMessage}</Text>
-                </View>
-            ) : null}
-            <TextInput
-                placeholder="Game ID"
-                value={roomId}
-                // Uppercase as you type (Jackbox-style) rather than only at
-                // submit — room codes are stored/matched uppercase, so this
-                // also means it never matters which case a player actually
-                // typed. autoCapitalize="characters" handles the on-screen
-                // keyboard's own casing; the explicit .toUpperCase() here is
-                // belt-and-suspenders for anything that bypasses it (e.g.
-                // pasted text), matching the web app's Input.
-                autoCapitalize="characters"
-                onChangeText={(text) => setRoomId(text.toUpperCase())}
-                style={styles.input}
-            />
-            <TextInput
-                placeholder="Your name"
-                value={playerName}
-                onChangeText={setPlayerName}
-                maxLength={16}
-                style={styles.input}
-            />
-            <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={isSubmitting}>
-                {isSubmitting ? (
-                    <ActivityIndicator color="#fff" />
-                ) : (
-                    <Text style={styles.buttonText}>Join</Text>
-                )}
-            </TouchableOpacity>
-        </View>
+        // Tapping anywhere outside the inputs dismisses the keyboard —
+        // without this, the only way to dismiss it was the keyboard's own
+        // return key. Wraps the whole screen rather than each input, since
+        // the inputs/button underneath still get their own press events
+        // first (TouchableWithoutFeedback only fires on a press that
+        // nothing else inside it handled).
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <View testID="join-screen" style={styles.container}>
+                <Text style={styles.heading}>Join Game</Text>
+                {errorMessage ? (
+                    <View style={styles.errorBox}>
+                        <Text style={styles.errorText}>{errorMessage}</Text>
+                    </View>
+                ) : null}
+                <TextInput
+                    placeholder="Game ID"
+                    value={roomId}
+                    // Uppercase as you type (Jackbox-style) rather than only at
+                    // submit — room codes are stored/matched uppercase, so this
+                    // also means it never matters which case a player actually
+                    // typed. autoCapitalize="characters" handles the on-screen
+                    // keyboard's own casing; the explicit .toUpperCase() here is
+                    // belt-and-suspenders for anything that bypasses it (e.g.
+                    // pasted text), matching the web app's Input.
+                    autoCapitalize="characters"
+                    onChangeText={(text) => setRoomId(text.toUpperCase())}
+                    style={styles.input}
+                />
+                <TextInput
+                    placeholder="Your name"
+                    value={playerName}
+                    onChangeText={setPlayerName}
+                    maxLength={16}
+                    style={styles.input}
+                />
+                <TouchableOpacity
+                    style={styles.button}
+                    onPress={handleSubmit}
+                    disabled={isSubmitting}
+                >
+                    {isSubmitting ? (
+                        <ActivityIndicator color="#fff" />
+                    ) : (
+                        <Text style={styles.buttonText}>Join</Text>
+                    )}
+                </TouchableOpacity>
+            </View>
+        </TouchableWithoutFeedback>
     );
 };
 
