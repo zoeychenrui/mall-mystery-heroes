@@ -38,7 +38,11 @@ const ReconnectPendingScreen = ({ route, navigation }) => {
                     // param or anything else — this is the one value a
                     // subtle bug here would silently corrupt.
                     await playerSession.writePlayerSession(roomID, data.playerName);
-                    navigation.navigate('Game', { roomID });
+                    // reset, not navigate: React Navigation 7's navigate()
+                    // pushes Game on top and leaves this screen mounted
+                    // underneath, so this request-doc listener would never
+                    // tear down. Resetting unmounts it.
+                    navigation.reset({ index: 0, routes: [{ name: 'Game', params: { roomID } }] });
                     return;
                 }
                 setStatus(data.status);
@@ -68,9 +72,10 @@ const ReconnectPendingScreen = ({ route, navigation }) => {
                     <Text style={styles.heading}>
                         Your {requestType === 'join' ? 'join' : 'reconnect'} request was denied
                     </Text>
+                    {/* reset, same reason as the approval path above. */}
                     <TouchableOpacity
                         style={styles.button}
-                        onPress={() => navigation.navigate('Join')}
+                        onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Join' }] })}
                     >
                         <Text style={styles.buttonText}>Back to home</Text>
                     </TouchableOpacity>

@@ -61,9 +61,16 @@ const GameScreen = ({ route, navigation }) => {
     // here (room deleted, or the GM removed this player), so both clear the
     // session and go back to Join. The session is cleared before navigating
     // so nothing on Join can read the stale one back.
+    //
+    // reset, not navigate: in React Navigation 7, navigate('Join') from here
+    // pushes a NEW Join on top and leaves this screen mounted underneath,
+    // so its four onSnapshot listeners would never tear down and would pile
+    // up across leave/rejoin cycles. Resetting the stack to just Join
+    // unmounts GameScreen, which runs every effect's unsubscribe. Same as the
+    // web's navigate('/', { replace: true }).
     const leaveToJoin = useCallback(async () => {
         await playerSession.clearPlayerSession();
-        navigation.navigate('Join');
+        navigation.reset({ index: 0, routes: [{ name: 'Join' }] });
     }, [navigation]);
 
     const handleSubscriptionError = useCallback(

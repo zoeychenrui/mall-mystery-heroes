@@ -66,7 +66,19 @@ const driveSnapshots = ({ room, player }) => {
     return listeners;
 };
 
-const renderScreen = (navigation = { navigate: jest.fn() }) =>
+// Every exit to Join must be a stack reset, not navigate('Join'): in React
+// Navigation 7, navigate() pushes a new Join on top and leaves GameScreen
+// mounted underneath with all four listeners still live.
+const RESET_TO_JOIN = { index: 0, routes: [{ name: 'Join' }] };
+const makeNavigation = () => ({ navigate: jest.fn(), reset: jest.fn() });
+
+const expectResetToJoin = (navigation) => {
+    expect(navigation.reset).toHaveBeenCalledTimes(1);
+    expect(navigation.reset).toHaveBeenCalledWith(RESET_TO_JOIN);
+    expect(navigation.navigate).not.toHaveBeenCalled();
+};
+
+const renderScreen = (navigation = makeNavigation()) =>
     render(<GameScreen route={{ params: { roomID: 'ROOM1' } }} navigation={navigation} />);
 
 beforeEach(() => {
@@ -144,8 +156,8 @@ describe('GameScreen', () => {
         });
         const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
         callables.leaveGame.mockResolvedValue(undefined);
-        const navigate = jest.fn();
-        const { getByLabelText } = await renderScreen({ navigate });
+        const navigation = makeNavigation();
+        const { getByLabelText } = await renderScreen(navigation);
 
         await fireEvent.press(getByLabelText('Leave'));
         const [title, , buttons] = alertSpy.mock.calls.at(-1);
@@ -155,18 +167,49 @@ describe('GameScreen', () => {
         expect(callables.leaveGame).toHaveBeenCalledWith('ROOM1');
         expect(signOut).toHaveBeenCalledTimes(1);
         expect(playerSession.clearPlayerSession).toHaveBeenCalledTimes(1);
-        expect(navigate).toHaveBeenCalledWith('Join');
+        expectResetToJoin(navigation);
         alertSpy.mockRestore();
     });
 
-    it('clears the session and returns to Join when the room doc is gone', async () => {
+    it('clears the session and resets to Join when the room doc is gone', async () => {
         onSnapshot.mockImplementation((ref, onNext) => {
             if (ref.path === ROOM_PATH) onNext({ exists: () => false, data: () => undefined });
             return jest.fn();
         });
-        const navigate = jest.fn();
-        await renderScreen({ navigate });
-        await waitFor(() => expect(navigate).toHaveBeenCalledWith('Join'));
+        const navigation = makeNavigation();
+        await renderScreen(navigation);
+        await waitFor(() => expect(navigation.reset).toHaveBeenCalled());
+        expectResetToJoin(navigation);
         expect(playerSession.clearPlayerSession).toHaveBeenCalled();
+    });
+
+    it('clears the session and resets to Join when the player doc is gone', async () => {
+        onSnapshot.mockImplementation((ref, onNext) => {
+            if (ref.path === ROOM_PATH) {
+                onNext({ exists: () => true, data: () => ({ gameStarted: false }) });
+            } else if (ref.path === PLAYER_PATH) {
+                onNext({ exists: () => false, data: () => undefined });
+            }
+            return jest.fn();
+        });
+        const navigation = makeNavigation();
+        await renderScreen(navigation);
+        await waitFor(() => expect(navigation.reset).toHaveBeenCalled());
+        expectResetToJoin(navigation);
+        expect(playerSession.clearPlayerSession).toHaveBeenCalled();
+    });
+
+    it('clears the session and resets to Join on a subscription error', async () => {
+        const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        onSnapshot.mockImplementation((ref, onNext, onError) => {
+            if (ref.path === ROOM_PATH) onError(new Error('permission-denied'));
+            return jest.fn();
+        });
+        const navigation = makeNavigation();
+        await renderScreen(navigation);
+        await waitFor(() => expect(navigation.reset).toHaveBeenCalled());
+        expectResetToJoin(navigation);
+        expect(playerSession.clearPlayerSession).toHaveBeenCalled();
+        consoleSpy.mockRestore();
     });
 });

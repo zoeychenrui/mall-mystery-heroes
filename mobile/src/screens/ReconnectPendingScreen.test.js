@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { onSnapshot } from 'firebase/firestore';
 import ReconnectPendingScreen from './ReconnectPendingScreen';
 
@@ -23,10 +23,14 @@ jest.mock('../firebase/firebaseConfig', () => ({
 jest.mock('firebase/firestore');
 
 describe('ReconnectPendingScreen', () => {
-    it('navigates to Game once the request is approved', async () => {
+    it('resets the stack to Game once the request is approved', async () => {
         const navigate = jest.fn();
+        const reset = jest.fn();
         onSnapshot.mockImplementation((ref, onNext) => {
-            onNext({ exists: () => true, data: () => ({ status: 'approved', playerName: 'Alice' }) });
+            onNext({
+                exists: () => true,
+                data: () => ({ status: 'approved', playerName: 'Alice' }),
+            });
             return () => {};
         });
         // @testing-library/react-native v14's `render` is async by default
@@ -35,17 +39,44 @@ describe('ReconnectPendingScreen', () => {
         await render(
             <ReconnectPendingScreen
                 route={{ params: { roomID: 'ROOM1', requestId: 'req1' } }}
-                navigation={{ navigate }}
+                navigation={{ navigate, reset }}
             />
         );
+        // reset, not navigate: navigate() would push Game on top and leave
+        // this screen (and its request-doc listener) mounted underneath.
         await waitFor(() =>
-            expect(navigate).toHaveBeenCalledWith('Game', { roomID: 'ROOM1' })
+            expect(reset).toHaveBeenCalledWith({
+                index: 0,
+                routes: [{ name: 'Game', params: { roomID: 'ROOM1' } }],
+            })
         );
+        expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('resets the stack to Join from the denied screen', async () => {
+        const navigate = jest.fn();
+        const reset = jest.fn();
+        onSnapshot.mockImplementation((ref, onNext) => {
+            onNext({ exists: () => false });
+            return () => {};
+        });
+        const { findByText } = await render(
+            <ReconnectPendingScreen
+                route={{ params: { roomID: 'ROOM1', requestId: 'req1' } }}
+                navigation={{ navigate, reset }}
+            />
+        );
+        await fireEvent.press(await findByText('Back to home'));
+        expect(reset).toHaveBeenCalledWith({ index: 0, routes: [{ name: 'Join' }] });
+        expect(navigate).not.toHaveBeenCalled();
     });
 
     it('shows join-specific wording when requestType is "join"', async () => {
         onSnapshot.mockImplementation((ref, onNext) => {
-            onNext({ exists: () => true, data: () => ({ status: 'pending', requestType: 'join' }) });
+            onNext({
+                exists: () => true,
+                data: () => ({ status: 'pending', requestType: 'join' }),
+            });
             return () => {};
         });
         const { findByText } = await render(
