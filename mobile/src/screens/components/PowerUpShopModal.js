@@ -129,6 +129,15 @@ const ShopItemCard = ({
 // item that needs a player picked, it also asks for one and uses the item
 // on them via `onClaim`. Closing without picking leaves that reward
 // waiting server-side (`pendingMysteryItem`); the shop offers it again.
+//
+// Deliberately NOT its own <Modal> — this renders as an absolutely
+// positioned overlay inside the shop's own Modal instead. A real device
+// showed that presenting a second native Modal on iOS while the shop's
+// Modal is still open can silently fail to appear at all (iOS modal
+// presentation is a chain from whichever view controller is currently on
+// screen; RN's Modal doesn't manage that chaining), which Jest's Modal
+// mock never exercises since it has no real native presentation to fail.
+// Only ever one real Modal exists now.
 const MysteryBoxReveal = ({
     isOpen,
     label,
@@ -150,6 +159,8 @@ const MysteryBoxReveal = ({
         }
     }, [isOpen]);
 
+    if (!isOpen) return null;
+
     const handleUse = async () => {
         setIsClaiming(true);
         setError(null);
@@ -165,53 +176,48 @@ const MysteryBoxReveal = ({
     };
 
     return (
-        <Modal visible={isOpen} onRequestClose={onClose} transparent animationType="fade">
-            <View style={styles.revealOverlay}>
-                <View testID="mystery-reveal" style={styles.revealContent}>
-                    <Text style={styles.revealKicker}>Mystery box</Text>
-                    <Text style={styles.revealLabel}>{label}</Text>
-                    {needsTarget && (
-                        <>
-                            <PlayerPicker
-                                players={pickablePlayers}
-                                selected={targetName}
-                                onSelect={setTargetName}
-                                groupLabel="Pick a player for your reward"
-                            />
-                            <Pressable
-                                accessibilityRole="button"
-                                accessibilityLabel="Use"
-                                accessibilityState={{
-                                    disabled:
-                                        !targetName || isClaiming || Boolean(unavailableMessage),
-                                }}
-                                disabled={!targetName || isClaiming || Boolean(unavailableMessage)}
-                                onPress={handleUse}
-                                style={[
-                                    styles.useButton,
-                                    (!targetName || isClaiming || Boolean(unavailableMessage)) &&
-                                        styles.useButtonDisabled,
-                                ]}
-                            >
-                                <Text style={styles.useButtonText}>Use</Text>
-                            </Pressable>
-                        </>
-                    )}
-                    {unavailableMessage && (
-                        <Text style={styles.revealWarning}>{unavailableMessage}</Text>
-                    )}
-                    {error && <Text style={styles.revealError}>{error}</Text>}
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Close"
-                        onPress={onClose}
-                        style={styles.revealClose}
-                    >
-                        <Text style={styles.revealCloseText}>Close</Text>
-                    </Pressable>
-                </View>
+        <View style={styles.revealOverlay}>
+            <View testID="mystery-reveal" style={styles.revealContent}>
+                <Text style={styles.revealKicker}>Mystery box</Text>
+                <Text style={styles.revealLabel}>{label}</Text>
+                {needsTarget && (
+                    <>
+                        <PlayerPicker
+                            players={pickablePlayers}
+                            selected={targetName}
+                            onSelect={setTargetName}
+                            groupLabel="Pick a player for your reward"
+                        />
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Use"
+                            accessibilityState={{
+                                disabled: !targetName || isClaiming || Boolean(unavailableMessage),
+                            }}
+                            disabled={!targetName || isClaiming || Boolean(unavailableMessage)}
+                            onPress={handleUse}
+                            style={[
+                                styles.useButton,
+                                (!targetName || isClaiming || Boolean(unavailableMessage)) &&
+                                    styles.useButtonDisabled,
+                            ]}
+                        >
+                            <Text style={styles.useButtonText}>Use</Text>
+                        </Pressable>
+                    </>
+                )}
+                {unavailableMessage && <Text style={styles.revealWarning}>{unavailableMessage}</Text>}
+                {error && <Text style={styles.revealError}>{error}</Text>}
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                    onPress={onClose}
+                    style={styles.revealClose}
+                >
+                    <Text style={styles.revealCloseText}>Close</Text>
+                </Pressable>
             </View>
-        </Modal>
+        </View>
     );
 };
 
@@ -292,10 +298,9 @@ const PowerUpShopModal = ({
             : '';
 
     return (
-        <>
-            <Modal visible={isOpen} onRequestClose={onClose} transparent animationType="fade">
-                <View style={styles.overlay}>
-                    <View style={styles.content}>
+        <Modal visible={isOpen} onRequestClose={onClose} transparent animationType="fade">
+            <View style={styles.overlay}>
+                <View style={styles.content}>
                         <View style={styles.header}>
                             <View style={styles.headerTitleRow}>
                                 <Text style={styles.title}>Shop</Text>
@@ -386,18 +391,17 @@ const PowerUpShopModal = ({
                             }}
                         />
                     </View>
-                </View>
-            </Modal>
-            <MysteryBoxReveal
-                isOpen={reveal !== null}
-                label={reveal?.label}
-                needsTarget={reveal?.needsTarget}
-                unavailableMessage={revealUnavailableMessage}
-                pickablePlayers={pickablePlayers}
-                onClaim={(targetName) => claimMysteryReward({ roomId: roomID, targetName })}
-                onClose={() => setReveal(null)}
-            />
-        </>
+                <MysteryBoxReveal
+                    isOpen={reveal !== null}
+                    label={reveal?.label}
+                    needsTarget={reveal?.needsTarget}
+                    unavailableMessage={revealUnavailableMessage}
+                    pickablePlayers={pickablePlayers}
+                    onClaim={(targetName) => claimMysteryReward({ roomId: roomID, targetName })}
+                    onClose={() => setReveal(null)}
+                />
+            </View>
+        </Modal>
     );
 };
 
@@ -563,7 +567,15 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     revealOverlay: {
-        flex: 1,
+        // Absolute, not flex: this now renders as a sibling of `content`
+        // inside the shop's own `overlay` View (see the comment above
+        // MysteryBoxReveal) rather than in its own Modal, so it has to
+        // cover the screen itself instead of relying on flex layout.
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
         backgroundColor: '#4A5568', // gray.700
         alignItems: 'center',
         justifyContent: 'center',
