@@ -50,9 +50,13 @@ beforeEach(() => {
     callables.submitChatMessage.mockResolvedValue(undefined);
     callables.submitKillPhoto.mockResolvedValue(undefined);
     storageCalls.uploadKillPhoto.mockResolvedValue('https://example.com/photo.jpg');
+    // A landscape asset (width > height, both already under MAX_DIMENSION)
+    // by default, so scale is 1 and the resize call's width/height equal
+    // the asset's own — the portrait/over-sized case is covered by its own
+    // test below.
     ImagePicker.launchCameraAsync.mockResolvedValue({
         canceled: false,
-        assets: [{ uri: CAPTURED_URI }],
+        assets: [{ uri: CAPTURED_URI, width: 1200, height: 900 }],
     });
     ImageManipulator.manipulateAsync.mockResolvedValue({ uri: MANIPULATED_URI });
     global.fetch = jest.fn(() => Promise.resolve({ blob: () => Promise.resolve(fakeBlob) }));
@@ -259,13 +263,37 @@ describe('ChatComposer', () => {
             expect(ImagePicker.launchCameraAsync).toHaveBeenCalledWith({
                 mediaTypes: 'Images',
             });
+            // The default mocked asset (1200x900, landscape, already under
+            // MAX_DIMENSION) scales by 1 — width/height pass through
+            // unchanged, both computed, not width alone.
             expect(ImageManipulator.manipulateAsync).toHaveBeenCalledWith(
                 CAPTURED_URI,
-                [{ resize: { width: 1600 } }],
+                [{ resize: { width: 1200, height: 900 } }],
                 { compress: 0.8, format: 'jpeg' }
             );
             expect(screen.getByLabelText('Kill photo preview').props.source.uri).toBe(
                 MANIPULATED_URI
+            );
+        });
+
+        it('caps the longer side for a portrait photo, matching compressImage.js', async () => {
+            // height > width (camera held vertically) and over MAX_DIMENSION
+            // on its long side — resizing by width alone (the bug the
+            // review caught) would leave height at 2000, uncapped.
+            // scale = 1600 / 2000 = 0.8 → width 900*0.8=720, height
+            // 2000*0.8=1600 (the long side lands exactly on MAX_DIMENSION).
+            ImagePicker.launchCameraAsync.mockResolvedValue({
+                canceled: false,
+                assets: [{ uri: CAPTURED_URI, width: 900, height: 2000 }],
+            });
+            await mountComposer();
+
+            await fireEvent.press(screen.getByLabelText('Send photo'));
+
+            expect(ImageManipulator.manipulateAsync).toHaveBeenCalledWith(
+                CAPTURED_URI,
+                [{ resize: { width: 720, height: 1600 } }],
+                { compress: 0.8, format: 'jpeg' }
             );
         });
 
@@ -277,6 +305,18 @@ describe('ChatComposer', () => {
 
             expect(ImageManipulator.manipulateAsync).not.toHaveBeenCalled();
             expect(screen.queryByLabelText('Submit')).toBeNull();
+        });
+
+        it('opens the modal with an error, not a preview, when capture/manipulation fails', async () => {
+            ImageManipulator.manipulateAsync.mockRejectedValue(new Error('bad file'));
+            await mountComposer();
+
+            await fireEvent.press(screen.getByLabelText('Send photo'));
+
+            expect(
+                screen.getByText('Could not read that photo. Try taking it again.')
+            ).toBeTruthy();
+            expect(screen.queryByLabelText('Kill photo preview')).toBeNull();
         });
 
         it('compresses a captured photo before uploading it', async () => {

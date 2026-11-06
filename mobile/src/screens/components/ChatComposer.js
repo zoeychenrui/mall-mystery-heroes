@@ -119,20 +119,39 @@ const ChatComposer = ({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
             });
             if (result.canceled || !result.assets?.length) return;
+            const asset = result.assets[0];
+            // Same algorithm as the web's src/utils/compressImage.js: cap
+            // whichever side is longer, not width alone — a portrait photo
+            // (height > width, the common camera-held-vertically case)
+            // would otherwise end up with its long side (height)
+            // uncapped, defeating the point of compressing at all.
+            const scale = Math.min(1, MAX_DIMENSION / Math.max(asset.width, asset.height));
             const manipulated = await ImageManipulator.manipulateAsync(
-                result.assets[0].uri,
-                [{ resize: { width: MAX_DIMENSION } }],
+                asset.uri,
+                [
+                    {
+                        resize: {
+                            width: Math.round(asset.width * scale),
+                            height: Math.round(asset.height * scale),
+                        },
+                    },
+                ],
                 { compress: JPEG_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
             );
             setPhotoError(null);
             setPreviewUri(manipulated.uri);
             setIsPhotoModalOpen(true);
         } catch (captureError) {
-            // No test/spec coverage for this branch — capture/manipulation
-            // failures are rarer and less recoverable than the web's
-            // file-input compression failures (there's no file to retry
-            // from), so this just logs rather than inventing new UX.
+            // Mirrors the web's compressImage.js failure path
+            // (MessageComposer.js's handleFileChange catch): open the modal
+            // with its existing inline error banner instead of leaving the
+            // failure silent — KillPhotoModal/ChatComposer already have the
+            // error/photoError plumbing for this, so there is nothing new
+            // to build, just actually use it.
             console.error('Error capturing photo:', captureError);
+            setPreviewUri(null);
+            setPhotoError('Could not read that photo. Try taking it again.');
+            setIsPhotoModalOpen(true);
         }
     };
 
