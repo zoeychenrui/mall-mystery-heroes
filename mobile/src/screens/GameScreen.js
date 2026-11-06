@@ -327,10 +327,16 @@ const GameScreen = ({ route, navigation }) => {
             <ChatComposer
                 roomID={roomID}
                 playerName={playerName}
+                isGameActive={isGameActive}
+                players={players}
+                missions={missions}
+                cameraBlockedUntil={playerData?.cameraBlockedUntil ?? null}
                 onOptimisticSend={handleOptimisticSend}
                 onOptimisticSendFailed={handleOptimisticSendFailed}
-                // Task 10 adds the camera button plus the isGameActive/
-                // players/missions/cameraBlockedUntil props it needs.
+                // locationEnabled isn't threaded here yet — ChatComposer's
+                // own default (true) applies until Task 11 builds the
+                // location-permission hook `permissionState` comes from and
+                // this passes permissionState === 'granted' down.
             />
         </SafeAreaView>
     );

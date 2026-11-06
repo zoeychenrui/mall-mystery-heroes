@@ -1,25 +1,61 @@
 /**
  * Component test for ChatComposer — the RN port of
- * src/components/player_messages_components/MessageComposer.js's
- * text-sending logic (the camera button is Task 10's).
+ * src/components/player_messages_components/MessageComposer.js. Covers both
+ * the text-sending logic (Task 9) and the camera capture/compress/submit
+ * flow (Task 10) added alongside it.
  *
- * Only the Firebase-touching '../../firebase/callables' import is mocked,
- * same pattern as JoinScreen.test.js / GameScreen.test.js.
+ * Firebase-touching imports are mocked ('../../firebase/callables' and
+ * '../../firebase/storageCalls'), same pattern as JoinScreen.test.js /
+ * GameScreen.test.js. 'expo-image-picker' and 'expo-image-manipulator' are
+ * also mocked — their real native modules don't exist under Jest (jest-expo
+ * ships automatic mocks for them, but the capture flow's actual *values*
+ * need per-test control, so each test drives them explicitly). `KillPhotoModal`
+ * itself is not mocked — it has no Firebase imports of its own, same reason
+ * the web's `MessageComposer.test.jsx` renders its own `KillPhotoModal` for
+ * real.
  *
  * @testing-library/react-native v14's render/fireEvent are async — every
  * call is awaited.
  */
+import { Alert } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as callables from '../../firebase/callables';
+import * as storageCalls from '../../firebase/storageCalls';
 import ChatComposer from './ChatComposer';
 
 jest.mock('../../firebase/callables', () => ({
     submitChatMessage: jest.fn(),
+    submitKillPhoto: jest.fn(),
 }));
+jest.mock('../../firebase/storageCalls', () => ({
+    uploadKillPhoto: jest.fn(),
+}));
+jest.mock('expo-image-picker', () => ({
+    launchCameraAsync: jest.fn(),
+    MediaTypeOptions: { Images: 'Images' },
+}));
+jest.mock('expo-image-manipulator', () => ({
+    manipulateAsync: jest.fn(),
+    SaveFormat: { JPEG: 'jpeg' },
+}));
+
+const CAPTURED_URI = 'file://captured-original.jpg';
+const MANIPULATED_URI = 'file://captured-manipulated.jpg';
+const fakeBlob = { __fake: 'blob' };
 
 beforeEach(() => {
     jest.clearAllMocks();
     callables.submitChatMessage.mockResolvedValue(undefined);
+    callables.submitKillPhoto.mockResolvedValue(undefined);
+    storageCalls.uploadKillPhoto.mockResolvedValue('https://example.com/photo.jpg');
+    ImagePicker.launchCameraAsync.mockResolvedValue({
+        canceled: false,
+        assets: [{ uri: CAPTURED_URI }],
+    });
+    ImageManipulator.manipulateAsync.mockResolvedValue({ uri: MANIPULATED_URI });
+    global.fetch = jest.fn(() => Promise.resolve({ blob: () => Promise.resolve(fakeBlob) }));
 });
 
 const mountComposer = (props = {}) =>
@@ -162,5 +198,230 @@ describe('ChatComposer', () => {
         await mountComposer();
 
         expect(screen.getByPlaceholderText('Type a message...').props.maxLength).toBe(500);
+    });
+
+    describe('camera capture flow', () => {
+        it('renders an enabled camera button by default (locationEnabled defaults to true)', async () => {
+            await mountComposer();
+
+            expect(screen.getByLabelText('Send photo').props.accessibilityState.disabled).toBe(
+                false
+            );
+        });
+
+        it('disables and relabels the camera button when locationEnabled is false', async () => {
+            await mountComposer({ locationEnabled: false });
+
+            expect(
+                screen.getByLabelText('Send photo (enable location first)').props
+                    .accessibilityState.disabled
+            ).toBe(true);
+        });
+
+        it('disables and relabels the camera button while blocked', async () => {
+            await mountComposer({ cameraBlockedUntil: Date.now() + 30000 });
+
+            expect(
+                screen.getByLabelText('Send photo (camera blocked)').props.accessibilityState
+                    .disabled
+            ).toBe(true);
+        });
+
+        it('ignores a camera block that has already ended', async () => {
+            await mountComposer({ cameraBlockedUntil: Date.now() - 1000 });
+
+            expect(screen.getByLabelText('Send photo').props.accessibilityState.disabled).toBe(
+                false
+            );
+        });
+
+        it('disables the camera button once the game has ended', async () => {
+            await mountComposer({ isGameActive: false });
+
+            expect(screen.getByLabelText('Send photo').props.accessibilityState.disabled).toBe(
+                true
+            );
+        });
+
+        it('disables the camera button when playerName is empty', async () => {
+            await mountComposer({ playerName: '' });
+
+            expect(screen.getByLabelText('Send photo').props.accessibilityState.disabled).toBe(
+                true
+            );
+        });
+
+        it('captures and manipulates a photo, then opens the modal with the manipulated preview', async () => {
+            await mountComposer();
+
+            await fireEvent.press(screen.getByLabelText('Send photo'));
+
+            expect(ImagePicker.launchCameraAsync).toHaveBeenCalledWith({
+                mediaTypes: 'Images',
+            });
+            expect(ImageManipulator.manipulateAsync).toHaveBeenCalledWith(
+                CAPTURED_URI,
+                [{ resize: { width: 1600 } }],
+                { compress: 0.8, format: 'jpeg' }
+            );
+            expect(screen.getByLabelText('Kill photo preview').props.source.uri).toBe(
+                MANIPULATED_URI
+            );
+        });
+
+        it('does nothing when the camera capture is canceled', async () => {
+            ImagePicker.launchCameraAsync.mockResolvedValue({ canceled: true, assets: null });
+            await mountComposer();
+
+            await fireEvent.press(screen.getByLabelText('Send photo'));
+
+            expect(ImageManipulator.manipulateAsync).not.toHaveBeenCalled();
+            expect(screen.queryByLabelText('Submit')).toBeNull();
+        });
+
+        it('compresses a captured photo before uploading it', async () => {
+            await mountComposer({
+                players: [{ name: 'Alice', targets: ['bob'], isAlive: true, openSeason: false }],
+            });
+
+            await fireEvent.press(screen.getByLabelText('Send photo'));
+            await fireEvent.press(screen.getByLabelText('Submit'));
+
+            await waitFor(() => expect(storageCalls.uploadKillPhoto).toHaveBeenCalled());
+            // The Blob is built from the MANIPULATED uri, not the original
+            // capture — fetch is only ever called with the manipulated uri.
+            expect(global.fetch).toHaveBeenCalledWith(MANIPULATED_URI);
+            expect(global.fetch).not.toHaveBeenCalledWith(CAPTURED_URI);
+            expect(storageCalls.uploadKillPhoto).toHaveBeenCalledWith('room-a', fakeBlob);
+        });
+
+        it('submits the resolved target claim, split into target/mission fields', async () => {
+            await mountComposer({
+                players: [{ name: 'Alice', targets: ['bob'], isAlive: true, openSeason: false }],
+            });
+
+            await fireEvent.press(screen.getByLabelText('Send photo'));
+            await fireEvent.press(screen.getByLabelText('Submit'));
+
+            await waitFor(() =>
+                expect(callables.submitKillPhoto).toHaveBeenCalledWith({
+                    roomId: 'room-a',
+                    url: 'https://example.com/photo.jpg',
+                    target: 'bob',
+                    mission: null,
+                    isFunPhoto: false,
+                })
+            );
+        });
+
+        it('submits a mission claim, split into target/mission fields, when that is the only open option', async () => {
+            await mountComposer({
+                players: [{ name: 'Alice', targets: [], isAlive: true, openSeason: false }],
+                missions: [
+                    {
+                        taskIndex: 3,
+                        title: 'Find the clue',
+                        taskType: 'Task',
+                        isComplete: false,
+                        completedBy: [],
+                    },
+                ],
+            });
+
+            await fireEvent.press(screen.getByLabelText('Send photo'));
+            await fireEvent.press(screen.getByLabelText('Submit'));
+
+            await waitFor(() =>
+                expect(callables.submitKillPhoto).toHaveBeenCalledWith({
+                    roomId: 'room-a',
+                    url: 'https://example.com/photo.jpg',
+                    target: null,
+                    mission: 3,
+                    isFunPhoto: false,
+                })
+            );
+        });
+
+        it('submits a fun-photo claim when there are no open targets or missions', async () => {
+            await mountComposer({
+                players: [{ name: 'Alice', targets: [], isAlive: true, openSeason: false }],
+            });
+
+            await fireEvent.press(screen.getByLabelText('Send photo'));
+            expect(
+                screen.getByText('No open targets or missions; this will be a fun photo.')
+            ).toBeTruthy();
+            await fireEvent.press(screen.getByLabelText('Submit'));
+
+            await waitFor(() =>
+                expect(callables.submitKillPhoto).toHaveBeenCalledWith({
+                    roomId: 'room-a',
+                    url: 'https://example.com/photo.jpg',
+                    target: null,
+                    mission: null,
+                    isFunPhoto: true,
+                })
+            );
+        });
+
+        it('closes the modal immediately on Submit, before uploadKillPhoto/submitKillPhoto resolve', async () => {
+            let resolveUpload;
+            storageCalls.uploadKillPhoto.mockImplementation(
+                () =>
+                    new Promise((resolve) => {
+                        resolveUpload = resolve;
+                    })
+            );
+            await mountComposer({
+                players: [{ name: 'Alice', targets: ['bob'], isAlive: true, openSeason: false }],
+            });
+
+            await fireEvent.press(screen.getByLabelText('Send photo'));
+            // Not awaited for the same reason as the Send-button test above:
+            // uploadKillPhoto is deliberately left pending.
+            const pressPromise = fireEvent.press(screen.getByLabelText('Submit'));
+
+            await waitFor(() => expect(screen.queryByLabelText('Submit')).toBeNull());
+            expect(callables.submitKillPhoto).not.toHaveBeenCalled();
+
+            resolveUpload('https://example.com/photo.jpg');
+            await pressPromise;
+
+            await waitFor(() => expect(callables.submitKillPhoto).toHaveBeenCalled());
+        });
+
+        it('alerts with the failure reason when the upload fails, after the modal has already closed', async () => {
+            storageCalls.uploadKillPhoto.mockRejectedValue(new Error('network error'));
+            const alertSpy = jest.spyOn(Alert, 'alert');
+            await mountComposer({
+                players: [{ name: 'Alice', targets: ['bob'], isAlive: true, openSeason: false }],
+            });
+
+            await fireEvent.press(screen.getByLabelText('Send photo'));
+            await fireEvent.press(screen.getByLabelText('Submit'));
+
+            await waitFor(() =>
+                expect(alertSpy).toHaveBeenCalledWith('Error submitting kill photo', 'network error')
+            );
+            expect(screen.queryByLabelText('Submit')).toBeNull();
+        });
+
+        it('alerts with the failure reason when submitKillPhoto rejects', async () => {
+            callables.submitKillPhoto.mockRejectedValue(new Error('This game has ended.'));
+            const alertSpy = jest.spyOn(Alert, 'alert');
+            await mountComposer({
+                players: [{ name: 'Alice', targets: ['bob'], isAlive: true, openSeason: false }],
+            });
+
+            await fireEvent.press(screen.getByLabelText('Send photo'));
+            await fireEvent.press(screen.getByLabelText('Submit'));
+
+            await waitFor(() =>
+                expect(alertSpy).toHaveBeenCalledWith(
+                    'Error submitting kill photo',
+                    'This game has ended.'
+                )
+            );
+        });
     });
 });
