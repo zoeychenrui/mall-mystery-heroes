@@ -556,7 +556,29 @@ const GameScreen = ({ route, navigation }) => {
                 per the player's own framing, "if u open up missions/
                 leaderboard/map, u cant see those things anwyays" — each
                 of the other four is a full page of its own with nothing
-                underneath for that chrome to sit on top of. */}
+                underneath for that chrome to sit on top of.
+
+                KeyboardAvoidingView wraps the pager + tab bar here, as a
+                direct child of this screen's own SafeAreaView — the same
+                nesting depth it had pre-redesign, when it wrapped just
+                body+composer directly inside this same SafeAreaView.
+                RN's KeyboardAvoidingView computes how far to push content
+                up from `frame.y` (its own onLayout position, relative to
+                its immediate parent only — not recursively up the whole
+                ancestor chain) combined with the keyboard's absolute
+                screen position; nesting it one level deeper instead, as
+                a child of the Chat page inside the pager, broke that math
+                on a real device (the composer ended up hidden behind the
+                keyboard entirely, not just short by an offset) — moving
+                it back up here instead of trying to compensate with a
+                guessed keyboardVerticalOffset. The Chat page's own header/
+                banners stay unaffected: they're siblings-above, inside a
+                different flex child (ChatFeed) that simply gets less
+                space, not pushed. */}
+            <KeyboardAvoidingView
+                style={styles.keyboardAvoiding}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
             <PagerView
                 testID="game-pager"
                 ref={pagerRef}
@@ -730,59 +752,51 @@ const GameScreen = ({ route, navigation }) => {
                         </View>
                     )}
 
-                    {/* Keyboard avoidance: the header/status-notices above
-                        are normal (non-absolute) siblings, so
-                        KeyboardAvoidingView's own onLayout measures this
-                        view's actual on-screen position already below them
-                        — no keyboardVerticalOffset is needed to avoid
-                        double-counting the header or the SafeAreaView's
-                        insets. Wraps body+composer (not the header/notices
-                        above) so only the part that needs to rise above the
-                        keyboard does. */}
-                    <KeyboardAvoidingView
-                        style={styles.keyboardAvoiding}
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    >
-                        <View style={styles.body}>
-                            {/* Location/boundary status
-                                (PlayerBoundaryPanel.js). Self-gates on
-                                gameBoundary?.enabled and playerData?.isAlive
-                                ?? true. The map page (PAGE_MAP) reads
-                                freshOwnPosition, freshOtherOutsidePositions
-                                plus pingPositions, and
-                                boundaryDisplay.mapStatusText. */}
-                            <LocationStatusPanel
-                                enabled={gameBoundary?.enabled === true}
-                                isAlive={playerData?.isAlive ?? true}
-                                permissionState={permissionState}
-                                requestPermission={requestPermission}
-                                liveBoundaryStatus={liveBoundaryStatus}
-                                isApproachingExposure={boundaryDisplay.isApproachingExposure}
-                                secondsUntilExposed={boundaryDisplay.secondsUntilExposed}
-                                statusText={boundaryDisplay.statusText}
-                                unavailableText={boundaryDisplay.unavailableText}
-                                lastCheckTime={boundaryDisplay.lastCheckTime}
-                                showUnavailableRetry={boundaryDisplay.showUnavailableRetry}
-                            />
-                            <ChatFeed
-                                roomID={roomID}
-                                playerName={playerName}
-                                pendingMessages={pendingMessages}
-                                onPendingMessageConfirmed={handlePendingMessageConfirmed}
-                                onShowPings={isMapAvailable ? handleShowPings : undefined}
-                            />
-                        </View>
-                        <ChatComposer
+                    {/* Keyboard avoidance for body+composer happens one
+                        level up now (the outer KeyboardAvoidingView
+                        wrapping the whole pager+tab-bar, below) — see its
+                        own comment for why this page no longer has its
+                        own. The header/status-notices above stay put
+                        either way; only ChatFeed's flex:1 space shrinks. */}
+                    <View style={styles.body}>
+                        {/* Location/boundary status
+                            (PlayerBoundaryPanel.js). Self-gates on
+                            gameBoundary?.enabled and playerData?.isAlive
+                            ?? true. The map page (PAGE_MAP) reads
+                            freshOwnPosition, freshOtherOutsidePositions
+                            plus pingPositions, and
+                            boundaryDisplay.mapStatusText. */}
+                        <LocationStatusPanel
+                            enabled={gameBoundary?.enabled === true}
+                            isAlive={playerData?.isAlive ?? true}
+                            permissionState={permissionState}
+                            requestPermission={requestPermission}
+                            liveBoundaryStatus={liveBoundaryStatus}
+                            isApproachingExposure={boundaryDisplay.isApproachingExposure}
+                            secondsUntilExposed={boundaryDisplay.secondsUntilExposed}
+                            statusText={boundaryDisplay.statusText}
+                            unavailableText={boundaryDisplay.unavailableText}
+                            lastCheckTime={boundaryDisplay.lastCheckTime}
+                            showUnavailableRetry={boundaryDisplay.showUnavailableRetry}
+                        />
+                        <ChatFeed
                             roomID={roomID}
                             playerName={playerName}
-                            isGameActive={isGameActive}
-                            players={players}
-                            missions={missions}
-                            cameraBlockedUntil={playerData?.cameraBlockedUntil ?? null}
-                            onOptimisticSend={handleOptimisticSend}
-                            onOptimisticSendFailed={handleOptimisticSendFailed}
+                            pendingMessages={pendingMessages}
+                            onPendingMessageConfirmed={handlePendingMessageConfirmed}
+                            onShowPings={isMapAvailable ? handleShowPings : undefined}
                         />
-                    </KeyboardAvoidingView>
+                    </View>
+                    <ChatComposer
+                        roomID={roomID}
+                        playerName={playerName}
+                        isGameActive={isGameActive}
+                        players={players}
+                        missions={missions}
+                        cameraBlockedUntil={playerData?.cameraBlockedUntil ?? null}
+                        onOptimisticSend={handleOptimisticSend}
+                        onOptimisticSendFailed={handleOptimisticSendFailed}
+                    />
                 </View>
                 <View key="leaderboard" style={styles.page}>
                     <LeaderboardModal standings={buildLeaderboardStandings(players)} />
@@ -802,6 +816,7 @@ const GameScreen = ({ route, navigation }) => {
             </PagerView>
 
             <BottomTabBar activePage={activePage} onSelect={handleSelectTab} />
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 };
