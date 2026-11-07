@@ -14,7 +14,16 @@ export default function App() {
 
     useEffect(() => {
         let cancelled = false;
-        readPlayerSession().then((session) => {
+        // auth.currentUser is not reliable right after launch: the Firebase
+        // JS SDK restores the signed-in user from AsyncStorage
+        // asynchronously (a storage read, then a network call), and nothing
+        // here was waiting on that — readPlayerSession() is a completely
+        // separate, unrelated async read with no ordering guarantee against
+        // it. Without authStateReady(), currentUser reads as null almost
+        // every time on a real device (AsyncStorage/network always lose
+        // that race), so a genuinely still-signed-in player with a stored
+        // session was being sent to Join instead of resumed into the game.
+        Promise.all([readPlayerSession(), auth.authStateReady()]).then(([session]) => {
             if (cancelled) return;
             if (session && auth.currentUser) {
                 setInitialRoute({ name: 'Game', params: { roomID: session.roomID } });

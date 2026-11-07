@@ -155,6 +155,66 @@ describe('GameMapModal', () => {
         expect(mockAnimateToRegion).not.toHaveBeenCalled();
     });
 
+    it('does not re-center on every later position update while the page stays active', async () => {
+        // useBoundaryLocation's watch delivers one update per OS fix
+        // (timeInterval/distanceInterval both 0), so ownPosition's identity
+        // changes constantly while this page is open — only the first one
+        // per visit should move the map, or a player panning to look at
+        // someone else gets yanked back moments later.
+        const { rerender } = await render(
+            <GameMapModal
+                isActive
+                boundaryVertices={RING}
+                ownPosition={{ lat: 10, lng: 20, accuracyM: 12 }}
+                otherPositions={[]}
+            />
+        );
+        expect(mockAnimateToRegion).toHaveBeenCalledTimes(1);
+
+        await rerender(
+            <GameMapModal
+                isActive
+                boundaryVertices={RING}
+                ownPosition={{ lat: 10.001, lng: 20.001, accuracyM: 10 }}
+                otherPositions={[]}
+            />
+        );
+        expect(mockAnimateToRegion).toHaveBeenCalledTimes(1);
+    });
+
+    it('centers again on the next visit after the page goes inactive and active again', async () => {
+        const { rerender } = await render(
+            <GameMapModal
+                isActive
+                boundaryVertices={RING}
+                ownPosition={{ lat: 10, lng: 20, accuracyM: 12 }}
+                otherPositions={[]}
+            />
+        );
+        expect(mockAnimateToRegion).toHaveBeenCalledTimes(1);
+
+        await rerender(
+            <GameMapModal
+                isActive={false}
+                boundaryVertices={RING}
+                ownPosition={{ lat: 10, lng: 20, accuracyM: 12 }}
+                otherPositions={[]}
+            />
+        );
+        await rerender(
+            <GameMapModal
+                isActive
+                boundaryVertices={RING}
+                ownPosition={{ lat: 30, lng: 40, accuracyM: 12 }}
+                otherPositions={[]}
+            />
+        );
+        expect(mockAnimateToRegion).toHaveBeenCalledTimes(2);
+        expect(mockAnimateToRegion).toHaveBeenLastCalledWith(
+            expect.objectContaining({ latitude: 30, longitude: 40 })
+        );
+    });
+
     it('shows a message instead of an empty map when zones are not enabled', async () => {
         await renderModal({ zonesEnabled: false });
         expect(screen.getByText("Zones aren't enabled for this game.")).toBeTruthy();
@@ -164,5 +224,21 @@ describe('GameMapModal', () => {
     it('renders the real map as usual when zones are enabled', async () => {
         await renderModal({ zonesEnabled: true });
         expect(screen.getByTestId('game-map-view')).toBeTruthy();
+    });
+
+    // Parity with the web/old isMapAvailable, which hid the map in these
+    // same two cases — not just UI tidiness: an eliminated player relaying
+    // exposed players' live positions out of band to a still-alive friend
+    // is a real meta-gaming risk in an in-person game.
+    it('shows a message instead of the map once the game has ended', async () => {
+        await renderModal({ isGameActive: false });
+        expect(screen.getByText('The game has ended.')).toBeTruthy();
+        expect(screen.queryByTestId('game-map-view')).toBeNull();
+    });
+
+    it("shows a message instead of the map once the player is eliminated", async () => {
+        await renderModal({ isAlive: false });
+        expect(screen.getByText("You can't view the map while eliminated.")).toBeTruthy();
+        expect(screen.queryByTestId('game-map-view')).toBeNull();
     });
 });

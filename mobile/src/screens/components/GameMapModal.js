@@ -63,17 +63,34 @@ const GameMapModal = ({
     // player is looking at a completely different tab.
     isActive = false,
     // Previously this page's own tab/entry-point just didn't exist unless
-    // the host had zones enabled. Now that it's a fixed tab always
-    // reachable (the Clash-Royale-style redesign has no conditionally
-    // hidden tabs), an explicit message here stands in for that instead of
-    // showing an interactive but permanently empty map.
+    // isGameActive && zonesEnabled && isAlive (GameScreen's old
+    // isMapAvailable). Now that the tab is always reachable (the
+    // Clash-Royale-style redesign has no conditionally hidden tabs), a
+    // message here stands in for that instead of showing an interactive
+    // map. isGameActive/isAlive matter for the same reason the web hides
+    // the map from eliminated/post-game players, not just UI tidiness: an
+    // eliminated player watching exposed players' live positions and
+    // relaying that out of band (a text, a shout across the room) to a
+    // still-alive friend is a real meta-gaming risk in an in-person game,
+    // not merely a cosmetic one.
     zonesEnabled = true,
+    isGameActive = true,
+    isAlive = true,
     boundaryVertices = [],
     ownPosition,
     otherPositions = [],
     statusText,
 }) => {
     const mapRef = useRef(null);
+    // Whether this "visit" to the map page has already auto-centered once.
+    // Reset to false the moment the page goes inactive, so the NEXT visit
+    // centers fresh again. Without this, the effect below would re-fire
+    // (and re-center) on every single GPS update while the page stays
+    // active — useBoundaryLocation's watch delivers one with
+    // timeInterval/distanceInterval both 0, i.e. every update the OS
+    // produces, so a player panning around to look at an exposed player
+    // would get yanked back to their own position moments later.
+    const hasCenteredRef = useRef(false);
 
     const handleRecenter = () => {
         if (!mapRef.current || !ownPosition) return;
@@ -84,14 +101,20 @@ const GameMapModal = ({
         });
     };
 
-    // Auto-center once, the moment a fresh position becomes available
-    // while this page is the one showing — otherwise the map opens on
-    // MapView's bare default region (center of nowhere) until the player
-    // notices and taps Recenter themselves. Runs again any time
-    // ownPosition's identity changes (e.g. this page was opened before a
-    // fix existed, then one arrives).
+    // Auto-center once per visit, the moment a fresh position becomes
+    // available while this page is the one showing — otherwise the map
+    // opens on MapView's bare default region (center of nowhere) until the
+    // player notices and taps Recenter themselves. Still reacts to
+    // ownPosition arriving late (e.g. this page was opened before a fix
+    // existed), just not to every update after the first center.
     useEffect(() => {
-        if (isActive) handleRecenter();
+        if (!isActive) {
+            hasCenteredRef.current = false;
+            return;
+        }
+        if (hasCenteredRef.current || !ownPosition) return;
+        handleRecenter();
+        hasCenteredRef.current = true;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isActive, ownPosition]);
 
@@ -100,16 +123,22 @@ const GameMapModal = ({
         longitude: point.lng,
     }));
 
-    if (!zonesEnabled) {
+    const unavailableMessage = !zonesEnabled
+        ? "Zones aren't enabled for this game."
+        : !isGameActive
+          ? 'The game has ended.'
+          : !isAlive
+            ? "You can't view the map while eliminated."
+            : null;
+
+    if (unavailableMessage) {
         return (
             <View style={styles.container}>
                 <View style={styles.header}>
                     <Text style={styles.title}>Game Area</Text>
                 </View>
                 <View style={styles.emptyState}>
-                    <Text style={styles.emptyStateText}>
-                        Zones aren&apos;t enabled for this game.
-                    </Text>
+                    <Text style={styles.emptyStateText}>{unavailableMessage}</Text>
                 </View>
             </View>
         );

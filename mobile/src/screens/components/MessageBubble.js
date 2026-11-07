@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { normalizePlayerName } from '../../../../src/game/playerNames';
 import { formatMessageTime } from '../../../../src/utils/formatMessageTime';
 import LeaderboardModal, { StandingLine } from './LeaderboardModal';
@@ -19,6 +20,11 @@ const captureTime = (ms) =>
 const MessageBubble = ({ message, playerName, onShowPings }) => {
     const [isPhotoOpen, setIsPhotoOpen] = useState(false);
     const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+    // Only the 'gameEndedLeaderboard' branch's own Modal needs this — see
+    // its leaderboardModalOverlay/leaderboardModalClose usage below. Read
+    // once up here, not conditionally, same reason every other hook in
+    // this file runs unconditionally.
+    const insets = useSafeAreaInsets();
     const mission = message.mission ?? {};
     // Only 'chat' messages have a sender to compare — every other type
     // (whisper/broadcast/leaderboard/mission) is GM-authored and has no
@@ -84,19 +90,24 @@ const MessageBubble = ({ message, playerName, onShowPings }) => {
                     now (despite the filename) — it owns no Modal/isOpen of
                     its own, so this, its only other call site, provides
                     its own Modal + close button around the same pure
-                    standings list. */}
+                    standings list. This Modal renders in its own native
+                    window that bypasses whatever SafeAreaView wraps the
+                    rest of the app — the exact bug fixed in ee83926 for the
+                    map's full-screen Modal — so the top inset is applied by
+                    hand here (useSafeAreaInsets(), read unconditionally
+                    above), the same fix, since this is full-screen too. */}
                 <Modal
                     visible={isLeaderboardOpen}
                     transparent
                     animationType="fade"
                     onRequestClose={() => setIsLeaderboardOpen(false)}
                 >
-                    <View style={styles.leaderboardModalOverlay}>
+                    <View style={[styles.leaderboardModalOverlay, { paddingTop: insets.top }]}>
                         <LeaderboardModal standings={standings} />
                         <Pressable
                             accessibilityRole="button"
                             accessibilityLabel="Close leaderboard"
-                            style={styles.leaderboardModalClose}
+                            style={[styles.leaderboardModalClose, { top: insets.top + 16 }]}
                             onPress={() => setIsLeaderboardOpen(false)}
                         >
                             <Text style={styles.leaderboardModalCloseText}>✕</Text>
@@ -300,8 +311,10 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     leaderboardModalClose: {
+        // `top` is always supplied inline (insets.top + 16) — see the
+        // render above — not a static value here, since it depends on the
+        // device's safe-area inset.
         position: 'absolute',
-        top: 16,
         right: 16,
         paddingHorizontal: 8,
     },

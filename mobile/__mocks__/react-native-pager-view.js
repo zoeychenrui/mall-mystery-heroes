@@ -10,7 +10,10 @@ const React = require('react');
 const { View } = require('react-native');
 
 const PagerView = React.forwardRef(
-    ({ children, onPageSelected, initialPage = 0, testID, style }, ref) => {
+    (
+        { children, onPageSelected, initialPage = 0, testID, style, scrollEnabled, ...rest },
+        ref
+    ) => {
         const [page, setPage] = React.useState(initialPage);
 
         const goTo = React.useCallback(
@@ -27,7 +30,15 @@ const PagerView = React.forwardRef(
         }));
 
         const pages = React.Children.toArray(children);
-        return React.createElement(View, { testID, style }, pages[page] ?? null);
+        // scrollEnabled only ever gates a real touch gesture, which this
+        // mock has no equivalent of — forwarded as a prop purely so a test
+        // can assert GameScreen computed the right value, same as any
+        // other prop this mock doesn't otherwise act on.
+        return React.createElement(
+            View,
+            { testID, style, scrollEnabled, ...rest },
+            pages[page] ?? null
+        );
     }
 );
 

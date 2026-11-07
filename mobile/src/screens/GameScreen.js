@@ -50,16 +50,19 @@ const PAGE_MAP = 4;
 // The player's in-game screen — a port of the web app's src/pages/PlayerGame.js
 // plus the pieces of it that live in src/components/player_game/
 // (PlayerGameHeader, PlayerGameDialogs, PlayerGameStatusNotices,
-// PlayerRulesModal). Like the web page, this one screen is both the waiting
+// PlayerRulesModal), now rebuilt around a Clash-Royale-style five-page
+// PagerView (Shop/Missions/Chat/Leaderboard/Map, always reachable, via
+// BottomTabBar.js or a swipe). This one screen is still both the waiting
 // room and the main game: nothing here is wrapped in one big
-// `{gameStarted && ...}`. The header (Leave, Rules, avatar) and chat are
-// always mounted, and every gated piece checks its own precondition
-// (gameStarted, isGameActive, playerData?.isAlive, gameBoundary?.enabled).
+// `{gameStarted && ...}`, and every gated piece checks its own
+// precondition (gameStarted, isGameActive, playerData?.isAlive,
+// gameBoundary?.enabled). The header/Leave/Rules/avatar/status-notices/
+// location-panel chrome is mounted only on the Chat page — see that
+// page's own comment further down for why.
 //
-// This is the shell later tasks mount into. The state below — gameBoundary,
-// players, missions, playerData — is produced here even where nothing in
-// this file renders it yet, because Tasks 9-15 read it as props from the
-// empty slots marked "Task N" further down.
+// The state below — gameBoundary, players, missions, playerData — is
+// produced here and handed down as props to whichever of the five pages
+// renders it, even where a given page doesn't use all of it.
 const GameScreen = ({ route, navigation }) => {
     const { roomID } = route.params ?? {};
     const [gameStarted, setGameStarted] = useState(false);
@@ -555,9 +558,22 @@ const GameScreen = ({ route, navigation }) => {
                 of the other four is a full page of its own with nothing
                 underneath for that chrome to sit on top of. */}
             <PagerView
+                testID="game-pager"
                 ref={pagerRef}
                 style={styles.pager}
                 initialPage={PAGE_CHAT}
+                // Otherwise swiping away from Chat mid-type leaves the
+                // keyboard up over whichever page you land on, the same
+                // "nothing dismisses it but the keyboard's own return key"
+                // gap already fixed on the Join screen.
+                keyboardDismissMode="on-drag"
+                // Android's ViewPager2 (what this is built on, on that
+                // platform) and a MapView both want to own a horizontal
+                // drag — a known conflict. Disabling swipe-to-change-page
+                // only while the Map page is showing avoids it; the bottom
+                // tab bar (pagerRef.current.setPage, not a touch gesture)
+                // still works to leave the map regardless of this prop.
+                scrollEnabled={activePage !== PAGE_MAP}
                 onPageSelected={handlePageSelected}
             >
                 <View key="shop" style={styles.page}>
@@ -569,6 +585,9 @@ const GameScreen = ({ route, navigation }) => {
                         players={players}
                         horcruxActive={horcruxActive}
                         zonesEnabled={gameBoundary?.enabled === true}
+                        gameStarted={gameStarted}
+                        isGameActive={isGameActive}
+                        isAlive={playerData?.isAlive ?? true}
                         pendingMysteryItem={playerData?.pendingMysteryItem ?? null}
                         purchasePowerUp={callables.purchasePowerUp}
                         claimMysteryReward={callables.claimMysteryReward}
@@ -772,6 +791,8 @@ const GameScreen = ({ route, navigation }) => {
                     <GameMapModal
                         isActive={activePage === PAGE_MAP}
                         zonesEnabled={gameBoundary?.enabled === true}
+                        isGameActive={isGameActive}
+                        isAlive={playerData?.isAlive ?? true}
                         boundaryVertices={gameBoundary?.vertices ?? []}
                         ownPosition={freshOwnPosition}
                         otherPositions={[...freshOtherOutsidePositions, ...pingPositions]}
@@ -810,7 +831,7 @@ const RULES_SECTIONS = [
     {
         heading: 'Zones',
         items: [
-            'The host can decide to enable zones in the game. Users must accept location permissions to submit photos.',
+            'The host can decide to enable zones in the game.',
             'If these zones are enabled, use the map to locate individuals who are outside of the zone.',
         ],
     },

@@ -11,7 +11,11 @@ jest.mock('./src/utils/playerSession');
 // `.currentUser` directly, same as the real SDK's auth object.
 jest.mock('./src/firebase/firebaseConfig', () => ({
     db: {},
-    auth: { currentUser: null },
+    // authStateReady() resolves once the SDK's own async restore (an
+    // AsyncStorage read, then a network call on a real device) has set
+    // currentUser one way or the other — tests set currentUser first, then
+    // resolve this, the same order a real app sees it in.
+    auth: { currentUser: null, authStateReady: jest.fn().mockResolvedValue(undefined) },
 }));
 // Resuming into Game mounts the real GameScreen (unlike the Join-screen
 // cases below, App.js itself never touches dbCalls/firestore — this is only
@@ -50,5 +54,34 @@ describe('App launch', () => {
         auth.currentUser = null;
         const { findByTestId } = await render(<App />);
         await findByTestId('join-screen');
+    });
+
+    // Real-device regression: the Firebase SDK restores the signed-in user
+    // from AsyncStorage asynchronously (a storage read, then a network
+    // call) — readPlayerSession() is unrelated and has no reason to finish
+    // after that restore does. This simulates the restore landing LAST, the
+    // way it actually does on a device, to prove App.js waits for it rather
+    // than reading currentUser the instant readPlayerSession() resolves.
+    it('resumes into Game even when auth restore finishes after the session read', async () => {
+        readPlayerSession.mockResolvedValue({ roomID: 'ROOM1', playerName: 'Alice' });
+        let resolveAuthRestore;
+        auth.authStateReady.mockReturnValue(
+            new Promise((resolve) => {
+                resolveAuthRestore = () => {
+                    auth.currentUser = { uid: 'uid1' };
+                    resolve();
+                };
+            })
+        );
+        auth.currentUser = null;
+
+        const { findByTestId, queryByTestId } = await render(<App />);
+        // Still waiting on auth restore — must not have already decided
+        // Join just because the session read alone came back.
+        expect(queryByTestId('join-screen')).toBeNull();
+        expect(queryByTestId('game-screen')).toBeNull();
+
+        resolveAuthRestore();
+        await findByTestId('game-screen');
     });
 });

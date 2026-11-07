@@ -533,6 +533,21 @@ describe('GameScreen', () => {
             await waitFor(() => expect(queryByTestId('game-map-view')).toBeNull());
         });
 
+        it('disables page-swiping only while the Map page is showing, so it never fights a real device MapView for horizontal drags', async () => {
+            driveSnapshots({
+                room: { gameStarted: true, isGameActive: true, gameBoundary: ENABLED_BOUNDARY },
+                player: { isAlive: true },
+            });
+            const { findByLabelText, findByTestId } = await renderScreen();
+            expect((await findByTestId('game-pager')).props.scrollEnabled).toBe(true);
+
+            await fireEvent.press(await findByLabelText('Map'));
+            expect((await findByTestId('game-pager')).props.scrollEnabled).toBe(false);
+
+            await fireEvent.press(await findByLabelText('Chat'));
+            expect((await findByTestId('game-pager')).props.scrollEnabled).toBe(true);
+        });
+
         it('opens the map with a ping card\'s positions via "View on map"', async () => {
             driveSnapshots({
                 room: { gameStarted: true, isGameActive: true, gameBoundary: ENABLED_BOUNDARY },

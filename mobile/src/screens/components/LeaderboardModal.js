@@ -30,6 +30,7 @@ const LeaderboardModal = ({ standings }) => (
             keyExtractor={(entry) => entry.name}
             renderItem={({ item, index }) => <StandingLine entry={item} index={index} />}
             contentContainerStyle={styles.body}
+            ListEmptyComponent={<Text style={styles.empty}>No standings yet.</Text>}
         />
     </View>
 );
@@ -60,6 +61,11 @@ const styles = StyleSheet.create({
     },
     lineEliminated: {
         color: '#A0AEC0', // gray.400
+    },
+    empty: {
+        color: '#A0AEC0', // gray.400
+        textAlign: 'center',
+        marginTop: 16,
     },
 });
 

@@ -33,4 +33,10 @@ describe('LeaderboardModal', () => {
         expect(screen.getByText('2. Bob — 20 (eliminated)')).toBeTruthy();
         expect(screen.queryByText('1. Alice — 30 (eliminated)')).toBeNull();
     });
+
+    it('shows an empty state before the players list has any standings yet (e.g. the waiting room)', async () => {
+        await renderModal({ standings: [] });
+
+        expect(screen.getByText('No standings yet.')).toBeTruthy();
+    });
 });

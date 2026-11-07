@@ -4,11 +4,13 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 // order (Shop, Missions, Chat, Leaderboard, Map) — tapping one jumps
 // GameScreen's PagerView straight to that page; swiping between pages
 // (GameScreen's own PagerView) keeps this in sync the other way, via
-// `activePage`. There is no hiding/disabling any of the five — the item
-// shop and the map both already explain themselves when they can't be
-// used right now (purchaseBlockReason's per-item reasons; an empty map
-// when zones aren't enabled), so a tab disappearing or going gray here
-// would just be one more thing to keep in sync for no real benefit.
+// `activePage`. There is no hiding/disabling any of the five here — the
+// shop (PowerUpShopModal.js's shopUnavailableMessage) and the map
+// (GameMapModal.js's unavailableMessage) each show their own message in
+// place of their normal content whenever they're not usable right now
+// (game not started/ended, eliminated, zones off), so a tab disappearing
+// or going gray here would just be one more thing to keep in sync for no
+// real benefit.
 export const TABS = [
     { label: 'Shop', icon: require('../../../assets/icons/shop-white.png') },
     { label: 'Missions', icon: require('../../../assets/icons/mission-white.png') },

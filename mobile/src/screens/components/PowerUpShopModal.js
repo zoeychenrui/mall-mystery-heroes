@@ -136,13 +136,17 @@ const ShopItemCard = ({
 // waiting server-side (`pendingMysteryItem`); the shop offers it again.
 //
 // Deliberately NOT its own <Modal> — this renders as an absolutely
-// positioned overlay inside the shop's own Modal instead. A real device
-// showed that presenting a second native Modal on iOS while the shop's
-// Modal is still open can silently fail to appear at all (iOS modal
-// presentation is a chain from whichever view controller is currently on
-// screen; RN's Modal doesn't manage that chaining), which Jest's Modal
-// mock never exercises since it has no real native presentation to fail.
-// Only ever one real Modal exists now.
+// positioned overlay within the shop's own page content instead (the shop
+// itself has had no Modal of its own at all since the Clash-Royale-style
+// redesign — it's a plain page, like the rest of GameScreen's five
+// pages). Originally fixed this way because a real device showed that
+// presenting a second native Modal on iOS while the shop's own Modal was
+// still open could silently fail to appear at all (iOS modal presentation
+// is a chain from whichever view controller is currently on screen; RN's
+// Modal doesn't manage that chaining), which Jest's Modal mock never
+// exercised since it has no real native presentation to fail. The shop
+// having no Modal at all now makes that scenario moot, but the overlay
+// approach stayed since it already worked and needed no further change.
 const MysteryBoxReveal = ({
     isOpen,
     label,
@@ -234,6 +238,17 @@ const PowerUpShopModal = ({
     players = [],
     horcruxActive = false,
     zonesEnabled = true,
+    // Previously the Shop tab/entry-point itself just didn't exist unless
+    // gameStarted && isGameActive && isAlive (GameScreen's old `canShop`).
+    // Now that the tab is always reachable (the Clash-Royale-style redesign
+    // has no conditionally hidden tabs), these three replace that: a
+    // message stands in for the whole item grid instead of letting the
+    // player tap into purchases that would only fail, with "[400]", once
+    // they round-trip to the server (which still independently enforces
+    // all three — this is a UI nicety, not the actual safety boundary).
+    gameStarted = true,
+    isGameActive = true,
+    isAlive = true,
     pendingMysteryItem = null, // an item id, from the player doc
     purchasePowerUp,
     claimMysteryReward,
@@ -302,101 +317,121 @@ const PowerUpShopModal = ({
             ? 'This location reward is unavailable while zones are off.'
             : '';
 
+    const shopUnavailableMessage = !gameStarted
+        ? 'The shop opens once the game starts.'
+        : !isGameActive
+          ? 'The shop is closed — the game has ended.'
+          : !isAlive
+            ? "Eliminated players can't shop."
+            : null;
+
+    if (shopUnavailableMessage) {
+        return (
+            <View style={styles.overlay}>
+                <View style={styles.content}>
+                    <View style={styles.header}>
+                        <Text style={styles.title}>Shop</Text>
+                    </View>
+                    <View style={styles.unavailableState}>
+                        <Text style={styles.unavailableStateText}>{shopUnavailableMessage}</Text>
+                    </View>
+                </View>
+            </View>
+        );
+    }
+
     return (
         <View style={styles.overlay}>
             <View style={styles.content}>
-                        <View style={styles.header}>
-                            <View style={styles.headerTitleRow}>
-                                <Text style={styles.title}>Shop</Text>
-                            </View>
-                            <View style={styles.headerInfoRow}>
-                                <Text style={styles.pointsText}>
-                                    Your points: {Number(score) || 0}
-                                </Text>
-                                <Text style={styles.cdLegendText}>CD = cooldown</Text>
-                            </View>
-                            {horcruxActive && (
-                                <Text style={styles.horcruxBadge}>🛡️ Horcrux active</Text>
-                            )}
-                        </View>
-
-                        {pendingMysteryItem && !reveal && (
-                            <View style={styles.pendingBanner}>
-                                <Text style={styles.pendingBannerText}>
-                                    Your mystery box reward is waiting: {pendingItem?.name}
-                                </Text>
-                                {pendingRewardUnavailable && (
-                                    <Text style={styles.pendingBannerWarning}>
-                                        This location reward is unavailable while zones are off.
-                                    </Text>
-                                )}
-                                <Pressable
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Pick a player for your mystery reward"
-                                    accessibilityState={{ disabled: pendingRewardUnavailable }}
-                                    disabled={pendingRewardUnavailable}
-                                    onPress={openPendingReveal}
-                                    style={[
-                                        styles.pendingButton,
-                                        pendingRewardUnavailable && styles.pendingButtonDisabled,
-                                    ]}
-                                >
-                                    <Text style={styles.pendingButtonText}>Pick a player</Text>
-                                </Pressable>
-                            </View>
-                        )}
-
-                        <FlatList
-                            data={POWER_UPS}
-                            keyExtractor={(item) => item.id}
-                            numColumns={2}
-                            columnWrapperStyle={styles.gridRow}
-                            contentContainerStyle={styles.gridBody}
-                            renderItem={({ item }) => {
-                                const cooldownEndsAtMs = toMs(cooldowns[item.id]);
-                                const { secondsLeft } = cooldownRemaining({
-                                    cooldownEndsAtMs,
-                                    nowMs,
-                                    cooldownSeconds: item.cooldownSeconds,
-                                });
-                                const disabledReason =
-                                    buyingItemId === item.id
-                                        ? 'Buying…'
-                                        : purchaseBlockReason({
-                                              item,
-                                              score,
-                                              cooldownEndsAtMs,
-                                              nowMs,
-                                              targetName: targets[item.id],
-                                              horcruxActive,
-                                              boundaryEnabled: zonesEnabled,
-                                          });
-
-                                return (
-                                    <View style={styles.gridCell}>
-                                        <ShopItemCard
-                                            item={item}
-                                            secondsLeft={secondsLeft}
-                                            disabledReason={disabledReason}
-                                            targetName={targets[item.id]}
-                                            pickablePlayers={pickablePlayers}
-                                            onPickTarget={handlePickTarget}
-                                            onBuy={() => handleBuy(item)}
-                                        />
-                                    </View>
-                                );
-                            }}
-                        />
+                <View style={styles.header}>
+                    <View style={styles.headerTitleRow}>
+                        <Text style={styles.title}>Shop</Text>
                     </View>
-                <MysteryBoxReveal
-                    isOpen={reveal !== null}
-                    label={reveal?.label}
-                    needsTarget={reveal?.needsTarget}
-                    unavailableMessage={revealUnavailableMessage}
-                    pickablePlayers={pickablePlayers}
-                    onClaim={(targetName) => claimMysteryReward({ roomId: roomID, targetName })}
-                    onClose={() => setReveal(null)}
+                    <View style={styles.headerInfoRow}>
+                        <Text style={styles.pointsText}>Your points: {Number(score) || 0}</Text>
+                        <Text style={styles.cdLegendText}>CD = cooldown</Text>
+                    </View>
+                    {horcruxActive && <Text style={styles.horcruxBadge}>🛡️ Horcrux active</Text>}
+                </View>
+
+                {pendingMysteryItem && !reveal && (
+                    <View style={styles.pendingBanner}>
+                        <Text style={styles.pendingBannerText}>
+                            Your mystery box reward is waiting: {pendingItem?.name}
+                        </Text>
+                        {pendingRewardUnavailable && (
+                            <Text style={styles.pendingBannerWarning}>
+                                This location reward is unavailable while zones are off.
+                            </Text>
+                        )}
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Pick a player for your mystery reward"
+                            accessibilityState={{ disabled: pendingRewardUnavailable }}
+                            disabled={pendingRewardUnavailable}
+                            onPress={openPendingReveal}
+                            style={[
+                                styles.pendingButton,
+                                pendingRewardUnavailable && styles.pendingButtonDisabled,
+                            ]}
+                        >
+                            <Text style={styles.pendingButtonText}>Pick a player</Text>
+                        </Pressable>
+                    </View>
+                )}
+
+                <FlatList
+                    data={POWER_UPS}
+                    keyExtractor={(item) => item.id}
+                    numColumns={2}
+                    columnWrapperStyle={styles.gridRow}
+                    contentContainerStyle={styles.gridBody}
+                    renderItem={({ item }) => {
+                        const cooldownEndsAtMs = toMs(cooldowns[item.id]);
+                        const { secondsLeft } = cooldownRemaining({
+                            cooldownEndsAtMs,
+                            nowMs,
+                            cooldownSeconds: item.cooldownSeconds,
+                        });
+                        const disabledReason =
+                            buyingItemId === item.id
+                                ? 'Buying…'
+                                : purchaseBlockReason({
+                                      item,
+                                      score,
+                                      cooldownEndsAtMs,
+                                      nowMs,
+                                      targetName: targets[item.id],
+                                      isAlive,
+                                      horcruxActive,
+                                      boundaryEnabled: zonesEnabled,
+                                  });
+
+                        return (
+                            <View style={styles.gridCell}>
+                                <ShopItemCard
+                                    item={item}
+                                    secondsLeft={secondsLeft}
+                                    disabledReason={disabledReason}
+                                    targetName={targets[item.id]}
+                                    pickablePlayers={pickablePlayers}
+                                    onPickTarget={handlePickTarget}
+                                    onBuy={() => handleBuy(item)}
+                                />
+                            </View>
+                        );
+                    }}
                 />
+            </View>
+            <MysteryBoxReveal
+                isOpen={reveal !== null}
+                label={reveal?.label}
+                needsTarget={reveal?.needsTarget}
+                unavailableMessage={revealUnavailableMessage}
+                pickablePlayers={pickablePlayers}
+                onClaim={(targetName) => claimMysteryReward({ roomId: roomID, targetName })}
+                onClose={() => setReveal(null)}
+            />
         </View>
     );
 };
@@ -409,6 +444,16 @@ const styles = StyleSheet.create({
     content: {
         flex: 1,
         backgroundColor: '#202030',
+    },
+    unavailableState: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 32,
+    },
+    unavailableStateText: {
+        color: '#A0AEC0', // gray.400
+        textAlign: 'center',
     },
     header: {
         padding: 16,

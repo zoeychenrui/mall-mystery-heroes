@@ -197,4 +197,27 @@ describe('PowerUpShopModal', () => {
 
         expect(screen.getByText('1:04')).toBeTruthy();
     });
+
+    // Parity with the web/old canShop, which hid the shop entirely in
+    // these three cases — not just UI tidiness: the server (loadBuyer,
+    // purchasePowerUp.js) independently rejects all three regardless, so
+    // this is purely about not letting the player tap into a purchase
+    // that can only ever fail with a raw "[400]" error.
+    it('shows a message instead of the item grid before the game has started', async () => {
+        await renderModal({ gameStarted: false });
+        expect(screen.getByText('The shop opens once the game starts.')).toBeTruthy();
+        expect(screen.queryByTestId('shop-item-horcrux')).toBeNull();
+    });
+
+    it('shows a message instead of the item grid once the game has ended', async () => {
+        await renderModal({ isGameActive: false });
+        expect(screen.getByText('The shop is closed — the game has ended.')).toBeTruthy();
+        expect(screen.queryByTestId('shop-item-horcrux')).toBeNull();
+    });
+
+    it("shows a message instead of the item grid once the player is eliminated", async () => {
+        await renderModal({ isAlive: false });
+        expect(screen.getByText("Eliminated players can't shop.")).toBeTruthy();
+        expect(screen.queryByTestId('shop-item-horcrux')).toBeNull();
+    });
 });
