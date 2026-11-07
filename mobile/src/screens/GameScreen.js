@@ -558,23 +558,30 @@ const GameScreen = ({ route, navigation }) => {
                 of the other four is a full page of its own with nothing
                 underneath for that chrome to sit on top of.
 
-                KeyboardAvoidingView wraps the pager + tab bar here, as a
-                direct child of this screen's own SafeAreaView — the same
-                nesting depth it had pre-redesign, when it wrapped just
-                body+composer directly inside this same SafeAreaView.
-                RN's KeyboardAvoidingView computes how far to push content
-                up from `frame.y` (its own onLayout position, relative to
-                its immediate parent only — not recursively up the whole
-                ancestor chain) combined with the keyboard's absolute
-                screen position; nesting it one level deeper instead, as
-                a child of the Chat page inside the pager, broke that math
-                on a real device (the composer ended up hidden behind the
-                keyboard entirely, not just short by an offset) — moving
-                it back up here instead of trying to compensate with a
-                guessed keyboardVerticalOffset. The Chat page's own header/
-                banners stay unaffected: they're siblings-above, inside a
-                different flex child (ChatFeed) that simply gets less
-                space, not pushed. */}
+                KeyboardAvoidingView wraps only the pager here (not the
+                bottom tab bar below it), as a direct child of this
+                screen's own SafeAreaView — the same nesting depth it had
+                pre-redesign, when it wrapped just body+composer directly
+                inside this same SafeAreaView. RN's KeyboardAvoidingView
+                computes how far to push content up from `frame.y` (its
+                own onLayout position, relative to its immediate parent
+                only — not recursively up the whole ancestor chain)
+                combined with the keyboard's absolute screen position;
+                nesting it one level deeper instead, as a child of the
+                Chat page inside the pager, broke that math on a real
+                device (the composer ended up hidden behind the keyboard
+                entirely, not just short by an offset) — moving it back up
+                here instead of trying to compensate with a guessed
+                keyboardVerticalOffset. Wrapping the tab bar too was an
+                earlier attempt at this same fix, since corrected: a real
+                device showed the whole tab bar rising above the keyboard
+                along with the composer, not the ordinary "covered by the
+                keyboard while typing" a fixed bottom bar should do — the
+                tab bar is a plain sibling below this View now, outside
+                the padding RN adds here, so only the pager (and, within
+                it, only the Chat page's ChatFeed flex space) shrinks. The
+                Chat page's own header/banners stay unaffected either
+                way. */}
             <KeyboardAvoidingView
                 style={styles.keyboardAvoiding}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -814,9 +821,9 @@ const GameScreen = ({ route, navigation }) => {
                     />
                 </View>
             </PagerView>
+            </KeyboardAvoidingView>
 
             <BottomTabBar activePage={activePage} onSelect={handleSelectTab} />
-            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 };
