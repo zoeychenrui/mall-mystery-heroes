@@ -1,9 +1,14 @@
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 
-// RN port of src/components/game_end_components/LeaderboardModal.js.
-// Presentational: the caller hands in the standings array, already sorted
-// by buildLeaderboardStandings. The standings-line rendering is exported
-// so MessageBubble's 'gameEndedLeaderboard' branch shows the same copy.
+// RN port of src/components/game_end_components/LeaderboardModal.js —
+// despite the filename, this is now one of GameScreen's five swipeable
+// pages (the Clash-Royale-style redesign), not a popup: GameScreen renders
+// it directly as a PagerView page, with no isOpen/onClose — there is
+// nothing to close, since switching away is just swiping or tapping
+// another bottom tab. Presentational: the caller hands in the standings
+// array, already sorted by buildLeaderboardStandings. The standings-line
+// rendering is exported so MessageBubble's 'gameEndedLeaderboard' branch
+// shows the same copy.
 
 // "1. Alice — 30", plus " (eliminated)" for dead players.
 export const standingLabel = (entry, index) =>
@@ -15,43 +20,24 @@ export const StandingLine = ({ entry, index }) => (
     </Text>
 );
 
-const LeaderboardModal = ({ isOpen, onClose, standings }) => (
-    <Modal visible={isOpen} onRequestClose={onClose} transparent animationType="fade">
-        <View style={styles.overlay}>
-            <View style={styles.content}>
-                <View style={styles.header}>
-                    <Text style={styles.title}>Leaderboard</Text>
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Close leaderboard"
-                        onPress={onClose}
-                    >
-                        <Text style={styles.close}>✕</Text>
-                    </Pressable>
-                </View>
-                <FlatList
-                    data={standings}
-                    keyExtractor={(entry) => entry.name}
-                    renderItem={({ item, index }) => <StandingLine entry={item} index={index} />}
-                    contentContainerStyle={styles.body}
-                />
-            </View>
+const LeaderboardModal = ({ standings }) => (
+    <View style={styles.page}>
+        <View style={styles.header}>
+            <Text style={styles.title}>Leaderboard</Text>
         </View>
-    </Modal>
+        <FlatList
+            data={standings}
+            keyExtractor={(entry) => entry.name}
+            renderItem={({ item, index }) => <StandingLine entry={item} index={index} />}
+            contentContainerStyle={styles.body}
+        />
+    </View>
 );
 
 const styles = StyleSheet.create({
-    overlay: {
+    page: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        justifyContent: 'center',
-        padding: 16,
-    },
-    content: {
         backgroundColor: '#202030',
-        borderRadius: 8,
-        maxHeight: '85%',
-        overflow: 'hidden',
     },
     header: {
         flexDirection: 'row',
@@ -63,11 +49,6 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 20,
         fontWeight: 'bold',
-    },
-    close: {
-        color: '#FFFFFF',
-        fontSize: 18,
-        paddingHorizontal: 8,
     },
     body: {
         paddingHorizontal: 16,

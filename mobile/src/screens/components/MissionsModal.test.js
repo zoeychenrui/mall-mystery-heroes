@@ -8,6 +8,8 @@
  */
 import { render, screen, fireEvent } from '@testing-library/react-native';
 import MissionsModal from './MissionsModal';
+// Despite the filename, this is now one of GameScreen's five swipeable
+// pages (the Clash-Royale-style redesign), not a popup — no isOpen/onClose.
 
 const MISSIONS = [
     {
@@ -52,8 +54,7 @@ const MISSIONS = [
     },
 ];
 
-const renderModal = async (props = {}) =>
-    render(<MissionsModal isOpen onClose={jest.fn()} missions={MISSIONS} {...props} />);
+const renderModal = async (props = {}) => render(<MissionsModal missions={MISSIONS} {...props} />);
 
 describe('MissionsModal', () => {
     it('renders the Active tab by default, showing only incomplete missions', async () => {
@@ -123,14 +124,5 @@ describe('MissionsModal', () => {
         await fireEvent.press(screen.getByText('Completed (0)'));
 
         expect(screen.getByText('No completed missions.')).toBeTruthy();
-    });
-
-    it('calls onClose when the close button is pressed', async () => {
-        const onClose = jest.fn();
-        await renderModal({ onClose });
-
-        fireEvent.press(screen.getByLabelText('Close missions'));
-
-        expect(onClose).toHaveBeenCalledTimes(1);
     });
 });

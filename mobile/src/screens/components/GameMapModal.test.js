@@ -1,8 +1,10 @@
 /**
  * Component test for GameMapModal — the RN port of
- * src/components/map_components/{GameMap.js,PlayerMapModal.js}. Purely
- * presentational: no Firebase dependency, so no Firebase mocks needed here
- * (only GameScreen.test.js, which wires this in, needs those).
+ * src/components/map_components/{GameMap.js,PlayerMapModal.js}. Despite
+ * the filename, this is now one of GameScreen's five swipeable pages
+ * (the Clash-Royale-style redesign), not a popup — no isOpen/onClose.
+ * Purely presentational: no Firebase dependency, so no Firebase mocks
+ * needed here (only GameScreen.test.js, which wires this in, needs those).
  *
  * 'react-native-maps' is mocked the same way the web tests mock
  * 'react-map-gl' (GameMap.test.jsx): MapView/Marker/Polygon become plain
@@ -13,8 +15,7 @@
  *
  * @testing-library/react-native v14's render/fireEvent are async.
  */
-import { render, screen, fireEvent, within } from '@testing-library/react-native';
-import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+import { render, screen, fireEvent } from '@testing-library/react-native';
 import GameMapModal from './GameMapModal';
 
 const mockAnimateToRegion = jest.fn();
@@ -54,8 +55,7 @@ const RING = [
 const renderModal = async (props = {}) =>
     render(
         <GameMapModal
-            isOpen
-            onClose={jest.fn()}
+            isActive
             boundaryVertices={RING}
             ownPosition={null}
             otherPositions={[]}
@@ -128,7 +128,7 @@ describe('GameMapModal', () => {
         );
     });
 
-    it('renders the boundary status prominently, so it stays visible while the modal is full-screen', async () => {
+    it('renders the boundary status prominently, so it stays visible while this page is full-screen', async () => {
         await renderModal({ statusText: 'You are outside the game area.' });
         expect(screen.getByText('You are outside the game area.')).toBeTruthy();
     });
@@ -138,56 +138,31 @@ describe('GameMapModal', () => {
         expect(screen.getByTestId('game-map-view')).toBeTruthy();
     });
 
-    it('is not visible when isOpen is false', async () => {
-        await renderModal({ isOpen: false });
-        expect(screen.queryByTestId('game-map-view')).toBeNull();
-    });
-
-    it('pads the header by the top safe-area inset, so it clears the status bar/notch in the full-screen (non-transparent) Modal', async () => {
-        // Real device bug: this Modal is not `transparent`, so unlike a
-        // screen reached through React Navigation it gets no safe-area
-        // handling for free — the header (title + close button) rendered
-        // up under the iOS status bar/clock with the close button
-        // unreachable. Reads the inset from context (useSafeAreaInsets)
-        // rather than relying on the SafeAreaView component to remeasure
-        // this Modal's own native window — that remeasurement was found to
-        // be unreliable right after the OS's location-permission prompt
-        // had just been shown and dismissed.
-        await render(
-            <SafeAreaInsetsContext.Provider value={{ top: 47, bottom: 0, left: 0, right: 0 }}>
-                <GameMapModal
-                    isOpen
-                    onClose={jest.fn()}
-                    boundaryVertices={RING}
-                    ownPosition={null}
-                    otherPositions={[]}
-                />
-            </SafeAreaInsetsContext.Provider>
-        );
-        const headerSafeArea = screen.getByTestId('map-header-safe-area');
-        expect(headerSafeArea.props.style).toEqual(
-            expect.arrayContaining([expect.objectContaining({ paddingTop: 47 })])
-        );
-        expect(within(headerSafeArea).getByText('Game Area')).toBeTruthy();
-        expect(within(headerSafeArea).getByLabelText('Close modal')).toBeTruthy();
-    });
-
-    it('auto-centers on the own position once it becomes available, without waiting for Recenter to be pressed', async () => {
-        await renderModal({ ownPosition: { lat: 10, lng: 20, accuracyM: 12 } });
+    it('auto-centers on the own position once it becomes available while this is the active page', async () => {
+        await renderModal({ isActive: true, ownPosition: { lat: 10, lng: 20, accuracyM: 12 } });
         expect(mockAnimateToRegion).toHaveBeenCalledWith(
             expect.objectContaining({ latitude: 10, longitude: 20 })
         );
     });
 
     it('does not try to auto-center when there is no own position yet', async () => {
-        await renderModal({ ownPosition: null });
+        await renderModal({ isActive: true, ownPosition: null });
         expect(mockAnimateToRegion).not.toHaveBeenCalled();
     });
 
-    it('calls onClose when the close button is pressed', async () => {
-        const onClose = jest.fn();
-        await renderModal({ onClose });
-        await fireEvent.press(screen.getByLabelText('Close modal'));
-        expect(onClose).toHaveBeenCalledTimes(1);
+    it('does not auto-center while this page is not the active one', async () => {
+        await renderModal({ isActive: false, ownPosition: { lat: 10, lng: 20, accuracyM: 12 } });
+        expect(mockAnimateToRegion).not.toHaveBeenCalled();
+    });
+
+    it('shows a message instead of an empty map when zones are not enabled', async () => {
+        await renderModal({ zonesEnabled: false });
+        expect(screen.getByText("Zones aren't enabled for this game.")).toBeTruthy();
+        expect(screen.queryByTestId('game-map-view')).toBeNull();
+    });
+
+    it('renders the real map as usual when zones are enabled', async () => {
+        await renderModal({ zonesEnabled: true });
+        expect(screen.getByTestId('game-map-view')).toBeTruthy();
     });
 });

@@ -1,23 +1,32 @@
 import { useEffect, useRef } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polygon } from 'react-native-maps';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // RN port of the web's read-only player map: src/components/map_components/
-// {GameMap.js, PlayerMapModal.js}. Shows the published game area, this
-// player's own position, and every other currently-exposed ("outside")
-// player, with a Recenter on Me control. Purely presentational — every
-// prop (boundaryVertices, ownPosition, otherPositions, statusText) is
-// handed down from GameScreen.js, which owns the Firestore subscriptions
-// and the location hook (Task 11). Closing this modal does not touch
-// location tracking — that keeps running at the GameScreen level exactly
-// as it did before the map existed (same "closing the map doesn't stop
-// reporting" rule as the web's PlayerMapModal/useBoundaryLocation split).
+// {GameMap.js, PlayerMapModal.js}. Despite the filename, this is now one
+// of GameScreen's five swipeable pages (the Clash-Royale-style redesign),
+// not a popup: GameScreen renders it directly as a PagerView page. Shows
+// the published game area, this player's own position, and every other
+// currently-exposed ("outside") player, with a Recenter on Me control.
+// Purely presentational — every prop (boundaryVertices, ownPosition,
+// otherPositions, statusText) is handed down from GameScreen.js, which
+// owns the Firestore subscriptions and the location hook (Task 11).
+// Swiping away from this page does not touch location tracking — that
+// keeps running at the GameScreen level regardless of which page is
+// showing (same "closing the map doesn't stop reporting" rule as the
+// web's PlayerMapModal/useBoundaryLocation split).
+//
+// No top-inset handling here, unlike when this was its own full-screen
+// Modal: a Modal renders in a separate native window that bypasses
+// whatever SafeAreaView wraps the rest of the app, which is what put the
+// header under the status bar before. As a plain page inside GameScreen's
+// own SafeAreaView now, it gets that handling for free, the same as the
+// Shop/Missions/Leaderboard pages beside it.
 //
 // `statusText` is GameScreen's boundaryDisplay.mapStatusText, passed
 // straight through so the player sees the same words here as in Task 11's
-// LocationStatusPanel — this modal is full-screen, which would otherwise
-// hide the panel's status line entirely for as long as the map stays open.
+// LocationStatusPanel — this page is full-screen, which would otherwise
+// hide the panel's status line entirely for as long as it's showing.
 //
 // Coordinate order: RN Maps' Polygon/Marker both take {latitude,
 // longitude} objects directly. No GeoJSON [lng, lat] flip is needed here
@@ -47,15 +56,24 @@ const PositionDot = ({ label }) => (
 );
 
 const GameMapModal = ({
-    isOpen,
-    onClose,
+    // Whether this is the currently showing page — GameScreen passes
+    // `activePage === PAGE_MAP`. This page stays mounted continuously
+    // (PagerView keeps every page mounted), so without this, "auto-center
+    // when a fresh position arrives" below would also fire while the
+    // player is looking at a completely different tab.
+    isActive = false,
+    // Previously this page's own tab/entry-point just didn't exist unless
+    // the host had zones enabled. Now that it's a fixed tab always
+    // reachable (the Clash-Royale-style redesign has no conditionally
+    // hidden tabs), an explicit message here stands in for that instead of
+    // showing an interactive but permanently empty map.
+    zonesEnabled = true,
     boundaryVertices = [],
     ownPosition,
     otherPositions = [],
     statusText,
 }) => {
     const mapRef = useRef(null);
-    const insets = useSafeAreaInsets();
 
     const handleRecenter = () => {
         if (!mapRef.current || !ownPosition) return;
@@ -67,104 +85,85 @@ const GameMapModal = ({
     };
 
     // Auto-center once, the moment a fresh position becomes available
-    // while the map is open — otherwise the map opens on MapView's bare
-    // default region (center of nowhere) until the player notices and
-    // taps Recenter themselves. Runs again any time ownPosition's
-    // identity changes (e.g. the map was opened before a fix existed,
-    // then one arrives), not on every position update, so it never fights
-    // a player who has since panned away.
+    // while this page is the one showing — otherwise the map opens on
+    // MapView's bare default region (center of nowhere) until the player
+    // notices and taps Recenter themselves. Runs again any time
+    // ownPosition's identity changes (e.g. this page was opened before a
+    // fix existed, then one arrives).
     useEffect(() => {
-        if (isOpen) handleRecenter();
+        if (isActive) handleRecenter();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen, ownPosition]);
-
-    // Nothing to render, nothing to mount, while closed — keeps a native
-    // MapView from sitting mounted off-screen between opens.
-    if (!isOpen) return null;
+    }, [isActive, ownPosition]);
 
     const polygonCoordinates = boundaryVertices.map((point) => ({
         latitude: point.lat,
         longitude: point.lng,
     }));
 
-    return (
-        <Modal visible={isOpen} onRequestClose={onClose} animationType="slide">
+    if (!zonesEnabled) {
+        return (
             <View style={styles.container}>
-                {/* Unlike a screen reached through React Navigation, this
-                    Modal is not `transparent` — it renders genuinely
-                    full-screen, over the status bar/notch, so nothing here
-                    gets safe-area handling for free. Only the header needs
-                    it (that's what overlapped the status bar/clock on a
-                    real device); the map below is fine bleeding to the
-                    screen edges, so only the header gets the top inset as
-                    padding. `useSafeAreaInsets()` is used here rather than
-                    the `SafeAreaView` component — the component remeasures
-                    its own native window on mount, which this Modal's
-                    separate native window did unreliably right after the
-                    OS's location-permission prompt had just been shown and
-                    dismissed; the hook reads the already-correct value
-                    from the stable SafeAreaProvider context instead. */}
-                <View
-                    testID="map-header-safe-area"
-                    style={[styles.headerSafeArea, { paddingTop: insets.top }]}
-                >
-                    <View style={styles.header}>
-                        <Text style={styles.title}>Game Area</Text>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel="Close modal"
-                            onPress={onClose}
-                            style={styles.closeButton}
-                        >
-                            <Text style={styles.closeText}>✕</Text>
-                        </Pressable>
-                    </View>
+                <View style={styles.header}>
+                    <Text style={styles.title}>Game Area</Text>
                 </View>
-                {statusText && (
-                    <View style={styles.statusBanner}>
-                        <Text style={styles.statusText}>{statusText}</Text>
-                    </View>
-                )}
-                <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Recenter on Me"
-                    accessibilityState={{ disabled: !ownPosition }}
-                    disabled={!ownPosition}
-                    onPress={handleRecenter}
-                    style={[styles.recenterButton, !ownPosition && styles.recenterButtonDisabled]}
-                >
-                    <Text style={styles.recenterText}>Recenter on Me</Text>
-                </Pressable>
-                <MapView ref={mapRef} style={styles.map} testID="game-map-view">
-                    {polygonCoordinates.length > 0 && (
-                        <Polygon
-                            testID="boundary-polygon"
-                            coordinates={polygonCoordinates}
-                            fillColor="rgba(56, 178, 172, 0.2)"
-                            strokeColor="#38B2AC"
-                            strokeWidth={3}
-                        />
-                    )}
-                    {ownPosition && (
-                        <Marker
-                            testID="own-position-marker"
-                            coordinate={{ latitude: ownPosition.lat, longitude: ownPosition.lng }}
-                        >
-                            <PositionDot />
-                        </Marker>
-                    )}
-                    {otherPositions.map((position) => (
-                        <Marker
-                            key={position.id}
-                            testID="other-position-marker"
-                            coordinate={{ latitude: position.lat, longitude: position.lng }}
-                        >
-                            <PositionDot label={position.label} />
-                        </Marker>
-                    ))}
-                </MapView>
+                <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>
+                        Zones aren&apos;t enabled for this game.
+                    </Text>
+                </View>
             </View>
-        </Modal>
+        );
+    }
+
+    return (
+        <View style={styles.container}>
+            <View style={styles.header}>
+                <Text style={styles.title}>Game Area</Text>
+            </View>
+            {statusText && (
+                <View style={styles.statusBanner}>
+                    <Text style={styles.statusText}>{statusText}</Text>
+                </View>
+            )}
+            <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Recenter on Me"
+                accessibilityState={{ disabled: !ownPosition }}
+                disabled={!ownPosition}
+                onPress={handleRecenter}
+                style={[styles.recenterButton, !ownPosition && styles.recenterButtonDisabled]}
+            >
+                <Text style={styles.recenterText}>Recenter on Me</Text>
+            </Pressable>
+            <MapView ref={mapRef} style={styles.map} testID="game-map-view">
+                {polygonCoordinates.length > 0 && (
+                    <Polygon
+                        testID="boundary-polygon"
+                        coordinates={polygonCoordinates}
+                        fillColor="rgba(56, 178, 172, 0.2)"
+                        strokeColor="#38B2AC"
+                        strokeWidth={3}
+                    />
+                )}
+                {ownPosition && (
+                    <Marker
+                        testID="own-position-marker"
+                        coordinate={{ latitude: ownPosition.lat, longitude: ownPosition.lng }}
+                    >
+                        <PositionDot />
+                    </Marker>
+                )}
+                {otherPositions.map((position) => (
+                    <Marker
+                        key={position.id}
+                        testID="other-position-marker"
+                        coordinate={{ latitude: position.lat, longitude: position.lng }}
+                    >
+                        <PositionDot label={position.label} />
+                    </Marker>
+                ))}
+            </MapView>
+        </View>
     );
 };
 
@@ -175,27 +174,13 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#202030',
     },
-    headerSafeArea: {
-        backgroundColor: '#202030',
-    },
     header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
         padding: 16,
     },
     title: {
         color: '#FFFFFF',
         fontSize: 20,
         fontWeight: 'bold',
-    },
-    closeButton: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-    },
-    closeText: {
-        color: '#FFFFFF',
-        fontSize: 18,
     },
     statusBanner: {
         backgroundColor: '#2D3748', // gray.700
@@ -227,6 +212,16 @@ const styles = StyleSheet.create({
     },
     map: {
         flex: 1,
+    },
+    emptyState: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 32,
+    },
+    emptyStateText: {
+        color: '#A0AEC0', // gray.400
+        textAlign: 'center',
     },
     dotWrap: {
         alignItems: 'center',

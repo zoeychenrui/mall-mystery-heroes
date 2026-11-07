@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 // powerUps.js is CommonJS (module.exports) — the web's shop_components use
 // `require()` for it because CRA's production build can't statically
 // analyze a named ES `import` of a CommonJS file. Metro has no such
@@ -14,9 +14,14 @@ import {
 } from '../../../../src/game/powerUps';
 
 // RN port of src/components/shop_components/{PowerUpShopModal.js,
-// ShopItemCard.js, MysteryBoxReveal.js}. Presentational: `score`, `cooldowns`,
-// `horcruxActive`, and `pendingMysteryItem` all come from GameScreen's live
-// player-doc subscription (and its own isHorcruxActive derivation), and
+// ShopItemCard.js, MysteryBoxReveal.js}. Despite the filename, this is now
+// one of GameScreen's five swipeable pages (the Clash-Royale-style
+// redesign), not a popup: GameScreen renders it directly as a PagerView
+// page, with no isOpen/onClose — there is nothing to close, since
+// switching away is just swiping or tapping another bottom tab.
+// Presentational: `score`, `cooldowns`, `horcruxActive`, and
+// `pendingMysteryItem` all come from GameScreen's live player-doc
+// subscription (and its own isHorcruxActive derivation), and
 // `purchasePowerUp`/`claimMysteryReward` are injected rather than imported
 // directly, so this file needs no Firebase mocking of its own — GameScreen
 // wires them to callables.purchasePowerUp/claimMysteryReward.
@@ -222,8 +227,6 @@ const MysteryBoxReveal = ({
 };
 
 const PowerUpShopModal = ({
-    isOpen,
-    onClose,
     roomID,
     playerName = '',
     score,
@@ -244,13 +247,15 @@ const PowerUpShopModal = ({
     const [buyingItemId, setBuyingItemId] = useState(null);
 
     // Re-render once a second so cooldown covers sweep and countdowns tick.
-    // Only while open — a closed shop has nothing to animate.
+    // Unconditional, not gated on being the active page — this is now one
+    // of GameScreen's five swipeable PagerView pages, which (like the
+    // others) stays mounted the whole time regardless of which page is
+    // currently showing, the same tradeoff GameScreen's own 1Hz ticker
+    // already makes.
     useEffect(() => {
-        if (!isOpen) return undefined;
-        setNowMs(Date.now()); // catch up on time that passed while closed
         const id = setInterval(() => setNowMs(Date.now()), 1000);
         return () => clearInterval(id);
-    }, [isOpen]);
+    }, []);
 
     // Anyone else still in the game. Names are compared case-insensitively,
     // the same way the rest of the app matches player names.
@@ -298,19 +303,11 @@ const PowerUpShopModal = ({
             : '';
 
     return (
-        <Modal visible={isOpen} onRequestClose={onClose} transparent animationType="fade">
-            <View style={styles.overlay}>
-                <View style={styles.content}>
+        <View style={styles.overlay}>
+            <View style={styles.content}>
                         <View style={styles.header}>
                             <View style={styles.headerTitleRow}>
                                 <Text style={styles.title}>Shop</Text>
-                                <Pressable
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Close shop"
-                                    onPress={onClose}
-                                >
-                                    <Text style={styles.close}>✕</Text>
-                                </Pressable>
                             </View>
                             <View style={styles.headerInfoRow}>
                                 <Text style={styles.pointsText}>
@@ -400,23 +397,18 @@ const PowerUpShopModal = ({
                     onClaim={(targetName) => claimMysteryReward({ roomId: roomID, targetName })}
                     onClose={() => setReveal(null)}
                 />
-            </View>
-        </Modal>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        justifyContent: 'center',
-        padding: 16,
+        backgroundColor: '#0F1117', // gray.950, matches GameScreen's own page background
     },
     content: {
+        flex: 1,
         backgroundColor: '#202030',
-        borderRadius: 8,
-        maxHeight: '85%',
-        overflow: 'hidden',
     },
     header: {
         padding: 16,
@@ -432,11 +424,6 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 20,
         fontWeight: 'bold',
-    },
-    close: {
-        color: '#FFFFFF',
-        fontSize: 18,
-        paddingHorizontal: 8,
     },
     headerInfoRow: {
         flexDirection: 'row',

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 // RN port of src/components/task_components/PlayerTaskListModal.js, with
 // PlayerTaskList.js's Active/Completed split and PlayerTaskAccordion.js's
@@ -8,6 +8,12 @@ import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native
 // GameScreen already subscribes to them — and splits them client-side by
 // isComplete, the same two buckets the web's two Firestore queries return.
 // The copy line matches MessageBubble's 'mission' branch exactly.
+//
+// Despite the filename, this is now one of GameScreen's five swipeable
+// pages (the Clash-Royale-style redesign), not a popup: GameScreen renders
+// it directly as a PagerView page, with no isOpen/onClose — there is
+// nothing to close, since switching away is just swiping or tapping
+// another bottom tab.
 
 // Web's PlayerTaskAccordion: "Incomplete" unless the task is complete, then
 // "Completed By: <names>" (or "None" if nobody is recorded).
@@ -28,7 +34,7 @@ const TABS = [
     { key: 'completed', label: 'Completed', emptyText: 'No completed missions.' },
 ];
 
-const MissionsModal = ({ isOpen, onClose, missions }) => {
+const MissionsModal = ({ missions }) => {
     const [tab, setTab] = useState('active');
     const activeMissions = missions.filter((mission) => !mission.isComplete);
     const completedMissions = missions.filter((mission) => mission.isComplete);
@@ -37,83 +43,59 @@ const MissionsModal = ({ isOpen, onClose, missions }) => {
     const activeTab = TABS.find((item) => item.key === tab);
 
     return (
-        <Modal visible={isOpen} onRequestClose={onClose} transparent animationType="fade">
-            <View style={styles.overlay}>
-                <View style={styles.content}>
-                    <View style={styles.header}>
-                        <Text style={styles.title}>Missions</Text>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel="Close missions"
-                            onPress={onClose}
-                        >
-                            <Text style={styles.close}>✕</Text>
-                        </Pressable>
-                    </View>
-                    <View style={styles.tabRow}>
-                        {TABS.map((item) => {
-                            const isSelected = tab === item.key;
-                            return (
-                                <Pressable
-                                    key={item.key}
-                                    accessibilityRole="tab"
-                                    accessibilityState={{ selected: isSelected }}
-                                    onPress={() => setTab(item.key)}
-                                    style={[styles.tab, isSelected && styles.tabSelected]}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.tabText,
-                                            isSelected && styles.tabTextSelected,
-                                        ]}
-                                    >
-                                        {`${item.label} (${counts[item.key]})`}
-                                    </Text>
-                                </Pressable>
-                            );
-                        })}
-                    </View>
-                    <FlatList
-                        data={shownMissions}
-                        keyExtractor={(mission, index) => `${index}-${mission.title}`}
-                        contentContainerStyle={styles.body}
-                        ListEmptyComponent={<Text style={styles.empty}>{activeTab.emptyText}</Text>}
-                        renderItem={({ item: mission }) => (
-                            <View style={styles.card}>
-                                {mission.taskIndex != null && (
-                                    <Text style={styles.taskIndex}>#{mission.taskIndex}</Text>
-                                )}
-                                <Text style={styles.missionTitle}>{mission.title}</Text>
-                                <Text style={styles.missionText}>{mission.description}</Text>
-                                <Text style={styles.subtleText}>
-                                    {mission.taskType} · {mission.pointValue} points ·{' '}
-                                    {mission.maxCompletions
-                                        ? `Limited to ${mission.maxCompletions} players`
-                                        : 'Unlimited players'}
-                                </Text>
-                                <Text style={styles.subtleText}>{completionsText(mission)}</Text>
-                                <Text style={styles.missionText}>{completedByText(mission)}</Text>
-                            </View>
-                        )}
-                    />
-                </View>
+        <View style={styles.page}>
+            <View style={styles.header}>
+                <Text style={styles.title}>Missions</Text>
             </View>
-        </Modal>
+            <View style={styles.tabRow}>
+                {TABS.map((item) => {
+                    const isSelected = tab === item.key;
+                    return (
+                        <Pressable
+                            key={item.key}
+                            accessibilityRole="tab"
+                            accessibilityState={{ selected: isSelected }}
+                            onPress={() => setTab(item.key)}
+                            style={[styles.tab, isSelected && styles.tabSelected]}
+                        >
+                            <Text style={[styles.tabText, isSelected && styles.tabTextSelected]}>
+                                {`${item.label} (${counts[item.key]})`}
+                            </Text>
+                        </Pressable>
+                    );
+                })}
+            </View>
+            <FlatList
+                data={shownMissions}
+                keyExtractor={(mission, index) => `${index}-${mission.title}`}
+                contentContainerStyle={styles.body}
+                ListEmptyComponent={<Text style={styles.empty}>{activeTab.emptyText}</Text>}
+                renderItem={({ item: mission }) => (
+                    <View style={styles.card}>
+                        {mission.taskIndex != null && (
+                            <Text style={styles.taskIndex}>#{mission.taskIndex}</Text>
+                        )}
+                        <Text style={styles.missionTitle}>{mission.title}</Text>
+                        <Text style={styles.missionText}>{mission.description}</Text>
+                        <Text style={styles.subtleText}>
+                            {mission.taskType} · {mission.pointValue} points ·{' '}
+                            {mission.maxCompletions
+                                ? `Limited to ${mission.maxCompletions} players`
+                                : 'Unlimited players'}
+                        </Text>
+                        <Text style={styles.subtleText}>{completionsText(mission)}</Text>
+                        <Text style={styles.missionText}>{completedByText(mission)}</Text>
+                    </View>
+                )}
+            />
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
-    overlay: {
+    page: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        justifyContent: 'center',
-        padding: 16,
-    },
-    content: {
         backgroundColor: '#202030',
-        borderRadius: 8,
-        maxHeight: '85%',
-        overflow: 'hidden',
     },
     header: {
         flexDirection: 'row',
@@ -125,11 +107,6 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 20,
         fontWeight: 'bold',
-    },
-    close: {
-        color: '#FFFFFF',
-        fontSize: 18,
-        paddingHorizontal: 8,
     },
     tabRow: {
         flexDirection: 'row',

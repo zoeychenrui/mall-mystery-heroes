@@ -80,11 +80,29 @@ const MessageBubble = ({ message, playerName, onShowPings }) => {
                 >
                     <Text style={styles.leaderboardButtonText}>View Full Leaderboard</Text>
                 </Pressable>
-                <LeaderboardModal
-                    isOpen={isLeaderboardOpen}
-                    onClose={() => setIsLeaderboardOpen(false)}
-                    standings={standings}
-                />
+                {/* LeaderboardModal is GameScreen's own full-page component
+                    now (despite the filename) — it owns no Modal/isOpen of
+                    its own, so this, its only other call site, provides
+                    its own Modal + close button around the same pure
+                    standings list. */}
+                <Modal
+                    visible={isLeaderboardOpen}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setIsLeaderboardOpen(false)}
+                >
+                    <View style={styles.leaderboardModalOverlay}>
+                        <LeaderboardModal standings={standings} />
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Close leaderboard"
+                            style={styles.leaderboardModalClose}
+                            onPress={() => setIsLeaderboardOpen(false)}
+                        >
+                            <Text style={styles.leaderboardModalCloseText}>✕</Text>
+                        </Pressable>
+                    </View>
+                </Modal>
                 {time && <Text style={styles.subtleText}>{time}</Text>}
             </View>
         );
@@ -277,6 +295,19 @@ const styles = StyleSheet.create({
     enlargedPhoto: {
         width: '90%',
         height: '80%',
+    },
+    leaderboardModalOverlay: {
+        flex: 1,
+    },
+    leaderboardModalClose: {
+        position: 'absolute',
+        top: 16,
+        right: 16,
+        paddingHorizontal: 8,
+    },
+    leaderboardModalCloseText: {
+        color: '#FFFFFF',
+        fontSize: 18,
     },
     pingCard: {
         backgroundColor: ORANGE_900,

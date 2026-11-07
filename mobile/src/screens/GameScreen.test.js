@@ -485,12 +485,13 @@ describe('GameScreen', () => {
 
     // GameMapModal.js itself (presentational, no Firebase of its own) has
     // its own full test suite — these only cover the wiring this file owns:
-    // the "View Game Map" entry point, and handleShowPings/handleMapClose
-    // threading a ping card's positions through to the real modal.
-    // 'react-native-maps' is replaced project-wide by
-    // mobile/__mocks__/react-native-maps.js (no native module exists under
-    // Jest), whose MapView/Marker render as plain Views carrying their
-    // testID/children straight through.
+    // the Map tab (one of the five Clash-Royale-style pages, always
+    // present — see BottomTabBar.test.js for why it's never hidden/
+    // disabled), and handleShowPings threading a ping card's positions
+    // through to the real map page. 'react-native-maps' is replaced
+    // project-wide by mobile/__mocks__/react-native-maps.js (no native
+    // module exists under Jest), whose MapView/Marker render as plain
+    // Views carrying their testID/children straight through.
     describe('map (Task 12)', () => {
         const ENABLED_BOUNDARY = { enabled: true, revision: 1, vertices: [{ lat: 1, lng: 2 }] };
 
@@ -500,8 +501,8 @@ describe('GameScreen', () => {
             Location.getCurrentPositionAsync.mockReturnValue(new Promise(() => {}));
         });
 
-        it('shows the "View Game Map" entry point only once the boundary is enabled', async () => {
-            const listeners = driveSnapshots({
+        it('shows a "zones not enabled" message on the Map page when the boundary is disabled, rather than hiding the tab', async () => {
+            driveSnapshots({
                 room: {
                     gameStarted: true,
                     isGameActive: true,
@@ -509,12 +510,15 @@ describe('GameScreen', () => {
                 },
                 player: { isAlive: true },
             });
-            const { queryByLabelText } = await renderScreen();
-            await waitFor(() => expect(listeners[PLAYER_PATH]?.subscribeCount).toBe(1));
-            expect(queryByLabelText('View Game Map')).toBeNull();
+            const { findByLabelText, findByText, queryByTestId } = await renderScreen();
+
+            await fireEvent.press(await findByLabelText('Map'));
+
+            expect(await findByText("Zones aren't enabled for this game.")).toBeTruthy();
+            expect(queryByTestId('game-map-view')).toBeNull();
         });
 
-        it('opens the map modal from the "View Game Map" entry point, and closes it again', async () => {
+        it('switches to the map page from the Map tab, and away again from the Chat tab', async () => {
             driveSnapshots({
                 room: { gameStarted: true, isGameActive: true, gameBoundary: ENABLED_BOUNDARY },
                 player: { isAlive: true },
@@ -522,10 +526,10 @@ describe('GameScreen', () => {
             const { findByLabelText, queryByTestId } = await renderScreen();
             expect(queryByTestId('game-map-view')).toBeNull();
 
-            await fireEvent.press(await findByLabelText('View Game Map'));
+            await fireEvent.press(await findByLabelText('Map'));
             await waitFor(() => expect(queryByTestId('game-map-view')).toBeTruthy());
 
-            await fireEvent.press(await findByLabelText('Close modal'));
+            await fireEvent.press(await findByLabelText('Chat'));
             await waitFor(() => expect(queryByTestId('game-map-view')).toBeNull());
         });
 
@@ -549,6 +553,29 @@ describe('GameScreen', () => {
             expect(await findByText('📍 carol')).toBeTruthy();
         });
 
+        it('clears the ping snapshot once the player leaves the map page, rather than keeping it forever', async () => {
+            driveSnapshots({
+                room: { gameStarted: true, isGameActive: true, gameBoundary: ENABLED_BOUNDARY },
+                player: { isAlive: true },
+                messages: [
+                    {
+                        type: 'powerUpPing',
+                        text: 'Someone pinged',
+                        source: 'shopPurchase',
+                        pings: [{ name: 'carol', lat: 5, lng: 6, capturedAtMs: Date.now() }],
+                    },
+                ],
+            });
+
+            const { findByLabelText, findByText, queryByText } = await renderScreen();
+            await fireEvent.press(await findByLabelText('View on map'));
+            expect(await findByText('📍 carol')).toBeTruthy();
+
+            await fireEvent.press(await findByLabelText('Chat'));
+            await fireEvent.press(await findByLabelText('Map'));
+            expect(queryByText('📍 carol')).toBeNull();
+        });
+
         it('does not offer "View on map" once the game has ended', async () => {
             driveSnapshots({
                 room: { gameStarted: true, isGameActive: false, gameBoundary: ENABLED_BOUNDARY },
@@ -566,6 +593,69 @@ describe('GameScreen', () => {
             const { queryByLabelText, findByText } = await renderScreen();
             await findByText('Someone pinged');
             expect(queryByLabelText('View on map')).toBeNull();
+        });
+    });
+
+    // The Clash-Royale-style redesign: five swipeable pages behind a fixed
+    // bottom tab bar (BottomTabBar.js), with only the center/chat page
+    // carrying the header/Leave/Rules/avatar chrome — the player's own
+    // framing was "leave header for the main chat alone... if u open up
+    // missions/leaderboard/map, u cant see those things anwyays."
+    describe('swipeable pages (Clash-Royale-style redesign)', () => {
+        it('starts on the chat page, with the header visible', async () => {
+            driveSnapshots({
+                room: { gameStarted: true, isGameActive: true },
+                player: { isAlive: true, targets: [] },
+            });
+            const { findByText } = await renderScreen();
+            expect(await findByText('Mall Mystery Heroes')).toBeTruthy();
+        });
+
+        it('hides the header/Leave/Rules chrome on the Shop, Missions, Leaderboard, and Map pages', async () => {
+            driveSnapshots({
+                room: { gameStarted: true, isGameActive: true },
+                player: { isAlive: true, targets: [] },
+            });
+            const { findByLabelText, queryByText, queryByLabelText } = await renderScreen();
+
+            for (const tabLabel of ['Shop', 'Missions', 'Leaderboard', 'Map']) {
+                await fireEvent.press(await findByLabelText(tabLabel));
+                expect(queryByText('Mall Mystery Heroes')).toBeNull();
+                expect(queryByLabelText('Leave')).toBeNull();
+                expect(queryByLabelText('Game rules')).toBeNull();
+            }
+        });
+
+        it('shows the Shop tab even before the game has started or after the player is eliminated', async () => {
+            driveSnapshots({
+                room: { gameStarted: false, isGameActive: true },
+                player: { isAlive: false, targets: [] },
+            });
+            const { findByLabelText, findAllByText } = await renderScreen();
+
+            await fireEvent.press(await findByLabelText('Shop'));
+            // Both the tab bar's own label and the page's header title read
+            // "Shop" — findAllByText proves the page actually mounted
+            // alongside its tab, not just the tab itself.
+            expect(await findAllByText('Shop')).toHaveLength(2);
+        });
+
+        it('switches to the Missions and Leaderboard pages from their own tabs', async () => {
+            driveSnapshots({
+                room: { gameStarted: true, isGameActive: true },
+                player: { isAlive: true, targets: [], score: 42 },
+            });
+            const { findByLabelText, findByText, findAllByText } = await renderScreen();
+
+            // Both the tab bar's own label and the page's header title read
+            // "Missions"/"Leaderboard" — findAllByText proves the page
+            // actually mounted alongside its tab, not just the tab itself.
+            await fireEvent.press(await findByLabelText('Missions'));
+            expect(await findByText('Active (0)')).toBeTruthy();
+            expect(await findAllByText('Missions')).toHaveLength(2);
+
+            await fireEvent.press(await findByLabelText('Leaderboard'));
+            expect(await findAllByText('Leaderboard')).toHaveLength(2);
         });
     });
 });

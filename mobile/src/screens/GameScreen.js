@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Alert,
     BackHandler,
-    Image,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -13,6 +12,7 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import PagerView from 'react-native-pager-view';
 import { onSnapshot } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase/firebaseConfig';
@@ -26,6 +26,7 @@ import LocationStatusPanel, { deriveBoundaryDisplay } from './components/Locatio
 import MissionsModal from './components/MissionsModal';
 import LeaderboardModal from './components/LeaderboardModal';
 import PowerUpShopModal from './components/PowerUpShopModal';
+import BottomTabBar from './components/BottomTabBar';
 import AvatarButton, { AvatarCircle } from './components/AvatarButton';
 import TargetPhotoModal from './components/TargetPhotoModal';
 import useBoundaryLocation from '../hooks/useBoundaryLocation';
@@ -33,6 +34,18 @@ import { deriveFreshStatus, isPositionFresh, canSee } from '../../../src/game/ga
 import { normalizePlayerName, resolvePlayerDisplayName } from '../../../src/game/playerNames';
 import { buildLeaderboardStandings } from '../../../src/game/leaderboard';
 import { isHorcruxActive } from '../../../src/game/powerUpEffects';
+
+// The Clash-Royale-style bottom bar's fixed page order (BottomTabBar.js's
+// TABS array, in the same order): Shop (0), Missions (1), Chat (2),
+// Leaderboard (3), Map (4) — Shop and Missions to the left of the main
+// Chat page, Leaderboard and Map to its right, matching exactly how the
+// player described it: "leftmost would be shop, then missions. Then in
+// the middle would be the main window with the chat. right of that is
+// leaderboard, then map." Only Chat and Map need their own named
+// constant below — Shop/Missions/Leaderboard are never a jump target or
+// comparison elsewhere in this file, just fixed JSX order.
+const PAGE_CHAT = 2;
+const PAGE_MAP = 4;
 
 // The player's in-game screen — a port of the web app's src/pages/PlayerGame.js
 // plus the pieces of it that live in src/components/player_game/
@@ -60,9 +73,19 @@ const GameScreen = ({ route, navigation }) => {
     // {enabled, revision, vertices}, or undefined if the room has none yet.
     const [gameBoundary, setGameBoundary] = useState(undefined);
     const [areRulesOpen, setAreRulesOpen] = useState(false);
-    const [isMissionsOpen, setIsMissionsOpen] = useState(false);
-    const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
-    const [isShopOpen, setIsShopOpen] = useState(false);
+    // Which of the five swipeable pages is currently showing — BottomTabBar
+    // taps and the PagerView itself (swiping) both drive this through the
+    // same path: a tap calls pagerRef.current.setPage(index), which fires
+    // PagerView's own onPageSelected just as a real swipe would, so there
+    // is only ever one way activePage changes.
+    const [activePage, setActivePage] = useState(PAGE_CHAT);
+    const pagerRef = useRef(null);
+    // Tracks the page activePage is transitioning FROM, for the one thing
+    // that needs to know "I just left the map" rather than "where am I
+    // now" — see handlePageSelected below. A ref, not state: reading it
+    // doesn't need a re-render, and a second state variable kept in step
+    // with activePage would just be one more thing to keep in sync.
+    const previousPageRef = useRef(PAGE_CHAT);
     // This player's own chat sends that ChatComposer has fired off but
     // Firestore hasn't confirmed yet — callables.submitChatMessage writes
     // server-side, so this device no longer gets an automatic local echo
@@ -83,15 +106,16 @@ const GameScreen = ({ route, navigation }) => {
     // freshness is applied at render time against nowMs (see below).
     const [otherOutsidePositions, setOtherOutsidePositions] = useState([]);
     const [nowMs, setNowMs] = useState(Date.now());
-    // Task 12's map. isMapOpen/pingPositions are lifted here (not inside
-    // GameMapModal) for the same reason as the web's PlayerGame.js: a ping
-    // card's "View on map" (ChatFeed -> MessageBubble's powerUpPing branch)
-    // needs to both set positions to show AND open the map in one user
-    // action, and pingPositions must survive the map opening/closing via the
-    // normal "View Game Map" entry point too.
-    const [isMapOpen, setIsMapOpen] = useState(false);
+    // Task 12's map, now the fifth page (PAGE_MAP). pingPositions is
+    // lifted here (not inside GameMapModal) for the same reason as the
+    // web's PlayerGame.js: a ping card's "View on map" (ChatFeed ->
+    // MessageBubble's powerUpPing branch) needs to both set positions to
+    // show AND switch to the map page in one user action, and
+    // pingPositions must survive navigating to the map page via the bottom
+    // tab bar too.
     // Positions from a ping card's "View on map", shown alongside the live
-    // ones until the map closes. Snapshots — never updated.
+    // ones until the player swipes/taps away from the map page again.
+    // Snapshots — never updated.
     const [pingPositions, setPingPositions] = useState([]);
     // Task 15's target list (header accordion) + target-photo viewer.
     // isTargetsListOpen mirrors PlayerGameHeader.js's isTargetsAccordionOpen
@@ -102,11 +126,6 @@ const GameScreen = ({ route, navigation }) => {
     const [isTargetsListOpen, setIsTargetsListOpen] = useState(false);
     const [selectedTarget, setSelectedTarget] = useState(null);
     const [isTargetPhotoOpen, setIsTargetPhotoOpen] = useState(false);
-
-    // Used by Task 14's shop slot. purchasePowerUp enforces the same rules
-    // server-side; this only hides the entry point. `=== true` keeps it
-    // hidden until the player doc loads.
-    const canShop = gameStarted && isGameActive && playerData?.isAlive === true;
 
     useEffect(() => {
         let cancelled = false;
@@ -404,7 +423,8 @@ const GameScreen = ({ route, navigation }) => {
 
     // A ping card's "View on map" (ChatFeed -> MessageBubble's
     // powerUpPing branch): snapshots the pinged players' positions and
-    // opens the map, exactly like the web's handleShowPings.
+    // jumps straight to the map page, exactly like the web's
+    // handleShowPings opened the map modal.
     const handleShowPings = useCallback((pings) => {
         setPingPositions(
             (pings ?? [])
@@ -417,12 +437,26 @@ const GameScreen = ({ route, navigation }) => {
                     alwaysShowLabel: true,
                 }))
         );
-        setIsMapOpen(true);
+        pagerRef.current?.setPage(PAGE_MAP);
     }, []);
 
-    const handleMapClose = useCallback(() => {
-        setPingPositions([]);
-        setIsMapOpen(false);
+    // PagerView's onPageSelected, fired by both a real swipe and a
+    // BottomTabBar tap's setPage call (never a different path). Clears the
+    // ping snapshot once the player actually leaves the map page — mirrors
+    // the web/old modal's "clear pingPositions on close", just keyed off
+    // navigating away instead of an explicit close button, since there is
+    // no longer one.
+    const handlePageSelected = useCallback((event) => {
+        const nextIndex = event.nativeEvent.position;
+        if (previousPageRef.current === PAGE_MAP && nextIndex !== PAGE_MAP) {
+            setPingPositions([]);
+        }
+        previousPageRef.current = nextIndex;
+        setActivePage(nextIndex);
+    }, []);
+
+    const handleSelectTab = useCallback((index) => {
+        pagerRef.current?.setPage(index);
     }, []);
 
     // Opens TargetPhotoModal for one of this player's targets — same
@@ -505,270 +539,248 @@ const GameScreen = ({ route, navigation }) => {
             testID="game-screen"
             style={[styles.screen, !isGameActive && styles.screenEnded]}
         >
-            {/* Header — always mounted, waiting room included
-                (PlayerGameHeader.js). */}
-            <View style={styles.header}>
-                <View style={styles.headerRow}>
-                    <View style={styles.headerTitle}>
-                        <Text style={styles.brand}>Mall Mystery Heroes</Text>
-                        <Text style={styles.playerLine} numberOfLines={1}>
-                            {playerName || 'You'} <Text style={styles.lobby}>· Lobby {roomID}</Text>
-                        </Text>
-                    </View>
-                    <TouchableOpacity
-                        accessibilityRole="button"
-                        accessibilityLabel="Game rules"
-                        style={styles.headerButton}
-                        onPress={() => setAreRulesOpen(true)}
-                    >
-                        <Text style={styles.headerButtonText}>Rules</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        accessibilityRole="button"
-                        accessibilityLabel="Leave"
-                        style={styles.headerButton}
-                        onPress={handleLeavePress}
-                    >
-                        <Text style={styles.headerButtonText}>Leave</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {isGameActive && gameStarted && playerData?.isAlive && (
-                    // RN port of PlayerGameHeader.js's target-list
-                    // accordion — a plain show/hide toggle here (no
-                    // Accordion primitive in RN) wrapping a wrapping row of
-                    // per-target buttons, each opening TargetPhotoModal.
-                    <View style={styles.targetsBox}>
-                        {(playerData.targets ?? []).length > 0 ? (
-                            <>
-                                <TouchableOpacity
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Current targets"
-                                    onPress={() => setIsTargetsListOpen((open) => !open)}
-                                >
-                                    <Text style={styles.targetsHeading}>
-                                        Current target
-                                        {playerData.targets.length === 1 ? '' : 's'}
-                                        {playerData.targets.length > 1
-                                            ? ` (${playerData.targets.length})`
-                                            : ''}
-                                    </Text>
-                                    {isTargetsListOpen && (
-                                        <Text style={styles.targetsHint}>
-                                            Tap a target to view their photo
-                                        </Text>
-                                    )}
-                                </TouchableOpacity>
-                                {isTargetsListOpen && (
-                                    <View style={styles.targetsRow}>
-                                        {playerData.targets.map((targetName) => {
-                                            const target = players.find(
-                                                (player) =>
-                                                    normalizePlayerName(player.name) ===
-                                                    normalizePlayerName(targetName)
-                                            );
-                                            return (
-                                                <TouchableOpacity
-                                                    key={targetName}
-                                                    accessibilityRole="button"
-                                                    accessibilityLabel={`View ${targetName}'s photo`}
-                                                    style={styles.targetButton}
-                                                    onPress={() => handleTargetPress(targetName)}
-                                                >
-                                                    <AvatarCircle
-                                                        uri={target?.avatarUrl}
-                                                        name={targetName}
-                                                        size={24}
-                                                    />
-                                                    <Text style={styles.targetButtonText}>
-                                                        {targetName}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            );
-                                        })}
-                                    </View>
-                                )}
-                            </>
-                        ) : (
-                            <Text style={styles.targetsHeading}>Waiting for your target...</Text>
-                        )}
-                    </View>
-                )}
-
-                <View style={styles.actionRow}>
-                    {playerData && (
-                        <AvatarButton
-                            playerName={playerName}
-                            roomID={roomID}
-                            avatarUrl={playerData.avatarUrl}
-                        />
-                    )}
-                    {canShop && (
-                        <TouchableOpacity
-                            accessibilityRole="button"
-                            accessibilityLabel="Open shop"
-                            style={styles.headerButton}
-                            onPress={() => setIsShopOpen(true)}
-                        >
-                            <Image
-                                source={require('../../assets/icons/shop-white.png')}
-                                style={styles.headerButtonIcon}
-                            />
-                        </TouchableOpacity>
-                    )}
-                    <TouchableOpacity
-                        accessibilityRole="button"
-                        accessibilityLabel="View missions"
-                        style={styles.headerButton}
-                        onPress={() => setIsMissionsOpen(true)}
-                    >
-                        <Image
-                            source={require('../../assets/icons/mission-white.png')}
-                            style={styles.headerButtonIcon}
-                        />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        accessibilityRole="button"
-                        accessibilityLabel="View leaderboard"
-                        style={styles.headerButton}
-                        onPress={() => setIsLeaderboardOpen(true)}
-                    >
-                        <Image
-                            source={require('../../assets/icons/leaderboard-white.png')}
-                            style={styles.headerButtonIcon}
-                        />
-                    </TouchableOpacity>
-                    {gameBoundary?.enabled === true && (
-                        // Tasks 11-12: "View Game Map" entry point
-                        // (PlayerGameHeader.js's IconButton aria-label
-                        // "View Game Map").
-                        <TouchableOpacity
-                            accessibilityRole="button"
-                            accessibilityLabel="View Game Map"
-                            style={styles.headerButton}
-                            onPress={() => setIsMapOpen(true)}
-                        >
-                            <Image
-                                source={require('../../assets/icons/location-white.png')}
-                                style={styles.headerButtonIcon}
-                            />
-                        </TouchableOpacity>
-                    )}
-                </View>
-            </View>
-
             <GameRulesModal visible={areRulesOpen} onClose={() => setAreRulesOpen(false)} />
             <TargetPhotoModal
                 isOpen={isTargetPhotoOpen}
                 onClose={() => setIsTargetPhotoOpen(false)}
                 target={selectedTarget}
             />
-            <MissionsModal
-                isOpen={isMissionsOpen}
-                onClose={() => setIsMissionsOpen(false)}
-                missions={missions}
-            />
-            <LeaderboardModal
-                isOpen={isLeaderboardOpen}
-                onClose={() => setIsLeaderboardOpen(false)}
-                standings={buildLeaderboardStandings(players)}
-            />
-            <PowerUpShopModal
-                isOpen={isShopOpen}
-                onClose={() => setIsShopOpen(false)}
-                roomID={roomID}
-                playerName={playerName}
-                score={playerData?.score}
-                cooldowns={playerData?.powerUpCooldowns ?? {}}
-                players={players}
-                horcruxActive={horcruxActive}
-                zonesEnabled={gameBoundary?.enabled === true}
-                pendingMysteryItem={playerData?.pendingMysteryItem ?? null}
-                purchasePowerUp={callables.purchasePowerUp}
-                claimMysteryReward={callables.claimMysteryReward}
-            />
-            <GameMapModal
-                isOpen={isMapOpen}
-                onClose={handleMapClose}
-                boundaryVertices={gameBoundary?.vertices ?? []}
-                ownPosition={freshOwnPosition}
-                otherPositions={[...freshOtherOutsidePositions, ...pingPositions]}
-                statusText={boundaryDisplay.mapStatusText}
-            />
 
-            {/* Status notices (PlayerGameStatusNotices.js). */}
-            {isGameActive && !gameStarted && (
-                <View style={styles.waitingBox}>
-                    <Text style={styles.waitingText}>Waiting for the host to start...</Text>
-                </View>
-            )}
-            {isGameActive && gameStarted && playerData && !playerData.isAlive && (
-                <View style={styles.eliminatedBox}>
-                    <Text style={styles.eliminatedHeading}>YOU&apos;VE BEEN ELIMINATED</Text>
-                    <Text style={styles.eliminatedBody}>
-                        Be on the lookout for revival missions to get back in.
-                    </Text>
-                </View>
-            )}
-            {!isGameActive && (
-                <View style={styles.endedBanner}>
-                    <Text style={styles.endedBannerText}>
-                        GAME ENDED. PLEASE HEAD BACK TO THE STARTING AREA.
-                    </Text>
-                </View>
-            )}
-
-            {/* Keyboard avoidance: the header/status-notices above are
-                normal (non-absolute) siblings, so KeyboardAvoidingView's
-                own onLayout measures this view's actual on-screen position
-                already below them — no keyboardVerticalOffset is needed to
-                avoid double-counting the header or the SafeAreaView's
-                insets. Wraps body+composer (not the header/notices above)
-                so only the part that needs to rise above the keyboard
-                does. */}
-            <KeyboardAvoidingView
-                style={styles.keyboardAvoiding}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            {/* The Clash-Royale-style redesign: five swipeable pages, in
+                the fixed order Shop/Missions/Chat/Leaderboard/Map
+                (BottomTabBar.js's TABS, same order). Only the chat page
+                carries the header, status notices, and location panel —
+                per the player's own framing, "if u open up missions/
+                leaderboard/map, u cant see those things anwyays" — each
+                of the other four is a full page of its own with nothing
+                underneath for that chrome to sit on top of. */}
+            <PagerView
+                ref={pagerRef}
+                style={styles.pager}
+                initialPage={PAGE_CHAT}
+                onPageSelected={handlePageSelected}
             >
-                <View style={styles.body}>
-                    {/* Location/boundary status (PlayerBoundaryPanel.js).
-                        Self-gates on gameBoundary?.enabled and
-                        playerData?.isAlive ?? true. GameMapModal (Task 12) is
-                        mounted above, outside this panel, reading
-                        freshOwnPosition, freshOtherOutsidePositions plus
-                        pingPositions, and boundaryDisplay.mapStatusText. */}
-                    <LocationStatusPanel
-                        enabled={gameBoundary?.enabled === true}
-                        isAlive={playerData?.isAlive ?? true}
-                        permissionState={permissionState}
-                        requestPermission={requestPermission}
-                        liveBoundaryStatus={liveBoundaryStatus}
-                        isApproachingExposure={boundaryDisplay.isApproachingExposure}
-                        secondsUntilExposed={boundaryDisplay.secondsUntilExposed}
-                        statusText={boundaryDisplay.statusText}
-                        unavailableText={boundaryDisplay.unavailableText}
-                        lastCheckTime={boundaryDisplay.lastCheckTime}
-                        showUnavailableRetry={boundaryDisplay.showUnavailableRetry}
-                    />
-                    <ChatFeed
+                <View key="shop" style={styles.page}>
+                    <PowerUpShopModal
                         roomID={roomID}
                         playerName={playerName}
-                        pendingMessages={pendingMessages}
-                        onPendingMessageConfirmed={handlePendingMessageConfirmed}
-                        onShowPings={isMapAvailable ? handleShowPings : undefined}
+                        score={playerData?.score}
+                        cooldowns={playerData?.powerUpCooldowns ?? {}}
+                        players={players}
+                        horcruxActive={horcruxActive}
+                        zonesEnabled={gameBoundary?.enabled === true}
+                        pendingMysteryItem={playerData?.pendingMysteryItem ?? null}
+                        purchasePowerUp={callables.purchasePowerUp}
+                        claimMysteryReward={callables.claimMysteryReward}
                     />
                 </View>
-                <ChatComposer
-                    roomID={roomID}
-                    playerName={playerName}
-                    isGameActive={isGameActive}
-                    players={players}
-                    missions={missions}
-                    cameraBlockedUntil={playerData?.cameraBlockedUntil ?? null}
-                    onOptimisticSend={handleOptimisticSend}
-                    onOptimisticSendFailed={handleOptimisticSendFailed}
-                />
-            </KeyboardAvoidingView>
+                <View key="missions" style={styles.page}>
+                    <MissionsModal missions={missions} />
+                </View>
+                <View key="chat" style={styles.page}>
+                    {/* Header — always mounted, waiting room included
+                        (PlayerGameHeader.js). */}
+                    <View style={styles.header}>
+                        <View style={styles.headerRow}>
+                            <View style={styles.headerTitle}>
+                                <Text style={styles.brand}>Mall Mystery Heroes</Text>
+                                <Text style={styles.playerLine} numberOfLines={1}>
+                                    {playerName || 'You'}{' '}
+                                    <Text style={styles.lobby}>· Lobby {roomID}</Text>
+                                </Text>
+                            </View>
+                            <TouchableOpacity
+                                accessibilityRole="button"
+                                accessibilityLabel="Game rules"
+                                style={styles.headerButton}
+                                onPress={() => setAreRulesOpen(true)}
+                            >
+                                <Text style={styles.headerButtonText}>Rules</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                accessibilityRole="button"
+                                accessibilityLabel="Leave"
+                                style={styles.headerButton}
+                                onPress={handleLeavePress}
+                            >
+                                <Text style={styles.headerButtonText}>Leave</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {isGameActive && gameStarted && playerData?.isAlive && (
+                            // RN port of PlayerGameHeader.js's target-list
+                            // accordion — a plain show/hide toggle here (no
+                            // Accordion primitive in RN) wrapping a wrapping
+                            // row of per-target buttons, each opening
+                            // TargetPhotoModal.
+                            <View style={styles.targetsBox}>
+                                {(playerData.targets ?? []).length > 0 ? (
+                                    <>
+                                        <TouchableOpacity
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Current targets"
+                                            onPress={() => setIsTargetsListOpen((open) => !open)}
+                                        >
+                                            <Text style={styles.targetsHeading}>
+                                                Current target
+                                                {playerData.targets.length === 1 ? '' : 's'}
+                                                {playerData.targets.length > 1
+                                                    ? ` (${playerData.targets.length})`
+                                                    : ''}
+                                            </Text>
+                                            {isTargetsListOpen && (
+                                                <Text style={styles.targetsHint}>
+                                                    Tap a target to view their photo
+                                                </Text>
+                                            )}
+                                        </TouchableOpacity>
+                                        {isTargetsListOpen && (
+                                            <View style={styles.targetsRow}>
+                                                {playerData.targets.map((targetName) => {
+                                                    const target = players.find(
+                                                        (player) =>
+                                                            normalizePlayerName(player.name) ===
+                                                            normalizePlayerName(targetName)
+                                                    );
+                                                    return (
+                                                        <TouchableOpacity
+                                                            key={targetName}
+                                                            accessibilityRole="button"
+                                                            accessibilityLabel={`View ${targetName}'s photo`}
+                                                            style={styles.targetButton}
+                                                            onPress={() =>
+                                                                handleTargetPress(targetName)
+                                                            }
+                                                        >
+                                                            <AvatarCircle
+                                                                uri={target?.avatarUrl}
+                                                                name={targetName}
+                                                                size={24}
+                                                            />
+                                                            <Text style={styles.targetButtonText}>
+                                                                {targetName}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                    );
+                                                })}
+                                            </View>
+                                        )}
+                                    </>
+                                ) : (
+                                    <Text style={styles.targetsHeading}>
+                                        Waiting for your target...
+                                    </Text>
+                                )}
+                            </View>
+                        )}
+
+                        <View style={styles.actionRow}>
+                            {playerData && (
+                                <AvatarButton
+                                    playerName={playerName}
+                                    roomID={roomID}
+                                    avatarUrl={playerData.avatarUrl}
+                                />
+                            )}
+                        </View>
+                    </View>
+
+                    {/* Status notices (PlayerGameStatusNotices.js). */}
+                    {isGameActive && !gameStarted && (
+                        <View style={styles.waitingBox}>
+                            <Text style={styles.waitingText}>
+                                Waiting for the host to start...
+                            </Text>
+                        </View>
+                    )}
+                    {isGameActive && gameStarted && playerData && !playerData.isAlive && (
+                        <View style={styles.eliminatedBox}>
+                            <Text style={styles.eliminatedHeading}>
+                                YOU&apos;VE BEEN ELIMINATED
+                            </Text>
+                            <Text style={styles.eliminatedBody}>
+                                Be on the lookout for revival missions to get back in.
+                            </Text>
+                        </View>
+                    )}
+                    {!isGameActive && (
+                        <View style={styles.endedBanner}>
+                            <Text style={styles.endedBannerText}>
+                                GAME ENDED. PLEASE HEAD BACK TO THE STARTING AREA.
+                            </Text>
+                        </View>
+                    )}
+
+                    {/* Keyboard avoidance: the header/status-notices above
+                        are normal (non-absolute) siblings, so
+                        KeyboardAvoidingView's own onLayout measures this
+                        view's actual on-screen position already below them
+                        — no keyboardVerticalOffset is needed to avoid
+                        double-counting the header or the SafeAreaView's
+                        insets. Wraps body+composer (not the header/notices
+                        above) so only the part that needs to rise above the
+                        keyboard does. */}
+                    <KeyboardAvoidingView
+                        style={styles.keyboardAvoiding}
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    >
+                        <View style={styles.body}>
+                            {/* Location/boundary status
+                                (PlayerBoundaryPanel.js). Self-gates on
+                                gameBoundary?.enabled and playerData?.isAlive
+                                ?? true. The map page (PAGE_MAP) reads
+                                freshOwnPosition, freshOtherOutsidePositions
+                                plus pingPositions, and
+                                boundaryDisplay.mapStatusText. */}
+                            <LocationStatusPanel
+                                enabled={gameBoundary?.enabled === true}
+                                isAlive={playerData?.isAlive ?? true}
+                                permissionState={permissionState}
+                                requestPermission={requestPermission}
+                                liveBoundaryStatus={liveBoundaryStatus}
+                                isApproachingExposure={boundaryDisplay.isApproachingExposure}
+                                secondsUntilExposed={boundaryDisplay.secondsUntilExposed}
+                                statusText={boundaryDisplay.statusText}
+                                unavailableText={boundaryDisplay.unavailableText}
+                                lastCheckTime={boundaryDisplay.lastCheckTime}
+                                showUnavailableRetry={boundaryDisplay.showUnavailableRetry}
+                            />
+                            <ChatFeed
+                                roomID={roomID}
+                                playerName={playerName}
+                                pendingMessages={pendingMessages}
+                                onPendingMessageConfirmed={handlePendingMessageConfirmed}
+                                onShowPings={isMapAvailable ? handleShowPings : undefined}
+                            />
+                        </View>
+                        <ChatComposer
+                            roomID={roomID}
+                            playerName={playerName}
+                            isGameActive={isGameActive}
+                            players={players}
+                            missions={missions}
+                            cameraBlockedUntil={playerData?.cameraBlockedUntil ?? null}
+                            onOptimisticSend={handleOptimisticSend}
+                            onOptimisticSendFailed={handleOptimisticSendFailed}
+                        />
+                    </KeyboardAvoidingView>
+                </View>
+                <View key="leaderboard" style={styles.page}>
+                    <LeaderboardModal standings={buildLeaderboardStandings(players)} />
+                </View>
+                <View key="map" style={styles.page}>
+                    <GameMapModal
+                        isActive={activePage === PAGE_MAP}
+                        zonesEnabled={gameBoundary?.enabled === true}
+                        boundaryVertices={gameBoundary?.vertices ?? []}
+                        ownPosition={freshOwnPosition}
+                        otherPositions={[...freshOtherOutsidePositions, ...pingPositions]}
+                        statusText={boundaryDisplay.mapStatusText}
+                    />
+                </View>
+            </PagerView>
+
+            <BottomTabBar activePage={activePage} onSelect={handleSelectTab} />
         </SafeAreaView>
     );
 };
@@ -866,6 +878,12 @@ const styles = StyleSheet.create({
     screenEnded: {
         backgroundColor: '#3B0A0A', // red.950
     },
+    pager: {
+        flex: 1,
+    },
+    page: {
+        flex: 1,
+    },
     header: {
         backgroundColor: '#171923', // gray.900
         borderBottomWidth: 1,
@@ -907,11 +925,6 @@ const styles = StyleSheet.create({
     headerButtonText: {
         color: '#FFFFFF',
         fontWeight: 'bold',
-    },
-    headerButtonIcon: {
-        width: 24,
-        height: 24,
-        resizeMode: 'contain',
     },
     actionRow: {
         flexDirection: 'row',

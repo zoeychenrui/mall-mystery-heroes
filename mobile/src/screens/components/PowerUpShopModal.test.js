@@ -1,7 +1,9 @@
 /**
  * Component test for PowerUpShopModal — the RN port of
  * src/components/shop_components/{PowerUpShopModal.js, ShopItemCard.js,
- * MysteryBoxReveal.js}. Presentational: `purchasePowerUp`/
+ * MysteryBoxReveal.js}. Despite the filename, this is now one of
+ * GameScreen's five swipeable pages (the Clash-Royale-style redesign),
+ * not a popup — no isOpen/onClose. Presentational: `purchasePowerUp`/
  * `claimMysteryReward` are injected as props (GameScreen wires them to
  * callables.purchasePowerUp/claimMysteryReward), so this file needs no
  * Firebase mocking at all. The cooldown math, the block-reason text, and
@@ -25,8 +27,6 @@ const renderModal = async (props = {}) => {
     const claimMysteryReward = props.claimMysteryReward ?? jest.fn().mockResolvedValue(undefined);
     const utils = await render(
         <PowerUpShopModal
-            isOpen
-            onClose={jest.fn()}
             roomID="ROOM1"
             playerName="Dana"
             score={100}
@@ -196,14 +196,5 @@ describe('PowerUpShopModal', () => {
         });
 
         expect(screen.getByText('1:04')).toBeTruthy();
-    });
-
-    it('calls onClose when the close button is pressed', async () => {
-        const onClose = jest.fn();
-        await renderModal({ onClose });
-
-        fireEvent.press(screen.getByLabelText('Close shop'));
-
-        expect(onClose).toHaveBeenCalledTimes(1);
     });
 });
