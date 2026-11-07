@@ -76,7 +76,7 @@ has. It is a new client, not a new backend.
 
 ## Anti-goals
 
-- Shipping something that's *functionally* parity but feels noticeably
+- Shipping something that's _functionally_ parity but feels noticeably
   worse than the website (sluggish, flaky reconnects, janky camera/map)
   would defeat the point. Performance/battery/offline-robustness polish
   is explicitly deferred past this first build (per the brainstorming
@@ -105,40 +105,40 @@ that those pages use), gets a native equivalent:
    routes into the game once the GM approves it, shows "denied" with a
    way back to the join screen otherwise.
 4. **Main game screen**, once the game has started:
-   - Current target(s), or an "eliminated" state with the revival-mission
-     note.
-   - Boundary/location panel: permission prompt, live inside/near-edge/
-     outside status text, the exposure countdown, retryable
-     unavailable-reason messages (`UNAVAILABLE_REASON_TEXT` in
-     `PlayerGame.js`), and a button to open the live map.
-   - Live map: the game boundary polygon, this player's own position,
-     every other currently-exposed player's position, and ping-card
-     "View on map" overlays — the same data `GameMap.js`/
-     `PlayerMapModal.js` render today, in a native map view instead of
-     Mapbox GL JS.
-   - Group chat feed: chat messages, GM broadcasts/whispers,
-     kill-photo submissions, mission/revival announcements, power-up
-     ping/notice messages — everything `MessageBubble.js` renders today.
-   - Chat composer: send a text message; take or pick a photo, claim it
-     against a target, an open mission, or nothing ("just for fun"),
-     and submit it (`submitChatMessage`/`submitKillPhoto`, unchanged).
-   - Missions list (read-only — players never edit missions).
-   - Leaderboard (standings, read-only).
-   - Power-up shop, when alive and the game is active: watch-ad,
-     ping-targets, ping-assassins, global-ping-picked,
-     global-ping-random, block-camera, horcrux, mystery-box — the same
-     catalog `src/game/powerUps.js` already defines, called through the
-     same `purchasePowerUp`/`claimMysteryReward` endpoints, gated the
-     same way on whether the room's boundary ("zones") is enabled.
-   - Player avatars: capture/replace your own photo (written directly
-     to your own player doc, already permitted by an existing
-     `firestore.rules` clause — no Cloud Function involved), shown next
-     to your name and on each of your targets; tapping a target's
-     avatar opens a full view of their photo, or a note that they
-     haven't added one yet.
-   - A Game Rules modal — static help text (targets, missions/points,
-     avatars, zones, shop, safety, what happens if you're eliminated).
-   - Leave game, with the same confirm-dialog warning.
+    - Current target(s), or an "eliminated" state with the revival-mission
+      note.
+    - Boundary/location panel: permission prompt, live inside/near-edge/
+      outside status text, the exposure countdown, retryable
+      unavailable-reason messages (`UNAVAILABLE_REASON_TEXT` in
+      `PlayerGame.js`), and a button to open the live map.
+    - Live map: the game boundary polygon, this player's own position,
+      every other currently-exposed player's position, and ping-card
+      "View on map" overlays — the same data `GameMap.js`/
+      `PlayerMapModal.js` render today, in a native map view instead of
+      Mapbox GL JS.
+    - Group chat feed: chat messages, GM broadcasts/whispers,
+      kill-photo submissions, mission/revival announcements, power-up
+      ping/notice messages — everything `MessageBubble.js` renders today.
+    - Chat composer: send a text message; take or pick a photo, claim it
+      against a target, an open mission, or nothing ("just for fun"),
+      and submit it (`submitChatMessage`/`submitKillPhoto`, unchanged).
+    - Missions list (read-only — players never edit missions).
+    - Leaderboard (standings, read-only).
+    - Power-up shop, when alive and the game is active: watch-ad,
+      ping-targets, ping-assassins, global-ping-picked,
+      global-ping-random, block-camera, horcrux, mystery-box — the same
+      catalog `src/game/powerUps.js` already defines, called through the
+      same `purchasePowerUp`/`claimMysteryReward` endpoints, gated the
+      same way on whether the room's boundary ("zones") is enabled.
+    - Player avatars: capture/replace your own photo (written directly
+      to your own player doc, already permitted by an existing
+      `firestore.rules` clause — no Cloud Function involved), shown next
+      to your name and on each of your targets; tapping a target's
+      avatar opens a full view of their photo, or a note that they
+      haven't added one yet.
+    - A Game Rules modal — static help text (targets, missions/points,
+      avatars, zones, shop, safety, what happens if you're eliminated).
+    - Leave game, with the same confirm-dialog warning.
 5. **Game-ended state** — the same banner/notice telling players to head
    back, with chat staying open afterward.
 
@@ -189,7 +189,7 @@ unspecified:
   listed in `CLAUDE.md`'s "Game rules, parsing, anything decidable from
   data" row is already plain JS with no React, no Firebase, no DOM —
   written that way specifically so it's reusable. The existing
-  `functions/vendor/game/` setup *copies* those files because Cloud
+  `functions/vendor/game/` setup _copies_ those files because Cloud
   Functions deploys `functions/` in total isolation from the rest of
   the repo; `mobile/` has no such isolation constraint, since the whole
   repo ships together in git, so the plan should prefer Metro bundler
@@ -204,7 +204,7 @@ unspecified:
   `@react-native-firebase`.** The existing web app already uses the JS
   SDK; reusing it in the Expo app (with `firebase/auth`'s
   `getReactNativePersistence` backed by `@react-native-async-storage/
-  async-storage` for persistent login, and the same `firebase/firestore`
+async-storage` for persistent login, and the same `firebase/firestore`
   and `httpsCallable` APIs the web app's `dbCalls.js` and
   `src/components/*.js` callable wrappers already use) means the exact
   same Firebase config, project, and query/callable code patterns carry
@@ -216,25 +216,25 @@ unspecified:
 - **Native equivalents for the browser-only APIs the current player
   code depends on.** Found by reading the actual files, not just the
   top-level components:
-  - `navigator.geolocation` (`useBoundaryLocation.js`) → `expo-location`'s
-    foreground position watch. The cadence/throttling logic in
-    `src/game/locationReportCadence.js` is reused unchanged; only the
-    OS-level watch call changes.
-  - The hidden `<input type="file" capture="environment">`
-    (`MessageComposer.js`) → `expo-image-picker`'s camera capture.
-  - `src/utils/compressImage.js`'s `new Image()`/`<canvas>`/
-    `URL.createObjectURL` (run on every kill-photo before upload, so a
-    multi-MB phone photo doesn't go out over a possibly-weak venue
-    connection uncompressed — skipping this would reproduce exactly the
-    "janky camera" failure this doc's Anti-goals section rules out) →
-    `expo-image-manipulator` for the resize/compress step.
-  - `crypto.randomUUID()` (`src/components/firebase_calls/
-    storageCalls.js`'s `uploadKillPhoto`, naming the Storage object) →
-    `expo-crypto` (or an equivalent RN UUID polyfill), since Hermes does
-    not provide this by default.
-  Each of these is a client-side swap only — none change what gets
-  uploaded, stored, or how the backend processes it, so none of them
-  are backend changes under this doc's Non-goals.
+    - `navigator.geolocation` (`useBoundaryLocation.js`) → `expo-location`'s
+      foreground position watch. The cadence/throttling logic in
+      `src/game/locationReportCadence.js` is reused unchanged; only the
+      OS-level watch call changes.
+    - The hidden `<input type="file" capture="environment">`
+      (`MessageComposer.js`) → `expo-image-picker`'s camera capture.
+    - `src/utils/compressImage.js`'s `new Image()`/`<canvas>`/
+      `URL.createObjectURL` (run on every kill-photo before upload, so a
+      multi-MB phone photo doesn't go out over a possibly-weak venue
+      connection uncompressed — skipping this would reproduce exactly the
+      "janky camera" failure this doc's Anti-goals section rules out) →
+      `expo-image-manipulator` for the resize/compress step.
+    - `crypto.randomUUID()` (`src/components/firebase_calls/
+storageCalls.js`'s `uploadKillPhoto`, naming the Storage object) →
+      `expo-crypto` (or an equivalent RN UUID polyfill), since Hermes does
+      not provide this by default.
+      Each of these is a client-side swap only — none change what gets
+      uploaded, stored, or how the backend processes it, so none of them
+      are backend changes under this doc's Non-goals.
 - **Firestore's realtime listeners need a transport setting under
   React Native.** The web SDK's default `onSnapshot` streaming
   transport is browser-specific; under Hermes it commonly needs

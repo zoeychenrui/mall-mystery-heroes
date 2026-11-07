@@ -47,7 +47,7 @@ version as the web app, `^10.x`), `@react-navigation/native`,
   existing `firestore.rules` clause (a signed-in player may update only
   that one field on their own player doc), and the existing
   `storage.rules` already has a matching `rooms/{roomId}/avatars/
-  {uid}` rule — nothing to add on either side.
+{uid}` rule — nothing to add on either side.
 - `src/game/*.js`, `src/utils/applyMessageChanges.js`, and
   `src/utils/formatMessageTime.js` are the single source of truth —
   imported by `mobile/`, never copied by hand. (`src/game/` mixes
@@ -231,11 +231,13 @@ mobile/
 ### Task 1: Scaffold the Expo app, wire up Firebase, verify realtime listeners work
 
 **Files:**
+
 - Create: `mobile/package.json`, `mobile/app.config.js`,
   `mobile/.env.example`, `mobile/App.js` (placeholder screen only),
   `mobile/src/firebase/firebaseConfig.js`
 
 **Interfaces:**
+
 - Produces: `mobile/src/firebase/firebaseConfig.js` exports `app`,
   `auth`, `db`, `storage`, `functions` — the same five names
   `src/utils/firebase.js` exports on the web side, same shapes
@@ -279,7 +281,7 @@ import { getStorage } from 'firebase/storage';
 import { getFunctions } from 'firebase/functions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const firebaseConfig = { /* from process.env.EXPO_PUBLIC_FIREBASE_* */ };
+const firebaseConfig = {/* from process.env.EXPO_PUBLIC_FIREBASE_* */};
 
 export const app = initializeApp(firebaseConfig);
 export const auth = initializeAuth(app, {
@@ -293,7 +295,7 @@ export const functions = getFunctions(app);
 ```
 
 - [ ] **Step 5: Manually verify realtime listeners actually work (the
-  day-one risk this plan exists to catch early)**
+      day-one risk this plan exists to catch early)**
 
 This is a platform-integration check, not a unit test — write a
 throwaway screen in `App.js` that, on mount, signs in anonymously
@@ -323,11 +325,13 @@ git commit -m "Scaffold Expo player app with verified Firebase/Firestore wiring"
 ### Task 2: Share `src/game/` and the pure `src/utils/` helpers into `mobile/`
 
 **Files:**
+
 - Create: `mobile/metro.config.js`
 - Create (throwaway, deleted at the end of this task once it passes):
   a temporary import in `mobile/App.js`
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks.
 - Produces: every later task may `import ... from '../../../src/game/<file>'`
   or `'../../../src/utils/applyMessageChanges'` /
@@ -391,38 +395,40 @@ mobile/scripts/sync-shared-game-logic.js` and note it in the message.)
 ### Task 3: Mobile Firebase data layer — query builders, callable wrappers, Storage upload
 
 **Files:**
+
 - Create: `mobile/src/firebase/dbCalls.js`
 - Create: `mobile/src/firebase/callables.js`
 - Create: `mobile/src/firebase/storageCalls.js`
 
 **Interfaces:**
+
 - Consumes: `app`, `auth`, `db`, `storage`, `functions` from Task 1's
   `mobile/src/firebase/firebaseConfig.js`.
 - Produces (all consumed by Tasks 5–14):
-  - `dbCalls.js`: `fetchRoomReferenceForRoom(roomID)`,
-    `fetchPlayerReferenceForRoom(playerName, roomID)`,
-    `fetchPlayersQueryByDescendPointsThenIsAliveForRoom(roomID)`,
-    `fetchTasksQueryForRoom(roomID)`,
-    `fetchBoundaryStatusReferenceForPlayer(playerName, roomID)`,
-    `fetchOutsideBoundaryStatusesQueryForRoom(roomID)`,
-    `fetchPlayerMessagesQueryForRoom(roomID)`,
-    `fetchReconnectRequestReferenceForRoom(requestId, roomID)` — same
-    names, same return shapes (a `DocumentReference` or `Query`) as the
-    web `src/components/firebase_calls/dbCalls.js`'s functions of the
-    same names.
-  - `callables.js`: `joinRoom(roomId, playerName)`,
-    `requestReconnect(roomID, playerName)`, `leaveGame(roomID)`,
-    `submitChatMessage({roomId, text})`,
-    `submitKillPhoto({roomId, target, mission, url})`,
-    `reportPlayerLocation(payload)`, `purchasePowerUp({roomId, itemId,
-    targetName})`, `claimMysteryReward({roomId, targetName})` — same
-    names/signatures/return shapes as the web app's
-    `src/components/{joinRoom,requestReconnect,leaveGame,
-    submitChatMessage,submitKillPhoto,reportPlayerLocation,
-    purchasePowerUp}.js`.
-  - `storageCalls.js`: `uploadKillPhoto(roomID, photoBlob)` — same
-    name/signature/return (`Promise<string>`, the download URL) as the
-    web version.
+    - `dbCalls.js`: `fetchRoomReferenceForRoom(roomID)`,
+      `fetchPlayerReferenceForRoom(playerName, roomID)`,
+      `fetchPlayersQueryByDescendPointsThenIsAliveForRoom(roomID)`,
+      `fetchTasksQueryForRoom(roomID)`,
+      `fetchBoundaryStatusReferenceForPlayer(playerName, roomID)`,
+      `fetchOutsideBoundaryStatusesQueryForRoom(roomID)`,
+      `fetchPlayerMessagesQueryForRoom(roomID)`,
+      `fetchReconnectRequestReferenceForRoom(requestId, roomID)` — same
+      names, same return shapes (a `DocumentReference` or `Query`) as the
+      web `src/components/firebase_calls/dbCalls.js`'s functions of the
+      same names.
+    - `callables.js`: `joinRoom(roomId, playerName)`,
+      `requestReconnect(roomID, playerName)`, `leaveGame(roomID)`,
+      `submitChatMessage({roomId, text})`,
+      `submitKillPhoto({roomId, target, mission, url})`,
+      `reportPlayerLocation(payload)`, `purchasePowerUp({roomId, itemId,
+targetName})`, `claimMysteryReward({roomId, targetName})` — same
+      names/signatures/return shapes as the web app's
+      `src/components/{joinRoom,requestReconnect,leaveGame,
+submitChatMessage,submitKillPhoto,reportPlayerLocation,
+purchasePowerUp}.js`.
+    - `storageCalls.js`: `uploadKillPhoto(roomID, photoBlob)` — same
+      name/signature/return (`Promise<string>`, the download URL) as the
+      web version.
 
 - [ ] **Step 1: Write `dbCalls.js`**
 
@@ -483,10 +489,12 @@ git commit -m "Add mobile app's own Firebase data-access layer, mirroring the we
 ### Task 4: AsyncStorage-backed player session
 
 **Files:**
+
 - Create: `mobile/src/utils/playerSession.js`
 - Test: `mobile/src/utils/playerSession.test.js`
 
 **Interfaces:**
+
 - Produces: `readPlayerSession(storage?)` returning
   `Promise<{roomID: string, playerName: string} | null>`,
   `writePlayerSession(roomID, playerName, storage?)` returning
@@ -511,8 +519,12 @@ const createFakeStorage = () => {
     const store = {};
     return {
         getItem: async (key) => (key in store ? store[key] : null),
-        setItem: async (key, value) => { store[key] = value; },
-        removeItem: async (key) => { delete store[key]; },
+        setItem: async (key, value) => {
+            store[key] = value;
+        },
+        removeItem: async (key) => {
+            delete store[key];
+        },
     };
 };
 
@@ -587,6 +599,7 @@ git commit -m "Add AsyncStorage-backed player session for the mobile app"
 ### Task 5: Navigation shell, anonymous sign-in, Join screen
 
 **Files:**
+
 - Create: `mobile/src/navigation/RootNavigator.js`
 - Create: `mobile/src/screens/JoinScreen.js`
 - Test: `mobile/src/screens/JoinScreen.test.js`
@@ -594,6 +607,7 @@ git commit -m "Add AsyncStorage-backed player session for the mobile app"
   the auto-resume decision here)
 
 **Interfaces:**
+
 - Consumes: Task 1's `auth`; Task 3's `callables.joinRoom`,
   `callables.requestReconnect`; Task 4's `writePlayerSession`.
 - Produces: `RootNavigator` registers three routes by name —
@@ -614,7 +628,9 @@ import JoinScreen from './JoinScreen';
 
 describe('JoinScreen', () => {
     it('uppercases the room code as typed, matching the web app', () => {
-        const { getByPlaceholderText } = render(<JoinScreen navigation={{ navigate: jest.fn() }} />);
+        const { getByPlaceholderText } = render(
+            <JoinScreen navigation={{ navigate: jest.fn() }} />
+        );
         const input = getByPlaceholderText('Game ID');
         fireEvent.changeText(input, 'abc123');
         expect(input.props.value).toBe('ABC123');
@@ -672,10 +688,12 @@ git commit -m "Add navigation shell and Join screen to the mobile app"
 ### Task 6: Reconnect-pending screen
 
 **Files:**
+
 - Create: `mobile/src/screens/ReconnectPendingScreen.js`
 - Test: `mobile/src/screens/ReconnectPendingScreen.test.js`
 
 **Interfaces:**
+
 - Consumes: Task 3's `dbCalls.fetchReconnectRequestReferenceForRoom`;
   Task 4's `writePlayerSession`; navigates to `'Game'` (Task 7) and back
   to `'Join'` (Task 5).
@@ -694,7 +712,10 @@ describe('ReconnectPendingScreen', () => {
     it('navigates to Game once the request is approved', async () => {
         const navigate = jest.fn();
         onSnapshot.mockImplementation((ref, onNext) => {
-            onNext({ exists: () => true, data: () => ({ status: 'approved', playerName: 'Alice' }) });
+            onNext({
+                exists: () => true,
+                data: () => ({ status: 'approved', playerName: 'Alice' }),
+            });
             return () => {};
         });
         render(
@@ -703,14 +724,15 @@ describe('ReconnectPendingScreen', () => {
                 navigation={{ navigate }}
             />
         );
-        await waitFor(() =>
-            expect(navigate).toHaveBeenCalledWith('Game', { roomID: 'ROOM1' })
-        );
+        await waitFor(() => expect(navigate).toHaveBeenCalledWith('Game', { roomID: 'ROOM1' }));
     });
 
     it('shows join-specific wording when requestType is "join"', async () => {
         onSnapshot.mockImplementation((ref, onNext) => {
-            onNext({ exists: () => true, data: () => ({ status: 'pending', requestType: 'join' }) });
+            onNext({
+                exists: () => true,
+                data: () => ({ status: 'pending', requestType: 'join' }),
+            });
             return () => {};
         });
         const { findByText } = render(
@@ -766,14 +788,16 @@ git commit -m "Add reconnect-pending screen to the mobile app"
 ### Task 7: Game screen shell — subscriptions, target/eliminated display, Leave, game-ended state
 
 **Files:**
+
 - Create: `mobile/src/screens/GameScreen.js`
 - Test: `mobile/src/screens/GameScreen.test.js`
 
 **Interfaces:**
+
 - Consumes: Task 3's `dbCalls.{fetchRoomReferenceForRoom,
-  fetchPlayerReferenceForRoom,
-  fetchPlayersQueryByDescendPointsThenIsAliveForRoom,
-  fetchTasksQueryForRoom}` and `callables.leaveGame`; Task 4's
+fetchPlayerReferenceForRoom,
+fetchPlayersQueryByDescendPointsThenIsAliveForRoom,
+fetchTasksQueryForRoom}` and `callables.leaveGame`; Task 4's
   `playerSession.{readPlayerSession, clearPlayerSession}`.
 - Produces: `GameScreen` renders child slots (filled by later tasks)
   for chat (Task 9), the location/map panel (Tasks 11–12), missions/
@@ -809,7 +833,10 @@ describe('GameScreen', () => {
         let call = 0;
         onSnapshot.mockImplementation(() => unsubscribes[call++]);
         const { unmount } = render(
-            <GameScreen route={{ params: { roomID: 'ROOM1' } }} navigation={{ navigate: jest.fn() }} />
+            <GameScreen
+                route={{ params: { roomID: 'ROOM1' } }}
+                navigation={{ navigate: jest.fn() }}
+            />
         );
         unmount();
         unsubscribes.forEach((unsubscribe) => expect(unsubscribe).toHaveBeenCalledTimes(1));
@@ -817,11 +844,17 @@ describe('GameScreen', () => {
 
     it('shows the waiting-room text before the host starts the game', async () => {
         onSnapshot.mockImplementation((ref, onNext) => {
-            onNext({ exists: () => true, data: () => ({ gameStarted: false, isGameActive: true }) });
+            onNext({
+                exists: () => true,
+                data: () => ({ gameStarted: false, isGameActive: true }),
+            });
             return () => {};
         });
         const { findByText } = render(
-            <GameScreen route={{ params: { roomID: 'ROOM1' } }} navigation={{ navigate: jest.fn() }} />
+            <GameScreen
+                route={{ params: { roomID: 'ROOM1' } }}
+                navigation={{ navigate: jest.fn() }}
+            />
         );
         await findByText('Waiting for the host to start...');
     });
@@ -832,7 +865,10 @@ describe('GameScreen', () => {
         // the mocked onSnapshot calls (two separate listeners — see the
         // player-doc subscription in Step 3), then assert:
         const { findByText } = render(
-            <GameScreen route={{ params: { roomID: 'ROOM1' } }} navigation={{ navigate: jest.fn() }} />
+            <GameScreen
+                route={{ params: { roomID: 'ROOM1' } }}
+                navigation={{ navigate: jest.fn() }}
+            />
         );
         await findByText("YOU'VE BEEN ELIMINATED");
     });
@@ -853,6 +889,7 @@ PlayerGameStatusNotices,PlayerBoundaryPanel,PlayerRulesModal}.js` —
 read all six before writing anything, not `PlayerGame.js` alone.
 Mirror the following, for this task's scope only (chat/location/
 missions/leaderboard/shop/avatar are explicitly out — later tasks):
+
 - The room-doc subscription, including the `handleSubscriptionError`
   pattern (clear the session via `playerSession.clearPlayerSession`,
   navigate back to `'Join'`) on a missing room or a permission error.
@@ -931,10 +968,12 @@ git commit -m "Add Game screen shell: subscriptions, target display, leave flow,
 ### Task 8: Session auto-resume on launch
 
 **Files:**
+
 - Modify: `mobile/App.js`
 - Test: `mobile/App.test.js`
 
 **Interfaces:**
+
 - Consumes: Task 4's `playerSession.readPlayerSession`; Task 1's
   `auth`; navigates to `'Join'` or `'Game'` (Tasks 5 and 7).
 
@@ -1012,6 +1051,7 @@ git commit -m "Resume straight into the game on launch when a valid session is s
 ### Task 9: Chat feed and composer (text only)
 
 **Files:**
+
 - Create: `mobile/src/screens/components/ChatFeed.js`
 - Create: `mobile/src/screens/components/ChatComposer.js`
 - Create: `mobile/src/screens/components/MessageBubble.js`
@@ -1021,6 +1061,7 @@ git commit -m "Resume straight into the game on launch when a valid session is s
   the chat stub from Task 7)
 
 **Interfaces:**
+
 - Consumes: Task 3's `dbCalls.fetchPlayerMessagesQueryForRoom` and
   `callables.submitChatMessage`; the shared
   `src/utils/applyMessageChanges.js` (Task 2).
@@ -1083,7 +1124,7 @@ Render the camera button as disabled/absent for now — Task 10 fills it
 in.
 
 - [ ] **Step 6: Mount both in `GameScreen.js`, lifting `pendingMessages`
-  state the same way `PlayerGame.js` does**
+      state the same way `PlayerGame.js` does**
 
 - [ ] **Step 7: Run the tests to verify they pass**
 
@@ -1108,6 +1149,7 @@ git commit -m "Add text chat feed and composer to the mobile game screen"
 ### Task 10: Kill-photo / mission-photo capture, compression, claim picker, submission
 
 **Files:**
+
 - Create: `mobile/src/screens/components/KillPhotoModal.js`
 - Modify: `mobile/src/screens/components/ChatComposer.js` (adds the
   camera button and capture/compress/submit flow)
@@ -1115,6 +1157,7 @@ git commit -m "Add text chat feed and composer to the mobile game screen"
 - Test (modified): `mobile/src/screens/components/ChatComposer.test.js`
 
 **Interfaces:**
+
 - Consumes: Task 3's `callables.submitKillPhoto` and
   `storageCalls.uploadKillPhoto`; the shared
   `src/game/photoClaimOptions.js`'s `buildPhotoClaimOptions` (Task 2).
@@ -1174,7 +1217,7 @@ Run: `cd mobile && npx jest src/screens/components/ChatComposer.test.js`
 Expected: FAIL.
 
 - [ ] **Step 7: Implement the camera button and its flow in
-  `ChatComposer.js`**
+      `ChatComposer.js`**
 
 Install `expo-image-picker` and `expo-image-manipulator`. Read the
 current `src/components/player_messages_components/MessageComposer.js`
@@ -1222,7 +1265,7 @@ Run: `cd mobile && npx jest src/screens/components/ChatComposer.test.js`
 Expected: PASS.
 
 - [ ] **Step 9: Manual verification (per this plan's Review Focus item
-  on backgrounding mid-upload)**
+      on backgrounding mid-upload)**
 
 On a real device: capture a photo, tap Submit, then immediately
 background the app (home button/swipe) before the upload could
@@ -1246,6 +1289,7 @@ git commit -m "Add camera capture, compression, and kill/mission-photo submissio
 ### Task 11: Location/boundary status hook and status panel
 
 **Files:**
+
 - Create: `mobile/src/hooks/useBoundaryLocation.js`
 - Create: `mobile/src/screens/components/LocationStatusPanel.js`
 - Test: `mobile/src/hooks/useBoundaryLocation.test.js`
@@ -1254,13 +1298,14 @@ git commit -m "Add camera capture, compression, and kill/mission-photo submissio
   replacing the location stub from Task 7)
 
 **Interfaces:**
+
 - Consumes: Task 3's `callables.reportPlayerLocation` (the hook itself
   — it only ever writes; read `src/hooks/useBoundaryLocation.js` now
   and confirm it has no `dbCalls`/`onSnapshot` dependency of its own).
   Separately, `GameScreen.js` itself (modified by this task, not the
   hook) gains two more subscriptions using Task 3's
   `dbCalls.{fetchBoundaryStatusReferenceForPlayer,
-  fetchOutsideBoundaryStatusesQueryForRoom}` — read
+fetchOutsideBoundaryStatusesQueryForRoom}` — read
   `src/pages/PlayerGame.js` now for exactly these two `useEffect`
   blocks (`boundaryStatusDoc`, `otherOutsidePositions`), which the real
   web app subscribes to directly in `PlayerGame.js`, not inside its
@@ -1270,7 +1315,7 @@ git commit -m "Add camera capture, compression, and kill/mission-photo submissio
   `GAME_BOUNDARY_CONFIG` — the first two for the hook/panel, `canSee`
   for the `GameScreen`-level position filtering below) (Task 2).
 - Produces: `useBoundaryLocation({roomID, boundaryRevision,
-  boundaryEnabled, isGameActive, isAlive})` returns
+boundaryEnabled, isGameActive, isAlive})` returns
   `{permissionState, ownPosition, requestPermission}` — same shape as
   the web hook (`lastResult` is dropped; nothing in this plan's scope
   reads it, same as the web version, where only `PlayerGame.js`'s own
@@ -1294,6 +1339,7 @@ calls (`Location.watchPositionAsync`, `Location.getCurrentPositionAsync`,
 `Location.requestForegroundPermissionsAsync`) for the web version's
 mocked `navigator.geolocation`. Explicitly include the two Review Focus
 cases:
+
 - Calling `requestPermission()` after a `PERMISSION_DENIED` result
   actually re-requests permission and, once granted, resumes reporting
   (not just "calls the right mock" — assert a subsequent position
@@ -1371,9 +1417,9 @@ Run: `cd mobile && npx jest src/screens/components/LocationStatusPanel.test.js`
 Expected: PASS.
 
 - [ ] **Step 9: Mount the hook and the two additional subscriptions in
-  `GameScreen.js`, derive `liveBoundaryStatus`/
-  `freshOtherOutsidePositions`, mount the panel, and thread the real
-  `locationEnabled` value into `ChatComposer`**
+      `GameScreen.js`, derive `liveBoundaryStatus`/
+      `freshOtherOutsidePositions`, mount the panel, and thread the real
+      `locationEnabled` value into `ChatComposer`**
 
 Mount `useBoundaryLocation` the same gating as the web version
 (independent of whether the map, Task 12, is open). Add the
@@ -1413,6 +1459,7 @@ git commit -m "Add location/boundary status tracking and status panel to the mob
 ### Task 12: Native boundary map
 
 **Files:**
+
 - Create: `mobile/src/screens/components/GameMapModal.js`
 - Test: `mobile/src/screens/components/GameMapModal.test.js`
 - Modify: `mobile/src/screens/GameScreen.js` (wires `onShowPings` from
@@ -1420,6 +1467,7 @@ git commit -m "Add location/boundary status tracking and status panel to the mob
   Task 7)
 
 **Interfaces:**
+
 - Consumes: Task 11's `ownPosition`, `freshOtherOutsidePositions`, and
   `mapStatusText` — all passed down as props from `GameScreen`; this
   task does **not** subscribe to Firestore itself (see Task 11's
@@ -1462,8 +1510,8 @@ Run: `cd mobile && npx jest src/screens/components/GameMapModal.test.js`
 Expected: PASS.
 
 - [ ] **Step 5: Wire `onShowPings` through from `ChatFeed`/
-  `MessageBubble`'s `powerUpPing` branch (Task 9) to open this modal
-  with the ping's positions, matching the web version exactly**
+      `MessageBubble`'s `powerUpPing` branch (Task 9) to open this modal
+      with the ping's positions, matching the web version exactly**
 
 - [ ] **Step 6: Commit**
 
@@ -1479,6 +1527,7 @@ git commit -m "Add native boundary map to the mobile app"
 ### Task 13: Missions list and leaderboard screens
 
 **Files:**
+
 - Create: `mobile/src/screens/components/MissionsModal.js`
 - Create: `mobile/src/screens/components/LeaderboardModal.js`
 - Test: `mobile/src/screens/components/MissionsModal.test.js`
@@ -1490,6 +1539,7 @@ git commit -m "Add native boundary map to the mobile app"
   Missions/Leaderboard buttons stubbed in Task 7)
 
 **Interfaces:**
+
 - Consumes: Task 7's `missions` (from the tasks-query subscription
   already mounted in `GameScreen`) and `players`; the shared
   `src/game/leaderboard.js`'s `buildLeaderboardStandings` (Task 2).
@@ -1528,11 +1578,11 @@ src/screens/components/LeaderboardModal.test.js`
 Expected: PASS.
 
 - [ ] **Step 5: Fill in `MessageBubble.js`'s `gameEndedLeaderboard`
-  branch, reusing the same standings-rendering logic as
-  `LeaderboardModal.js`**
+      branch, reusing the same standings-rendering logic as
+      `LeaderboardModal.js`**
 
 - [ ] **Step 6: Wire both modals into `GameScreen.js`'s Missions/
-  Leaderboard buttons**
+      Leaderboard buttons**
 
 - [ ] **Step 7: Commit**
 
@@ -1551,6 +1601,7 @@ git commit -m "Add missions list and leaderboard screens to the mobile app"
 ### Task 14: Power-up shop screen
 
 **Files:**
+
 - Create: `mobile/src/screens/components/PowerUpShopModal.js`
 - Test: `mobile/src/screens/components/PowerUpShopModal.test.js`
 - Modify: `mobile/src/screens/GameScreen.js` (wires the Shop button
@@ -1560,11 +1611,12 @@ git commit -m "Add missions list and leaderboard screens to the mobile app"
   "View on map" opens — already exists end-to-end from earlier tasks)
 
 **Interfaces:**
+
 - Consumes: Task 3's `callables.{purchasePowerUp, claimMysteryReward}`;
   Task 7's `players` and the player doc's `score`/`powerUpCooldowns`/
   `horcrux`/`horcruxEndsAt`/`pendingMysteryItem` raw fields — this task
   computes `horcruxActive` itself (`isHorcruxActive({horcrux,
-  horcruxEndsAtMs: horcruxEndsAt?.toMillis?.() ?? null}, Date.now())`,
+horcruxEndsAtMs: horcruxEndsAt?.toMillis?.() ?? null}, Date.now())`,
   same as the web version's `PlayerGame.js` does before handing the
   result to its own shop modal — `horcruxActive` is a derived value,
   not a field Task 7 stores or passes down); also
@@ -1610,8 +1662,8 @@ Run: `cd mobile && npx jest src/screens/components/PowerUpShopModal.test.js`
 Expected: PASS.
 
 - [ ] **Step 5: Wire into `GameScreen.js`'s Shop button, same
-  `canShop` gate as the web version (`gameStarted && isGameActive &&
-  playerData?.isAlive === true`)**
+      `canShop` gate as the web version (`gameStarted && isGameActive &&
+playerData?.isAlive === true`)**
 
 - [ ] **Step 6: Commit**
 
@@ -1627,6 +1679,7 @@ git commit -m "Add power-up shop screen to the mobile app"
 ### Task 15: Player avatar — capture, upload, display, target photo viewer
 
 **Files:**
+
 - Create: `mobile/src/screens/components/AvatarButton.js`
 - Create: `mobile/src/screens/components/TargetPhotoModal.js`
 - Test: `mobile/src/screens/components/AvatarButton.test.js`
@@ -1639,6 +1692,7 @@ git commit -m "Add power-up shop screen to the mobile app"
   avatar/target-photo stubs from Task 7)
 
 **Interfaces:**
+
 - Consumes: Task 3's `dbCalls.fetchPlayerReferenceForRoom` (for the
   direct `updateDoc` call below) and `storage` (via this task's own
   new `storageCalls.uploadPlayerAvatar`); Task 7's `players` and
@@ -1657,7 +1711,7 @@ Constraints, thin SDK wrappers aren't unit tested) — add it to
 `mobile/src/firebase/storageCalls.js` directly.
 
 - [ ] **Step 2: Implement `uploadPlayerAvatar` in
-  `mobile/src/firebase/storageCalls.js`**
+      `mobile/src/firebase/storageCalls.js`**
 
 ```js
 export const uploadPlayerAvatar = async (roomID, uid, photoBlob) => {
@@ -1756,6 +1810,7 @@ git commit -m "Add player avatar capture/upload/display and the target photo vie
 ### Task 16: Docs update and full-parity manual QA pass
 
 **Files:**
+
 - Modify: `docs/architecture.md` (the "Player mobile app (aspirational
   — does not exist)" box and its surrounding prose)
 - Modify: `docs/data-model.md` (if any field read by the mobile app
@@ -1764,6 +1819,7 @@ git commit -m "Add player avatar capture/upload/display and the target photo vie
   such a fix would land if found)
 
 **Interfaces:**
+
 - Consumes: the finished app from every prior task.
 
 - [ ] **Step 1: Update `docs/architecture.md`**
