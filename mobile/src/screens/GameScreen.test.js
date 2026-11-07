@@ -623,7 +623,7 @@ describe('GameScreen', () => {
                 player: { isAlive: true, targets: [] },
             });
             const { findByText } = await renderScreen();
-            expect(await findByText('Mall Mystery Heroes')).toBeTruthy();
+            expect(await findByText('Lobby ROOM1')).toBeTruthy();
         });
 
         it('hides the header/Leave/Rules chrome on the Shop, Missions, Leaderboard, and Map pages', async () => {
@@ -635,7 +635,7 @@ describe('GameScreen', () => {
 
             for (const tabLabel of ['Shop', 'Missions', 'Leaderboard', 'Map']) {
                 await fireEvent.press(await findByLabelText(tabLabel));
-                expect(queryByText('Mall Mystery Heroes')).toBeNull();
+                expect(queryByText('Lobby ROOM1')).toBeNull();
                 expect(queryByLabelText('Leave')).toBeNull();
                 expect(queryByLabelText('Game rules')).toBeNull();
             }

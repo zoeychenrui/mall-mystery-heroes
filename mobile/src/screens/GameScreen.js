@@ -630,13 +630,23 @@ const GameScreen = ({ route, navigation }) => {
                         (PlayerGameHeader.js). */}
                     <View style={styles.header}>
                         <View style={styles.headerRow}>
-                            <View style={styles.headerTitle}>
-                                <Text style={styles.brand}>Mall Mystery Heroes</Text>
-                                <Text style={styles.playerLine} numberOfLines={1}>
-                                    {playerName || 'You'}{' '}
-                                    <Text style={styles.lobby}>· Lobby {roomID}</Text>
-                                </Text>
-                            </View>
+                            {/* The avatar stands in for the player's own
+                                name here — it already answers "is this
+                                me", so repeating the name as text next to
+                                it would be redundant. Previously sat alone
+                                in its own row below (actionRow), which
+                                read as a mistake once the header's other
+                                buttons moved out to BottomTabBar. */}
+                            {playerData && (
+                                <AvatarButton
+                                    playerName={playerName}
+                                    roomID={roomID}
+                                    avatarUrl={playerData.avatarUrl}
+                                />
+                            )}
+                            <Text style={styles.lobbyText} numberOfLines={1}>
+                                Lobby {roomID}
+                            </Text>
                             <TouchableOpacity
                                 accessibilityRole="button"
                                 accessibilityLabel="Game rules"
@@ -721,16 +731,6 @@ const GameScreen = ({ route, navigation }) => {
                                 )}
                             </View>
                         )}
-
-                        <View style={styles.actionRow}>
-                            {playerData && (
-                                <AvatarButton
-                                    playerName={playerName}
-                                    roomID={roomID}
-                                    avatarUrl={playerData.avatarUrl}
-                                />
-                            )}
-                        </View>
                     </View>
 
                     {/* Status notices (PlayerGameStatusNotices.js). */}
@@ -941,24 +941,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
     },
-    headerTitle: {
+    lobbyText: {
         flex: 1,
         minWidth: 0,
-    },
-    brand: {
-        fontSize: 12,
-        color: 'rgba(255, 255, 255, 0.64)', // whiteAlpha.600
-        textTransform: 'uppercase',
-        letterSpacing: 1.7,
-    },
-    playerLine: {
         fontSize: 16,
         fontWeight: 'bold',
         color: '#FFFFFF',
-    },
-    lobby: {
-        color: 'rgba(255, 255, 255, 0.64)',
-        fontWeight: 'normal',
     },
     headerButton: {
         paddingVertical: 8,
@@ -968,11 +956,6 @@ const styles = StyleSheet.create({
     headerButtonText: {
         color: '#FFFFFF',
         fontWeight: 'bold',
-    },
-    actionRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
     },
     targetsBox: {
         paddingHorizontal: 8,
