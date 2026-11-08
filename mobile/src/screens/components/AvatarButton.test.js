@@ -349,4 +349,60 @@ describe('AvatarButton', () => {
 
         expect(screen.getByLabelText('Take new photo')).toBeTruthy();
     });
+
+    describe('Edit Photo: border toggle', () => {
+        it("reflects the player's current hasBorder value", async () => {
+            await mountButton({ hasBorder: true });
+
+            await fireEvent.press(screen.getByLabelText('Add my photo'));
+
+            expect(screen.getByLabelText('Toggle avatar border').props.value).toBe(true);
+        });
+
+        it('writes avatarBorder onto the player doc when flipped on', async () => {
+            await mountButton({ hasBorder: false });
+
+            await fireEvent.press(screen.getByLabelText('Add my photo'));
+            fireEvent(screen.getByLabelText('Toggle avatar border'), 'valueChange', true);
+
+            await waitFor(() =>
+                expect(updateDoc).toHaveBeenCalledWith(PLAYER_REF, { avatarBorder: true })
+            );
+        });
+
+        it('writes avatarBorder onto the player doc when flipped off', async () => {
+            await mountButton({ hasBorder: true });
+
+            await fireEvent.press(screen.getByLabelText('Add my photo'));
+            fireEvent(screen.getByLabelText('Toggle avatar border'), 'valueChange', false);
+
+            await waitFor(() =>
+                expect(updateDoc).toHaveBeenCalledWith(PLAYER_REF, { avatarBorder: false })
+            );
+        });
+
+        it('alerts if saving the border toggle fails', async () => {
+            const Alert = require('react-native').Alert;
+            const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+            updateDoc.mockRejectedValueOnce(new Error('network error'));
+            await mountButton({ hasBorder: false });
+
+            await fireEvent.press(screen.getByLabelText('Add my photo'));
+            fireEvent(screen.getByLabelText('Toggle avatar border'), 'valueChange', true);
+
+            await waitFor(() =>
+                expect(alertSpy).toHaveBeenCalledWith('Could not save your border', 'network error')
+            );
+            alertSpy.mockRestore();
+        });
+
+        it('stays available even when canEdit is false, unlike Take New Photo', async () => {
+            await mountButton({ canEdit: false, hasBorder: false });
+
+            await fireEvent.press(screen.getByLabelText('Add my photo'));
+
+            expect(screen.getByLabelText('Toggle avatar border')).toBeTruthy();
+            expect(screen.queryByLabelText('Take new photo')).toBeNull();
+        });
+    });
 });

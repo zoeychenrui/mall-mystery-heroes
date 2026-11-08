@@ -642,6 +642,7 @@ const GameScreen = ({ route, navigation }) => {
                                     playerName={playerName}
                                     roomID={roomID}
                                     avatarUrl={playerData.avatarUrl}
+                                    hasBorder={playerData.avatarBorder === true}
                                     // The GM reviews every photo before
                                     // the game starts — editing it
                                     // afterward would undo that review.

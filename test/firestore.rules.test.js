@@ -301,6 +301,65 @@ describe('rooms/{roomId}/players/{playerId}', () => {
             updateDoc(doc(db, 'rooms', 'room-a', 'players', 'alice'), { score: 15 })
         );
     });
+
+    // The one exception to host-only writes: a player may update their
+    // own avatarUrl/avatarBorder directly (AvatarButton.js, both web and
+    // mobile) — no Cloud Function is involved for either, since neither
+    // needs server-side validation the way score/targets/etc. do. Bob,
+    // not Alice, is the one seeded with a `uid` (PLAYER_UID) above —
+    // Alice has none at all, which is its own pre-existing edge case
+    // (accessing `resource.data.uid` on a doc that was never given one
+    // throws rather than reading as unset), not something these tests
+    // need to exercise.
+    describe("a player's own avatarUrl/avatarBorder self-write exception", () => {
+        it('allows the player themselves to write their own avatarUrl', async () => {
+            const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+            await assertSucceeds(
+                updateDoc(doc(db, 'rooms', 'room-a', 'players', 'bob'), {
+                    avatarUrl: 'https://example.com/bob.jpg',
+                })
+            );
+        });
+
+        it('allows the player themselves to write their own avatarBorder', async () => {
+            const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+            await assertSucceeds(
+                updateDoc(doc(db, 'rooms', 'room-a', 'players', 'bob'), { avatarBorder: true })
+            );
+        });
+
+        it('allows the player themselves to write both in the same update', async () => {
+            const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+            await assertSucceeds(
+                updateDoc(doc(db, 'rooms', 'room-a', 'players', 'bob'), {
+                    avatarUrl: 'https://example.com/bob.jpg',
+                    avatarBorder: true,
+                })
+            );
+        });
+
+        it('denies the player writing any other field about themselves, even alongside avatarUrl', async () => {
+            const db = testEnv.authenticatedContext(PLAYER_UID).firestore();
+            await assertFails(
+                updateDoc(doc(db, 'rooms', 'room-a', 'players', 'bob'), {
+                    avatarUrl: 'https://example.com/bob.jpg',
+                    score: 999,
+                })
+            );
+        });
+
+        it("denies a different player writing to bob's avatarUrl", async () => {
+            // OTHER_UID is signed in but is not bob's own uid (PLAYER_UID) —
+            // the self-write exception must key off the document's own
+            // stored uid, not just "any signed-in player of this room".
+            const db = testEnv.authenticatedContext(OTHER_UID).firestore();
+            await assertFails(
+                updateDoc(doc(db, 'rooms', 'room-a', 'players', 'bob'), {
+                    avatarUrl: 'https://example.com/bob.jpg',
+                })
+            );
+        });
+    });
 });
 
 describe('rooms/{roomId}/reconnectRequests/{requestId}', () => {

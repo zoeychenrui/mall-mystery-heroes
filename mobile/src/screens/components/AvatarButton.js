@@ -6,6 +6,7 @@ import {
     Modal,
     Pressable,
     StyleSheet,
+    Switch,
     Text,
     View,
 } from 'react-native';
@@ -39,8 +40,19 @@ export const getInitial = (name) => {
 // Presentational only — AvatarButton below wraps it in a Pressable for the
 // player's own avatar; GameScreen.js's target list (Task 15) wraps it in
 // its own Pressable per target instead of going through AvatarButton.
-export const AvatarCircle = ({ uri, name, size = 40 }) => (
-    <View style={[styles.circle, { width: size, height: size, borderRadius: size / 2 }]}>
+// `hasBorder` only ever reflects this specific player's own
+// `avatarBorder` toggle — the target list's own call site doesn't pass
+// it, so another player's border preference has no effect on how their
+// avatar looks to others yet (AvatarButton.js's own comment on
+// handleToggleBorder has the full reasoning).
+export const AvatarCircle = ({ uri, name, size = 40, hasBorder = false }) => (
+    <View
+        style={[
+            styles.circle,
+            { width: size, height: size, borderRadius: size / 2 },
+            hasBorder && styles.circleBordered,
+        ]}
+    >
         {uri ? (
             <Image
                 source={{ uri }}
@@ -65,11 +77,19 @@ export const AvatarCircle = ({ uri, name, size = 40 }) => (
 // to a read-only preview rather than refusing outright, with a line
 // explaining why "Take New Photo" isn't there instead of just not
 // showing it with no explanation.
+//
+// "Edit Photo" is a separate action from "Take New Photo" — a toggle
+// for a colored border around the avatar, not anything to do with the
+// photo's own content, so it stays available even once canEdit is
+// false (the GM reviews the photo itself before the game starts; a
+// border is cosmetic framing on top of it, not a different photo).
 const AvatarPhotoModal = ({
     isOpen,
     onClose,
     playerName,
     avatarUrl,
+    hasBorder,
+    onToggleBorder,
     onTakePhoto,
     busy,
     canEdit,
@@ -94,7 +114,12 @@ const AvatarPhotoModal = ({
                         <ActivityIndicator testID="avatar-busy" color="#FFFFFF" />
                     </View>
                 ) : (
-                    <AvatarCircle uri={avatarUrl} name={playerName} size={160} />
+                    <AvatarCircle
+                        uri={avatarUrl}
+                        name={playerName}
+                        size={160}
+                        hasBorder={hasBorder}
+                    />
                 )}
                 {canEdit ? (
                     <Pressable
@@ -111,6 +136,16 @@ const AvatarPhotoModal = ({
                         Your photo can&apos;t be changed once the game has started.
                     </Text>
                 )}
+                <View style={styles.editPhotoRow}>
+                    <Text style={styles.editPhotoLabel}>Edit Photo: Border</Text>
+                    <Switch
+                        accessibilityLabel="Toggle avatar border"
+                        value={hasBorder}
+                        onValueChange={onToggleBorder}
+                        trackColor={{ true: '#285E61' }}
+                        thumbColor="#FFFFFF"
+                    />
+                </View>
             </View>
         </View>
     </Modal>
@@ -128,7 +163,14 @@ const AvatarPhotoModal = ({
 // as the web — `updateDoc` is called directly against
 // `dbCalls.fetchPlayerReferenceForRoom(playerName, roomID)`, which the
 // existing firestore.rules clause already permits.
-const AvatarButton = ({ playerName, roomID, avatarUrl, size = 40, canEdit = true }) => {
+const AvatarButton = ({
+    playerName,
+    roomID,
+    avatarUrl,
+    size = 40,
+    canEdit = true,
+    hasBorder = false,
+}) => {
     const [busy, setBusy] = useState(false);
     const [isPhotoOpen, setIsPhotoOpen] = useState(false);
     // The just-captured { uri, width, height }, awaiting the crop step
@@ -186,6 +228,28 @@ const AvatarButton = ({ playerName, roomID, avatarUrl, size = 40, canEdit = true
         setIsPhotoOpen(true);
     };
 
+    // Separate from the photo-capture flow entirely, and not gated on
+    // canEdit — this only ever changes a colored ring drawn on top of
+    // the existing photo, not the photo itself, so it stays available
+    // even once the GM has started reviewing (and finishing) the game.
+    // Only ever applies to this player's own avatar for now: nothing
+    // else in the app reads `avatarBorder` back out yet (not
+    // GameScreen's target list, not any other player's own view of this
+    // player), so another player wouldn't see this border on them.
+    // Extending that is a separate, bigger change (threading a new field
+    // through the players subscription and every place an avatar other
+    // than your own renders), not done here.
+    const handleToggleBorder = async (nextValue) => {
+        try {
+            await updateDoc(dbCalls.fetchPlayerReferenceForRoom(playerName, roomID), {
+                avatarBorder: nextValue,
+            });
+        } catch (error) {
+            console.error('Could not update avatar border:', error);
+            Alert.alert('Could not save your border', error.message || 'Please try again.');
+        }
+    };
+
     const handleUseCroppedPhoto = async (cropRect) => {
         const asset = pendingAsset;
         setPendingAsset(null);
@@ -229,13 +293,15 @@ const AvatarButton = ({ playerName, roomID, avatarUrl, size = 40, canEdit = true
                 accessibilityLabel={avatarUrl ? 'Change my photo' : 'Add my photo'}
                 onPress={() => setIsPhotoOpen(true)}
             >
-                <AvatarCircle uri={avatarUrl} name={playerName} size={size} />
+                <AvatarCircle uri={avatarUrl} name={playerName} size={size} hasBorder={hasBorder} />
             </Pressable>
             <AvatarPhotoModal
                 isOpen={isPhotoOpen}
                 onClose={() => setIsPhotoOpen(false)}
                 playerName={playerName}
                 avatarUrl={avatarUrl}
+                hasBorder={hasBorder}
+                onToggleBorder={handleToggleBorder}
                 onTakePhoto={captureAndOpenCrop}
                 busy={busy}
                 canEdit={canEdit}
@@ -256,6 +322,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         backgroundColor: 'rgba(255, 255, 255, 0.12)', // whiteAlpha.200-ish
         overflow: 'hidden',
+    },
+    circleBordered: {
+        borderWidth: 3,
+        borderColor: '#38B2AC', // teal.400, matches the map boundary's own accent stroke
     },
     image: {
         width: '100%',
@@ -319,6 +389,20 @@ const styles = StyleSheet.create({
         color: '#A0AEC0', // gray.400
         textAlign: 'center',
         maxWidth: 220,
+    },
+    editPhotoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        alignSelf: 'stretch',
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255, 255, 255, 0.16)', // whiteAlpha.200
+        paddingTop: 12,
+        marginTop: 4,
+    },
+    editPhotoLabel: {
+        color: '#FFFFFF',
+        fontWeight: '600',
     },
 });
 

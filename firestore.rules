@@ -108,9 +108,14 @@ service cloud.firestore {
 
       match /players/{playerId} {
         allow read: if isHostOrPlayerOfRoom(roomId);
+        // avatarBorder (mobile's own cosmetic border toggle around the
+        // avatar, src/screens/components/AvatarButton.js's
+        // handleToggleBorder) is written the same direct-from-client way
+        // avatarUrl already is — no Cloud Function involved for either,
+        // so both need to be in this one allowed-keys list together.
         allow write: if isHostOfExistingRoom(roomId) ||
           (isSignedIn() && resource.data.uid == request.auth.uid &&
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['avatarUrl']));
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['avatarUrl', 'avatarBorder']));
       }
 
       // Game boundary status and events are written only by the Cloud
