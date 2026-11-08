@@ -1,5 +1,14 @@
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    Modal,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
+} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { updateDoc } from 'firebase/firestore';
@@ -43,6 +52,50 @@ export const AvatarCircle = ({ uri, name, size = 40 }) => (
     </View>
 );
 
+// Shown when the small avatar button is tapped, instead of jumping
+// straight into the camera — lets the player see what they currently
+// have before deciding to replace it (bug report: tapping it used to
+// just blast into the camera with no preview, which felt like it came
+// out of nowhere). `busy` swaps the photo for a spinner while a newly
+// taken one is uploading; Close is disabled for that same stretch so the
+// modal can't be dismissed mid-upload.
+const AvatarPhotoModal = ({ isOpen, onClose, playerName, avatarUrl, onTakePhoto, busy }) => (
+    <Modal visible={isOpen} onRequestClose={onClose} transparent animationType="fade">
+        <View style={styles.overlay}>
+            <View style={styles.content}>
+                <View style={styles.header}>
+                    <Text style={styles.title}>Your Photo</Text>
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Close your photo"
+                        accessibilityState={{ disabled: busy }}
+                        onPress={onClose}
+                        disabled={busy}
+                    >
+                        <Text style={styles.close}>✕</Text>
+                    </Pressable>
+                </View>
+                {busy ? (
+                    <View style={styles.bigCircle}>
+                        <ActivityIndicator testID="avatar-busy" color="#FFFFFF" />
+                    </View>
+                ) : (
+                    <AvatarCircle uri={avatarUrl} name={playerName} size={160} />
+                )}
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Take new photo"
+                    onPress={onTakePhoto}
+                    disabled={busy}
+                    style={[styles.takePhotoButton, busy && styles.takePhotoButtonDisabled]}
+                >
+                    <Text style={styles.takePhotoButtonText}>Take New Photo</Text>
+                </Pressable>
+            </View>
+        </View>
+    </Modal>
+);
+
 // RN port of src/components/player_game/PlayerGameHeader.js's own-avatar
 // IconButton plus src/pages/PlayerGame.js's handleAvatarChange. Unlike the
 // web's hidden `<input type="file" capture="user">`, this drives
@@ -57,8 +110,9 @@ export const AvatarCircle = ({ uri, name, size = 40 }) => (
 // existing firestore.rules clause already permits.
 const AvatarButton = ({ playerName, roomID, avatarUrl, size = 40 }) => {
     const [busy, setBusy] = useState(false);
+    const [isPhotoOpen, setIsPhotoOpen] = useState(false);
 
-    const handlePress = async () => {
+    const handleTakePhoto = async () => {
         try {
             // launchCameraAsync only checks whether camera permission has
             // already been granted — if it hasn't, it rejects immediately
@@ -80,8 +134,21 @@ const AvatarButton = ({ playerName, roomID, avatarUrl, size = 40 }) => {
                 );
                 return;
             }
+            // allowsEditing turns on expo-image-picker's own native
+            // crop/pan-zoom screen right after capture, so the player can
+            // position their face within the frame before it's used —
+            // bug report: "you should be able to arrange it to fit the
+            // face into the circle." On iOS the crop rectangle is always
+            // a square regardless of `aspect` (confirmed in
+            // expo-image-picker's own type docs) — close enough to the
+            // circular AvatarCircle this ends up displayed in. aspect/
+            // shape are Android-only, and get it an actual circular ('oval')
+            // crop overlay there.
             const result = await ImagePicker.launchCameraAsync({
                 cameraType: ImagePicker.CameraType.front,
+                allowsEditing: true,
+                aspect: [1, 1],
+                shape: 'oval',
             });
             if (result.canceled || !result.assets?.length) return;
             const asset = result.assets[0];
@@ -110,6 +177,7 @@ const AvatarButton = ({ playerName, roomID, avatarUrl, size = 40 }) => {
             await updateDoc(dbCalls.fetchPlayerReferenceForRoom(playerName, roomID), {
                 avatarUrl: uploadedUrl,
             });
+            setIsPhotoOpen(false);
         } catch (error) {
             console.error('Could not update avatar:', error);
             Alert.alert('Could not save your photo', error.message || 'Please try again.');
@@ -119,22 +187,23 @@ const AvatarButton = ({ playerName, roomID, avatarUrl, size = 40 }) => {
     };
 
     return (
-        <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={avatarUrl ? 'Change my photo' : 'Add my photo'}
-            onPress={handlePress}
-            disabled={busy}
-        >
-            {busy ? (
-                <View
-                    style={[styles.circle, { width: size, height: size, borderRadius: size / 2 }]}
-                >
-                    <ActivityIndicator testID="avatar-busy" color="#FFFFFF" />
-                </View>
-            ) : (
+        <>
+            <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={avatarUrl ? 'Change my photo' : 'Add my photo'}
+                onPress={() => setIsPhotoOpen(true)}
+            >
                 <AvatarCircle uri={avatarUrl} name={playerName} size={size} />
-            )}
-        </Pressable>
+            </Pressable>
+            <AvatarPhotoModal
+                isOpen={isPhotoOpen}
+                onClose={() => setIsPhotoOpen(false)}
+                playerName={playerName}
+                avatarUrl={avatarUrl}
+                onTakePhoto={handleTakePhoto}
+                busy={busy}
+            />
+        </>
     );
 };
 
@@ -150,6 +219,56 @@ const styles = StyleSheet.create({
         height: '100%',
     },
     initial: {
+        color: '#FFFFFF',
+        fontWeight: 'bold',
+    },
+    overlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        justifyContent: 'center',
+        padding: 16,
+    },
+    content: {
+        backgroundColor: '#1A202C', // gray.800
+        borderRadius: 8,
+        padding: 16,
+        alignItems: 'center',
+        gap: 16,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        alignSelf: 'stretch',
+    },
+    title: {
+        color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    close: {
+        color: '#FFFFFF',
+        fontSize: 18,
+        paddingHorizontal: 8,
+    },
+    bigCircle: {
+        width: 160,
+        height: 160,
+        borderRadius: 80,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    },
+    takePhotoButton: {
+        backgroundColor: '#285E61', // teal.700
+        borderRadius: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+    },
+    takePhotoButtonDisabled: {
+        opacity: 0.5,
+    },
+    takePhotoButtonText: {
         color: '#FFFFFF',
         fontWeight: 'bold',
     },

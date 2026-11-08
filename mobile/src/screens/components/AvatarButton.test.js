@@ -1,7 +1,10 @@
 /**
  * Component test for AvatarButton — the RN port of
  * src/components/player_game/PlayerGameHeader.js's own-avatar IconButton
- * plus src/pages/PlayerGame.js's handleAvatarChange (Task 15).
+ * plus src/pages/PlayerGame.js's handleAvatarChange (Task 15), reworked so
+ * tapping the small button opens a "Your Photo" preview/edit modal first,
+ * rather than jumping straight into the camera. The modal's own "Take New
+ * Photo" button is what actually drives the capture flow now.
  *
  * Firebase-touching imports are mocked, same pattern as ChatComposer.test.js:
  * 'firebase/firestore' (updateDoc), '../../firebase/firebaseConfig' (auth,
@@ -65,6 +68,13 @@ beforeEach(() => {
 const mountButton = (props = {}) =>
     render(<AvatarButton playerName="Alice" roomID="room-a" {...props} />);
 
+// Opens the "Your Photo" modal and presses its own "Take New Photo" button
+// — the two-step path every capture now goes through.
+const openModalAndTakePhoto = async (buttonLabel) => {
+    await fireEvent.press(screen.getByLabelText(buttonLabel));
+    await fireEvent.press(screen.getByLabelText('Take new photo'));
+};
+
 describe('getInitial', () => {
     it('returns the uppercased first letter of a name', () => {
         expect(getInitial('alice')).toBe('A');
@@ -98,13 +108,48 @@ describe('AvatarButton', () => {
         expect(screen.getByText('A')).toBeTruthy();
     });
 
-    it('uploads a captured selfie and writes avatarUrl onto the player doc', async () => {
-        await mountButton();
+    it('opens a preview modal showing the current photo instead of launching the camera directly', async () => {
+        await mountButton({ avatarUrl: 'https://example.com/existing.jpg' });
+
+        await fireEvent.press(screen.getByLabelText('Change my photo'));
+
+        expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();
+        expect(screen.getByText('Your Photo')).toBeTruthy();
+        // Both the small header button and the modal's own big preview
+        // render "Alice's photo" — this just confirms the modal's copy is
+        // one of them, alongside the existing header one.
+        expect(screen.getAllByLabelText("Alice's photo").length).toBeGreaterThanOrEqual(2);
+        expect(screen.getByLabelText('Take new photo')).toBeTruthy();
+    });
+
+    it('shows the initials fallback in the preview modal when there is no avatar yet', async () => {
+        await mountButton({ avatarUrl: undefined });
 
         await fireEvent.press(screen.getByLabelText('Add my photo'));
 
+        expect(screen.getAllByText('A').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('closes the preview modal when its close button is pressed', async () => {
+        await mountButton({ avatarUrl: undefined });
+
+        await fireEvent.press(screen.getByLabelText('Add my photo'));
+        expect(screen.getByText('Your Photo')).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText('Close your photo'));
+        expect(screen.queryByText('Your Photo')).toBeNull();
+    });
+
+    it('uploads a captured selfie and writes avatarUrl onto the player doc', async () => {
+        await mountButton();
+
+        await openModalAndTakePhoto('Add my photo');
+
         expect(ImagePicker.launchCameraAsync).toHaveBeenCalledWith({
             cameraType: 'front',
+            allowsEditing: true,
+            aspect: [1, 1],
+            shape: 'oval',
         });
         expect(ImageManipulator.manipulateAsync).toHaveBeenCalledWith(
             CAPTURED_URI,
@@ -127,10 +172,18 @@ describe('AvatarButton', () => {
         );
     });
 
+    it('closes the preview modal once the new photo has saved successfully', async () => {
+        await mountButton();
+
+        await openModalAndTakePhoto('Add my photo');
+
+        await waitFor(() => expect(screen.queryByText('Your Photo')).toBeNull());
+    });
+
     it('requests camera permission before launching the camera', async () => {
         await mountButton();
 
-        await fireEvent.press(screen.getByLabelText('Add my photo'));
+        await openModalAndTakePhoto('Add my photo');
 
         expect(ImagePicker.requestCameraPermissionsAsync).toHaveBeenCalled();
         await waitFor(() => expect(ImagePicker.launchCameraAsync).toHaveBeenCalled());
@@ -142,7 +195,7 @@ describe('AvatarButton', () => {
         const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
         await mountButton();
 
-        await fireEvent.press(screen.getByLabelText('Add my photo'));
+        await openModalAndTakePhoto('Add my photo');
 
         expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();
         expect(alertSpy).toHaveBeenCalledWith(
@@ -154,29 +207,55 @@ describe('AvatarButton', () => {
         alertSpy.mockRestore();
     });
 
-    it('does nothing when the camera capture is canceled', async () => {
+    it('does nothing when the camera capture is canceled, and leaves the preview modal open', async () => {
         ImagePicker.launchCameraAsync.mockResolvedValue({ canceled: true, assets: null });
         await mountButton();
 
-        await fireEvent.press(screen.getByLabelText('Add my photo'));
+        await openModalAndTakePhoto('Add my photo');
 
         expect(ImageManipulator.manipulateAsync).not.toHaveBeenCalled();
         expect(storageCalls.uploadPlayerAvatar).not.toHaveBeenCalled();
         expect(updateDoc).not.toHaveBeenCalled();
+        expect(screen.getByText('Your Photo')).toBeTruthy();
     });
 
-    it('alerts and does not write avatarUrl when the upload fails', async () => {
+    it('alerts, does not write avatarUrl, and leaves the preview modal open when the upload fails', async () => {
         const Alert = require('react-native').Alert;
         const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
         storageCalls.uploadPlayerAvatar.mockRejectedValue(new Error('network error'));
         await mountButton();
 
-        await fireEvent.press(screen.getByLabelText('Add my photo'));
+        await openModalAndTakePhoto('Add my photo');
 
         await waitFor(() =>
             expect(alertSpy).toHaveBeenCalledWith('Could not save your photo', 'network error')
         );
         expect(updateDoc).not.toHaveBeenCalled();
+        expect(screen.getByText('Your Photo')).toBeTruthy();
         alertSpy.mockRestore();
+    });
+
+    it('disables Close and shows a spinner in the modal while the new photo is uploading', async () => {
+        let resolveUpload;
+        storageCalls.uploadPlayerAvatar.mockReturnValue(
+            new Promise((resolve) => {
+                resolveUpload = resolve;
+            })
+        );
+        await mountButton();
+
+        await fireEvent.press(screen.getByLabelText('Add my photo'));
+        // Not awaited — uploadPlayerAvatar's promise never resolves until
+        // resolveUpload() below, so awaiting this press would hang on the
+        // same promise this test is trying to observe mid-flight.
+        fireEvent.press(screen.getByLabelText('Take new photo'));
+
+        await waitFor(() => expect(screen.getByTestId('avatar-busy')).toBeTruthy());
+        expect(screen.getByLabelText('Close your photo').props.accessibilityState.disabled).toBe(
+            true
+        );
+
+        resolveUpload('https://example.com/avatar.jpg');
+        await waitFor(() => expect(updateDoc).toHaveBeenCalled());
     });
 });
