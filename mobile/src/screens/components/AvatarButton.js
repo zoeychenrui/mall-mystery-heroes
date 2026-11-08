@@ -15,6 +15,7 @@ import { updateDoc } from 'firebase/firestore';
 import { auth } from '../../firebase/firebaseConfig';
 import * as dbCalls from '../../firebase/dbCalls';
 import * as storageCalls from '../../firebase/storageCalls';
+import AvatarCropModal from './AvatarCropModal';
 
 // Same MAX_DIMENSION/JPEG_QUALITY values as ChatComposer.js's own capture
 // flow (Task 10), which mirrors the web's src/utils/compressImage.js —
@@ -130,61 +131,77 @@ const AvatarPhotoModal = ({
 const AvatarButton = ({ playerName, roomID, avatarUrl, size = 40, canEdit = true }) => {
     const [busy, setBusy] = useState(false);
     const [isPhotoOpen, setIsPhotoOpen] = useState(false);
+    // The just-captured { uri, width, height }, awaiting the crop step
+    // below — null the rest of the time. AvatarCropModal and
+    // AvatarPhotoModal are deliberately never both open at once (see
+    // captureAndOpenCrop/handleRetake/handleCancelCrop): a real device
+    // showed that presenting a second native Modal on iOS while one is
+    // already open can silently fail to appear at all (the same bug
+    // already fixed once for the Mystery Box reveal).
+    const [pendingAsset, setPendingAsset] = useState(null);
 
-    const handleTakePhoto = async () => {
+    // Shared by the initial "Take New Photo" press and by Retake from the
+    // crop screen — both just want a fresh capture to crop.
+    const captureAndOpenCrop = async () => {
+        // launchCameraAsync only checks whether camera permission has
+        // already been granted — if it hasn't, it rejects immediately
+        // without ever showing iOS's native permission dialog (confirmed
+        // from expo-image-picker's own native iOS source,
+        // ImagePickerModule.swift's launchCameraAsync: it guards on
+        // `hasGrantedPermission` and never calls anything that prompts).
+        // requestCameraPermissionsAsync is the function that actually
+        // shows that dialog the first time, and safely returns the
+        // already-decided status on every call after that (it never
+        // re-prompts once the user has answered), so there's no need to
+        // cache the result ourselves — calling it unconditionally here
+        // is as cheap as checking a cached flag would be.
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert(
+                'Camera access needed',
+                'Camera access is needed to take a photo. Enable it in Settings and try again.'
+            );
+            return;
+        }
+        // No allowsEditing here — expo-image-picker's own native crop
+        // screen can only ever show a square on iOS (a hard
+        // UIImagePickerController limitation, not something its options
+        // can override), so AvatarCropModal stands in with an actual
+        // circular guide instead, matching how the photo will really look.
+        const result = await ImagePicker.launchCameraAsync({
+            cameraType: ImagePicker.CameraType.front,
+        });
+        if (result.canceled || !result.assets?.length) return;
+        setIsPhotoOpen(false);
+        setPendingAsset(result.assets[0]);
+    };
+
+    const handleRetake = () => {
+        setPendingAsset(null);
+        captureAndOpenCrop();
+    };
+
+    const handleCancelCrop = () => {
+        setPendingAsset(null);
+        setIsPhotoOpen(true);
+    };
+
+    const handleUseCroppedPhoto = async (cropRect) => {
+        const asset = pendingAsset;
+        setPendingAsset(null);
+        setIsPhotoOpen(true);
+        setBusy(true);
         try {
-            // launchCameraAsync only checks whether camera permission has
-            // already been granted — if it hasn't, it rejects immediately
-            // without ever showing iOS's native permission dialog (confirmed
-            // from expo-image-picker's own native iOS source,
-            // ImagePickerModule.swift's launchCameraAsync: it guards on
-            // `hasGrantedPermission` and never calls anything that prompts).
-            // requestCameraPermissionsAsync is the function that actually
-            // shows that dialog the first time, and safely returns the
-            // already-decided status on every call after that (it never
-            // re-prompts once the user has answered), so there's no need to
-            // cache the result ourselves — calling it unconditionally here
-            // is as cheap as checking a cached flag would be.
-            const { status } = await ImagePicker.requestCameraPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert(
-                    'Camera access needed',
-                    'Camera access is needed to take a photo. Enable it in Settings and try again.'
-                );
-                return;
-            }
-            // allowsEditing turns on expo-image-picker's own native
-            // crop/pan-zoom screen right after capture, so the player can
-            // position their face within the frame before it's used —
-            // bug report: "you should be able to arrange it to fit the
-            // face into the circle." On iOS the crop rectangle is always
-            // a square regardless of `aspect` (confirmed in
-            // expo-image-picker's own type docs) — close enough to the
-            // circular AvatarCircle this ends up displayed in. aspect/
-            // shape are Android-only, and get it an actual circular ('oval')
-            // crop overlay there.
-            const result = await ImagePicker.launchCameraAsync({
-                cameraType: ImagePicker.CameraType.front,
-                allowsEditing: true,
-                aspect: [1, 1],
-                shape: 'oval',
-            });
-            if (result.canceled || !result.assets?.length) return;
-            const asset = result.assets[0];
-            setBusy(true);
-            // Same portrait-aware cap as ChatComposer.js's handleCameraPress:
-            // the longer side is capped, not width alone.
-            const scale = Math.min(1, MAX_DIMENSION / Math.max(asset.width, asset.height));
+            // The crop is already square by construction (computeCropRect
+            // always returns width === height) — only a cap on the long
+            // side is needed now, not the portrait-aware math
+            // ChatComposer.js's own capture flow (Task 10) needs for an
+            // uncropped photo.
+            const scale = Math.min(1, MAX_DIMENSION / cropRect.width);
+            const targetSize = Math.round(cropRect.width * scale);
             const manipulated = await ImageManipulator.manipulateAsync(
                 asset.uri,
-                [
-                    {
-                        resize: {
-                            width: Math.round(asset.width * scale),
-                            height: Math.round(asset.height * scale),
-                        },
-                    },
-                ],
+                [{ crop: cropRect }, { resize: { width: targetSize, height: targetSize } }],
                 { compress: JPEG_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
             );
             const blob = await (await fetch(manipulated.uri)).blob();
@@ -219,9 +236,15 @@ const AvatarButton = ({ playerName, roomID, avatarUrl, size = 40, canEdit = true
                 onClose={() => setIsPhotoOpen(false)}
                 playerName={playerName}
                 avatarUrl={avatarUrl}
-                onTakePhoto={handleTakePhoto}
+                onTakePhoto={captureAndOpenCrop}
                 busy={busy}
                 canEdit={canEdit}
+            />
+            <AvatarCropModal
+                asset={pendingAsset}
+                onUsePhoto={handleUseCroppedPhoto}
+                onRetake={handleRetake}
+                onCancel={handleCancelCrop}
             />
         </>
     );
