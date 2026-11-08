@@ -58,13 +58,26 @@ export const AvatarCircle = ({ uri, name, size = 40 }) => (
 // just blast into the camera with no preview, which felt like it came
 // out of nowhere). `busy` swaps the photo for a spinner while a newly
 // taken one is uploading; Close is disabled for that same stretch so the
-// modal can't be dismissed mid-upload.
-const AvatarPhotoModal = ({ isOpen, onClose, playerName, avatarUrl, onTakePhoto, busy }) => (
+// modal can't be dismissed mid-upload. `canEdit` is false once the game
+// has started — the GM reviews every photo before then, so letting a
+// player swap theirs out afterward would undo that review. Still opens
+// to a read-only preview rather than refusing outright, with a line
+// explaining why "Take New Photo" isn't there instead of just not
+// showing it with no explanation.
+const AvatarPhotoModal = ({
+    isOpen,
+    onClose,
+    playerName,
+    avatarUrl,
+    onTakePhoto,
+    busy,
+    canEdit,
+}) => (
     <Modal visible={isOpen} onRequestClose={onClose} transparent animationType="fade">
         <View style={styles.overlay}>
             <View style={styles.content}>
                 <View style={styles.header}>
-                    <Text style={styles.title}>Your Photo</Text>
+                    <Text style={styles.title}>{playerName}</Text>
                     <Pressable
                         accessibilityRole="button"
                         accessibilityLabel="Close your photo"
@@ -82,15 +95,21 @@ const AvatarPhotoModal = ({ isOpen, onClose, playerName, avatarUrl, onTakePhoto,
                 ) : (
                     <AvatarCircle uri={avatarUrl} name={playerName} size={160} />
                 )}
-                <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Take new photo"
-                    onPress={onTakePhoto}
-                    disabled={busy}
-                    style={[styles.takePhotoButton, busy && styles.takePhotoButtonDisabled]}
-                >
-                    <Text style={styles.takePhotoButtonText}>Take New Photo</Text>
-                </Pressable>
+                {canEdit ? (
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Take new photo"
+                        onPress={onTakePhoto}
+                        disabled={busy}
+                        style={[styles.takePhotoButton, busy && styles.takePhotoButtonDisabled]}
+                    >
+                        <Text style={styles.takePhotoButtonText}>Take New Photo</Text>
+                    </Pressable>
+                ) : (
+                    <Text style={styles.editLockedText}>
+                        Your photo can&apos;t be changed once the game has started.
+                    </Text>
+                )}
             </View>
         </View>
     </Modal>
@@ -108,7 +127,7 @@ const AvatarPhotoModal = ({ isOpen, onClose, playerName, avatarUrl, onTakePhoto,
 // as the web — `updateDoc` is called directly against
 // `dbCalls.fetchPlayerReferenceForRoom(playerName, roomID)`, which the
 // existing firestore.rules clause already permits.
-const AvatarButton = ({ playerName, roomID, avatarUrl, size = 40 }) => {
+const AvatarButton = ({ playerName, roomID, avatarUrl, size = 40, canEdit = true }) => {
     const [busy, setBusy] = useState(false);
     const [isPhotoOpen, setIsPhotoOpen] = useState(false);
 
@@ -202,6 +221,7 @@ const AvatarButton = ({ playerName, roomID, avatarUrl, size = 40 }) => {
                 avatarUrl={avatarUrl}
                 onTakePhoto={handleTakePhoto}
                 busy={busy}
+                canEdit={canEdit}
             />
         </>
     );
@@ -271,6 +291,11 @@ const styles = StyleSheet.create({
     takePhotoButtonText: {
         color: '#FFFFFF',
         fontWeight: 'bold',
+    },
+    editLockedText: {
+        color: '#A0AEC0', // gray.400
+        textAlign: 'center',
+        maxWidth: 220,
     },
 });
 

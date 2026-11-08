@@ -2,9 +2,11 @@
  * Component test for AvatarButton — the RN port of
  * src/components/player_game/PlayerGameHeader.js's own-avatar IconButton
  * plus src/pages/PlayerGame.js's handleAvatarChange (Task 15), reworked so
- * tapping the small button opens a "Your Photo" preview/edit modal first,
- * rather than jumping straight into the camera. The modal's own "Take New
- * Photo" button is what actually drives the capture flow now.
+ * tapping the small button opens a preview/edit modal (titled with the
+ * player's own in-game name) first, rather than jumping straight into the
+ * camera. The modal's own "Take New Photo" button is what actually drives
+ * the capture flow now — hidden once `canEdit` is false (the GM reviews
+ * every photo before the game starts, so editing stops once it has).
  *
  * Firebase-touching imports are mocked, same pattern as ChatComposer.test.js:
  * 'firebase/firestore' (updateDoc), '../../firebase/firebaseConfig' (auth,
@@ -68,8 +70,8 @@ beforeEach(() => {
 const mountButton = (props = {}) =>
     render(<AvatarButton playerName="Alice" roomID="room-a" {...props} />);
 
-// Opens the "Your Photo" modal and presses its own "Take New Photo" button
-// — the two-step path every capture now goes through.
+// Opens the preview modal and presses its own "Take New Photo" button —
+// the two-step path every capture now goes through.
 const openModalAndTakePhoto = async (buttonLabel) => {
     await fireEvent.press(screen.getByLabelText(buttonLabel));
     await fireEvent.press(screen.getByLabelText('Take new photo'));
@@ -114,7 +116,7 @@ describe('AvatarButton', () => {
         await fireEvent.press(screen.getByLabelText('Change my photo'));
 
         expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();
-        expect(screen.getByText('Your Photo')).toBeTruthy();
+        expect(screen.getByText('Alice')).toBeTruthy();
         // Both the small header button and the modal's own big preview
         // render "Alice's photo" — this just confirms the modal's copy is
         // one of them, alongside the existing header one.
@@ -134,10 +136,10 @@ describe('AvatarButton', () => {
         await mountButton({ avatarUrl: undefined });
 
         await fireEvent.press(screen.getByLabelText('Add my photo'));
-        expect(screen.getByText('Your Photo')).toBeTruthy();
+        expect(screen.getByText('Alice')).toBeTruthy();
 
         await fireEvent.press(screen.getByLabelText('Close your photo'));
-        expect(screen.queryByText('Your Photo')).toBeNull();
+        expect(screen.queryByText('Alice')).toBeNull();
     });
 
     it('uploads a captured selfie and writes avatarUrl onto the player doc', async () => {
@@ -177,7 +179,7 @@ describe('AvatarButton', () => {
 
         await openModalAndTakePhoto('Add my photo');
 
-        await waitFor(() => expect(screen.queryByText('Your Photo')).toBeNull());
+        await waitFor(() => expect(screen.queryByText('Alice')).toBeNull());
     });
 
     it('requests camera permission before launching the camera', async () => {
@@ -216,7 +218,7 @@ describe('AvatarButton', () => {
         expect(ImageManipulator.manipulateAsync).not.toHaveBeenCalled();
         expect(storageCalls.uploadPlayerAvatar).not.toHaveBeenCalled();
         expect(updateDoc).not.toHaveBeenCalled();
-        expect(screen.getByText('Your Photo')).toBeTruthy();
+        expect(screen.getByText('Alice')).toBeTruthy();
     });
 
     it('alerts, does not write avatarUrl, and leaves the preview modal open when the upload fails', async () => {
@@ -231,7 +233,7 @@ describe('AvatarButton', () => {
             expect(alertSpy).toHaveBeenCalledWith('Could not save your photo', 'network error')
         );
         expect(updateDoc).not.toHaveBeenCalled();
-        expect(screen.getByText('Your Photo')).toBeTruthy();
+        expect(screen.getByText('Alice')).toBeTruthy();
         alertSpy.mockRestore();
     });
 
@@ -257,5 +259,25 @@ describe('AvatarButton', () => {
 
         resolveUpload('https://example.com/avatar.jpg');
         await waitFor(() => expect(updateDoc).toHaveBeenCalled());
+    });
+
+    it('still opens a read-only preview when canEdit is false, but hides Take New Photo', async () => {
+        await mountButton({ avatarUrl: 'https://example.com/existing.jpg', canEdit: false });
+
+        await fireEvent.press(screen.getByLabelText('Change my photo'));
+
+        expect(screen.getByText('Alice')).toBeTruthy();
+        expect(screen.queryByLabelText('Take new photo')).toBeNull();
+        expect(
+            screen.getByText("Your photo can't be changed once the game has started.")
+        ).toBeTruthy();
+    });
+
+    it('defaults to editable when canEdit is not passed', async () => {
+        await mountButton();
+
+        await fireEvent.press(screen.getByLabelText('Add my photo'));
+
+        expect(screen.getByLabelText('Take new photo')).toBeTruthy();
     });
 });
