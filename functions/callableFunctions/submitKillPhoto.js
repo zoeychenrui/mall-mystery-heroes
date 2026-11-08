@@ -175,11 +175,22 @@ exports.submitKillPhoto = functions.https.onCall(async (data, context) => {
             }
         }
 
-        const rateLimits = assassinData.rateLimits || {};
-        const currentWindow = rateLimits.photo
+        // Stored in rooms/{roomId}/photoRateLimits/{uid}, not on the player
+        // doc: every player and the GM listen to the roster
+        // (fetchPlayersQueryByDescendPointsThenIsAliveForRoom), so a counter
+        // on the player doc re-delivers to all of them on every photo
+        // submission for a field nobody's UI reads — the same
+        // read-amplification bug fixed on reportPlayerLocation.js's rate
+        // limit, and the same dedicated-collection pattern
+        // purchasePowerUp.js's powerUpRateLimits already uses. Nothing
+        // listens to this doc, and firestore.rules has no match for it, so
+        // clients can't read or write it.
+        const limitRef = roomRef.collection('photoRateLimits').doc(context.auth.uid);
+        const limitSnapshot = await transaction.get(limitRef);
+        const currentWindow = limitSnapshot.exists
             ? {
-                  windowStartMs: rateLimits.photo.windowStart.toMillis(),
-                  count: rateLimits.photo.count,
+                  windowStartMs: limitSnapshot.data().windowStart.toMillis(),
+                  count: limitSnapshot.data().count,
               }
             : null;
         const nextWindow = nextRateLimitWindow(currentWindow, Date.now(), PHOTO_RATE_LIMIT);
@@ -192,14 +203,9 @@ exports.submitKillPhoto = functions.https.onCall(async (data, context) => {
 
         // --- write phase ---
 
-        transaction.update(assassinDoc.ref, {
-            rateLimits: {
-                ...rateLimits,
-                photo: {
-                    windowStart: Timestamp.fromMillis(nextWindow.windowStartMs),
-                    count: nextWindow.count,
-                },
-            },
+        transaction.set(limitRef, {
+            windowStart: Timestamp.fromMillis(nextWindow.windowStartMs),
+            count: nextWindow.count,
         });
 
         transaction.create(roomRef.collection('photos').doc(), {

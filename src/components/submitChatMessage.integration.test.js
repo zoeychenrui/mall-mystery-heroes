@@ -5,20 +5,28 @@
  * executeKill.integration.test.js.
  */
 import { httpsCallable } from 'firebase/functions';
-import { terminate, getDocs, Timestamp } from 'firebase/firestore';
+import { doc, setDoc, terminate, getDocs, Timestamp } from 'firebase/firestore';
 import { fetchPlayerMessagesQueryForRoom } from './firebase_calls/dbCalls';
 import {
     callableAsNonHost,
     clearFirestore,
     createIndependentIdentity,
+    createRulesBypassDb,
     seedRoom,
     shutdown,
 } from '../../test/emulatorHelpers';
 
 const ROOM = 'test-room';
 
+let bypass;
+beforeAll(() => {
+    bypass = createRulesBypassDb();
+});
 beforeEach(clearFirestore);
-afterAll(shutdown);
+afterAll(async () => {
+    await terminate(bypass);
+    await shutdown();
+});
 
 describe('submitChatMessage', () => {
     it("writes the message with the caller's own real name as sender, never a client-supplied one", async () => {
@@ -162,18 +170,15 @@ describe('submitChatMessage', () => {
     it('allows a message again once the window has elapsed, even if the cap was reached', async () => {
         const alice = await createIndependentIdentity();
         try {
-            await seedRoom(ROOM, [
-                {
-                    name: 'alice',
-                    uid: alice.uid,
-                    rateLimits: {
-                        chat: {
-                            windowStart: Timestamp.fromMillis(Date.now() - 61000),
-                            count: 20,
-                        },
-                    },
-                },
-            ]);
+            await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }]);
+            // Stored on rooms/{roomId}/chatRateLimits/{uid}, a collection
+            // firestore.rules has no match for — seeded via the rules-bypass
+            // instance, same as purchasePowerUpCallable.integration.test.js
+            // seeds powerUpRateLimits.
+            await setDoc(doc(bypass, 'rooms', ROOM, 'chatRateLimits', alice.uid), {
+                windowStart: Timestamp.fromMillis(Date.now() - 61000),
+                count: 20,
+            });
             const call = httpsCallable(alice.functions, 'submitChatMessage');
 
             await expect(call({ roomId: ROOM, text: 'hi again' })).resolves.toBeDefined();

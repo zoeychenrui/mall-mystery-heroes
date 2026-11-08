@@ -18,7 +18,7 @@
  * for those test scenarios.
  */
 import { httpsCallable } from 'firebase/functions';
-import { terminate, getDocs, Timestamp } from 'firebase/firestore';
+import { doc, setDoc, terminate, getDocs, Timestamp } from 'firebase/firestore';
 import {
     fetchPhotosQueryByAscendingTimestampForRoom,
     fetchPlayerMessagesQueryForRoom,
@@ -27,6 +27,7 @@ import {
     callableAsNonHost,
     clearFirestore,
     createIndependentIdentity,
+    createRulesBypassDb,
     seedRoom,
     shutdown,
 } from '../../test/emulatorHelpers';
@@ -35,8 +36,15 @@ const ROOM = 'test-room';
 const REALISTIC_URL =
     'https://firebasestorage.googleapis.com/v0/b/mall-mystery-heroes.firebasestorage.app/o/rooms%2Ftest-room%2Fphotos%2Fabc123.jpg?alt=media&token=fake-token';
 
+let bypass;
+beforeAll(() => {
+    bypass = createRulesBypassDb();
+});
 beforeEach(clearFirestore);
-afterAll(shutdown);
+afterAll(async () => {
+    await terminate(bypass);
+    await shutdown();
+});
 
 describe('submitKillPhoto', () => {
     it("writes the photo with the caller's own real name as assassin, never a client-supplied one, carrying their claimed target", async () => {
@@ -253,19 +261,15 @@ describe('submitKillPhoto', () => {
     it('allows a submission again once the window has elapsed, even if the cap was reached', async () => {
         const alice = await createIndependentIdentity();
         try {
-            await seedRoom(ROOM, [
-                {
-                    name: 'alice',
-                    uid: alice.uid,
-                    rateLimits: {
-                        photo: {
-                            windowStart: Timestamp.fromMillis(Date.now() - 61000),
-                            count: 10,
-                        },
-                    },
-                },
-                { name: 'bob' },
-            ]);
+            await seedRoom(ROOM, [{ name: 'alice', uid: alice.uid }, { name: 'bob' }]);
+            // Stored on rooms/{roomId}/photoRateLimits/{uid}, a collection
+            // firestore.rules has no match for — seeded via the rules-bypass
+            // instance, same as purchasePowerUpCallable.integration.test.js
+            // seeds powerUpRateLimits.
+            await setDoc(doc(bypass, 'rooms', ROOM, 'photoRateLimits', alice.uid), {
+                windowStart: Timestamp.fromMillis(Date.now() - 61000),
+                count: 10,
+            });
             const call = httpsCallable(alice.functions, 'submitKillPhoto');
 
             await expect(

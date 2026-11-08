@@ -16,44 +16,61 @@ no backend of our own — see [Cloud Functions](#cloud-functions) below.
 ```
 ┌─────────────────────┐         ┌──────────────────────────────┐
 │  GM console         │────────▶│  Firebase                    │
-│  (this repo)        │         │                              │
-│  React SPA          │◀────────│  · Auth (email/password)     │
+│  (this repo,        │         │                              │
+│   src/)             │◀────────│  · Auth (email/password,     │
+│  React SPA          │         │    Google, anonymous)        │
 └─────────────────────┘         │  · Firestore  (game state)   │
-                                │  · Storage    (kill photos)  │
-┌─────────────────────┐         │  · Functions  (stub only)    │
-│  Player mobile app  │────────▶│                              │
-│  (aspirational —    │         └──────────────────────────────┘
-│   does not exist)   │
+                                │  · Storage    (kill photos,  │
+┌─────────────────────┐         │    avatars)                  │
+│  Player mobile app  │────────▶│  · Functions  (19 callables, │
+│  (this repo,        │         │    1 scheduled)              │
+│   mobile/)          │◀────────│                              │
+│  React Native/Expo  │         └──────────────────────────────┘
 └─────────────────────┘
 ```
 
-Two collaborators are referenced by this codebase's shape but neither is
-versioned here, so neither is documented beyond what follows — treat both as
-unknowns when changing the `photos` schema or the room document shape:
+The player mobile app is a React Native (Expo) client in `mobile/` —
+a second top-level project in this same repo, alongside `src/`,
+`functions/`, and `docs/`, with its own `package.json`. It is the full
+native replacement for the player-facing half of the web app
+(`src/pages/PlayerGame.js`, `JoinGame.js`, `ReconnectPending.js`, and
+everything under `src/components/player_messages_components/`,
+`shop_components/`, `task_components/`, `game_end_components/`, and
+`map_components/` that those pages use): join, waiting room, auto-resume
+on relaunch, target display, group chat (including GM broadcasts/
+whispers), kill/mission/"just for fun" photo submission, live
+boundary/location status and a native map, missions, leaderboard, the
+power-up shop, player avatars, a Game Rules modal, and leave-game — see
+`docs/superpowers/specs/2026-11-05-react-native-player-app-design.md`
+for the full design. It calls the exact same Cloud Functions
+(`joinRoom`, `submitKillPhoto`, `submitChatMessage`, `purchasePowerUp`,
+etc.) and reads/writes the exact same Firestore collections the web
+player experience does — no schema, rules, or function changed to
+support it. `mobile/src/firebase/dbCalls.js` is its own data-access
+seam, the same role `src/components/firebase_calls/dbCalls.js` plays
+for the web app, and it imports `src/game/`'s pure rule modules
+directly (via a Metro `watchFolders` config pointed at the repo root,
+not a copy) rather than re-deriving any game logic. The GM console
+itself (`DashBoard.js`, `Lobby.js`, `GameMasterView.js`, `Login.js`/
+`SignUp.js`) stays web-only; this is the player side only, and the
+player web experience (`PlayerGame.js` et al.) stays live as a fallback
+alongside it, not retired.
 
-- **A player-facing mobile app — does not currently exist, anywhere**
-  ([improvements.md](./improvements.md) item 33). It is never referenced in
-  code, but its existence is implied by two collections prepped for it, in
-  opposite directions: `photos` is designed to be _read_ by such an app but
-  is never _written_ by anything in this repository — nothing in
-  `dbCalls.js` writes a photo document (the test helper that once did was
-  dead code, deleted per item 14). `playerMessages`
-  (docs/superpowers/specs/2026-08-06-player-messaging-mobile-prep-design.md)
-  is the mirror case: written by `/whisper`, `/broadcast`, and
-  `/leaderboard`, and now read by `MessageFeed` (`src/components/player_messages_components/MessageFeed.js`)
-  via `fetchPlayerMessagesQueryForRoom`, filtered client-side to broadcasts/leaderboard sends and
-  whispers addressed to the subscribing player.
-  `firestore.rules` scopes both collections to the host rather than to a
-  distinct mobile-app identity, for the same reason (item 2). Until this
-  app exists, kill-proof photos have no way to enter Firestore except
-  manual/emulator seeding.
+`photos` and `playerMessages` are no longer unknowns: both now have a
+real reader and writer on the mobile side as well as the web side (see
+each collection's entry in [data-model.md](./data-model.md)), not just
+collections shaped in anticipation of a client that didn't exist yet.
+
+One collaborator remains undocumented beyond a caveat, since it isn't
+versioned in this repository:
+
 - **Something Discord-related — no longer present.** `.env` used to carry a
   `DISCORD_TOKEN` that no code in this repository ever read. It was
   previously guessed to be the real integration point for `/broadcast`,
   `/leaderboard`, and `/whisper`, on no more evidence than the stray env
   var — that guess is now moot on two counts: those three commands are
-  implemented and target the `playerMessages` collection / a future mobile
-  app instead
+  implemented and target the `playerMessages` collection, read by the
+  web and mobile player apps described above, instead
   (docs/superpowers/specs/2026-08-06-player-messaging-mobile-prep-design.md),
   and the token itself is gone from `.env` as of this writing. Whatever it
   was for, if anything, is no longer this codebase's concern.
@@ -416,8 +433,11 @@ Gaps that remain, per [improvements.md](./improvements.md):
   validation, which moved to `src/game/killPhotoUrl.js`'s
   `isValidKillPhotoUrl` (`improvements.md` item 60). It also hardcodes
   `status`/`originalPlayerData`, requires the room to still be active, and
-  applies a rolling per-player rate limit (10 per 60s) recorded in the
-  player doc's `rateLimits` field. `src/components/submitKillPhoto.js` is
+  applies a rolling per-player rate limit (10 per 60s) recorded in
+  `photoRateLimits` (see data-model.md) — not the player doc, which is
+  watched by every player's and the GM's roster listener, and would
+  re-deliver to all of them on every submission for nothing the UI shows.
+  `src/components/submitKillPhoto.js` is
   its thin `httpsCallable` wrapper, called from `MessageComposer.js` after
   the Storage upload.
 - `purchasePowerUp` and `claimMysteryReward`
@@ -448,7 +468,9 @@ Gaps that remain, per [improvements.md](./improvements.md):
   player-facing `playerMessages` `allow create` grant, both deleted. Also
   validates `text` is a string of at most 500 characters
   (`improvements.md` item 57), requires the room to still be active, and
-  rate-limits to 20 messages per 60s. `src/components/submitChatMessage.js`
+  rate-limits to 20 messages per 60s, recorded in `chatRateLimits` (see
+  data-model.md) for the same roster-fan-out reason as `submitKillPhoto`'s
+  `photoRateLimits` above. `src/components/submitChatMessage.js`
   is its thin `httpsCallable` wrapper, called from `MessageComposer.js`.
   GM-originated `playerMessages` writes (broadcast, whisper, leaderboard,
   mission) are untouched — they still go through
@@ -473,7 +495,10 @@ Gaps that remain, per [improvements.md](./improvements.md):
   error in place of a fix. The function looks up the caller's player document
   by `uid`, rejects a report whose `boundaryRevision` is not the room's
   current one, rejects stale or reordered sample times, and rate-limits
-  reports through `rateLimits.boundaryReport` on the player document. It
+  reports through `rateLimit` on the `boundaryStatuses` document, not the
+  player document — the player document is watched by every player's and
+  the GM's roster listener, and a field changing on every 5-15s report
+  would re-deliver to all of them for nothing the UI shows. It
   evaluates the fix against the boundary on the server, so the device's
   coordinates never reach a stored document: only the resulting status is
   written, to `boundaryStatuses/{playerId}`, along with a `boundaryEvents`

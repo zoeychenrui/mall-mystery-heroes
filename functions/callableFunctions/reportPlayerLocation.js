@@ -126,11 +126,26 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
             throw new functions.https.HttpsError('failed-precondition', 'revision_conflict');
         }
 
-        const rateLimits = playerData.rateLimits || {};
-        const currentWindow = rateLimits.boundaryReport
+        const statusRef = roomRef.collection('boundaryStatuses').doc(playerDoc.id);
+        const statusSnapshot = await transaction.get(statusRef);
+        const storedData = statusSnapshot.exists ? statusSnapshot.data() : null;
+
+        // Stored on boundaryStatuses, not on the player doc: the player doc
+        // is watched by every player's own roster listener plus the GM's
+        // (fetchPlayersQueryByDescendPointsThenIsAliveForRoom), so a write
+        // there re-delivers to all of them. This field changes on every
+        // report (every 5-15s per player) and nobody's UI reads it, so
+        // writing it there was pure Firestore read amplification —
+        // O(reports × listeners) reads for zero user-visible benefit. This
+        // doc has no such broad audience (own-status, the GM's live map
+        // when open, and the narrow "outside" query all watch far fewer
+        // documents, and none of them re-fan-out the way the roster query
+        // does).
+        const rateLimit = storedData?.rateLimit || null;
+        const currentWindow = rateLimit
             ? {
-                  windowStartMs: rateLimits.boundaryReport.windowStart.toMillis(),
-                  count: rateLimits.boundaryReport.count,
+                  windowStartMs: rateLimit.windowStart.toMillis(),
+                  count: rateLimit.count,
               }
             : null;
         const nextWindow = nextRateLimitWindow(currentWindow, receivedMs, reportRateLimit);
@@ -140,10 +155,6 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
                 'Too many location reports — slow down and try again in a moment.'
             );
         }
-
-        const statusRef = roomRef.collection('boundaryStatuses').doc(playerDoc.id);
-        const statusSnapshot = await transaction.get(statusRef);
-        const storedData = statusSnapshot.exists ? statusSnapshot.data() : null;
         // Read the stored run whole. A revision change does not discard it
         // here — stateAfterBoundaryRevision decides that once this report
         // has been classified against the new ring. lastSampleMs is what
@@ -167,15 +178,6 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
         // unavailable/clock_skew without touching lastSampleAt or evaluating
         // the fix, and compared against nothing for ordering.
         if (isClockSkewed) {
-            transaction.update(playerDoc.ref, {
-                rateLimits: {
-                    ...rateLimits,
-                    boundaryReport: {
-                        windowStart: Timestamp.fromMillis(nextWindow.windowStartMs),
-                        count: nextWindow.count,
-                    },
-                },
-            });
             transaction.set(
                 statusRef,
                 {
@@ -185,6 +187,10 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
                     lng: prevLng,
                     boundaryRevision,
                     lastSampleAt: toTimestamp(stored.lastSampleMs),
+                    rateLimit: {
+                        windowStart: Timestamp.fromMillis(nextWindow.windowStartMs),
+                        count: nextWindow.count,
+                    },
                 },
                 { merge: true }
             );
@@ -228,16 +234,6 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
             ? FieldValue.serverTimestamp()
             : statusSnapshot.data().statusChangedAt;
 
-        transaction.update(playerDoc.ref, {
-            rateLimits: {
-                ...rateLimits,
-                boundaryReport: {
-                    windowStart: Timestamp.fromMillis(nextWindow.windowStartMs),
-                    count: nextWindow.count,
-                },
-            },
-        });
-
         transaction.set(statusRef, {
             status: next.status,
             reason: next.reason,
@@ -254,6 +250,10 @@ exports.reportPlayerLocation = functions.https.onCall(async (data, context) => {
             outsideSampleCount: next.outsideSampleCount,
             outsideConfirmedAt: toTimestamp(next.outsideConfirmedAt),
             statusChangedAt,
+            rateLimit: {
+                windowStart: Timestamp.fromMillis(nextWindow.windowStartMs),
+                count: nextWindow.count,
+            },
         });
 
         // Events fire on the confirmation edge, not on status: an error report

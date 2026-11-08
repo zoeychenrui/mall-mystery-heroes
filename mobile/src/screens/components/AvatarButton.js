@@ -1,0 +1,409 @@
+import { useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    Modal,
+    Pressable,
+    StyleSheet,
+    Switch,
+    Text,
+    View,
+} from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { updateDoc } from 'firebase/firestore';
+import { auth } from '../../firebase/firebaseConfig';
+import * as dbCalls from '../../firebase/dbCalls';
+import * as storageCalls from '../../firebase/storageCalls';
+import AvatarCropModal from './AvatarCropModal';
+
+// Same MAX_DIMENSION/JPEG_QUALITY values as ChatComposer.js's own capture
+// flow (Task 10), which mirrors the web's src/utils/compressImage.js —
+// mirrored here rather than imported from ChatComposer.js: that module
+// eagerly builds its Cloud Functions callables at import time (callables.js),
+// which would drag a second, unrelated Firebase surface into every test of
+// this component just to reach two numeric constants.
+const MAX_DIMENSION = 1600;
+const JPEG_QUALITY = 0.8;
+
+// RN has no equivalent of Chakra's `Avatar` `name`-initials fallback —
+// render the first letter of the name manually wherever a photo is absent.
+// Exported so GameScreen.js's target list (Task 15) renders the same
+// fallback for each target's avatar.
+export const getInitial = (name) => {
+    const trimmed = (name ?? '').trim();
+    return trimmed ? trimmed.charAt(0).toUpperCase() : '?';
+};
+
+// A circular photo, or an initials fallback when `uri` is absent.
+// Presentational only — AvatarButton below wraps it in a Pressable for the
+// player's own avatar; GameScreen.js's target list (Task 15) wraps it in
+// its own Pressable per target instead of going through AvatarButton.
+// `hasBorder` only ever reflects this specific player's own
+// `avatarBorder` toggle — the target list's own call site doesn't pass
+// it, so another player's border preference has no effect on how their
+// avatar looks to others yet (AvatarButton.js's own comment on
+// handleToggleBorder has the full reasoning).
+export const AvatarCircle = ({ uri, name, size = 40, hasBorder = false }) => (
+    <View
+        style={[
+            styles.circle,
+            { width: size, height: size, borderRadius: size / 2 },
+            hasBorder && styles.circleBordered,
+        ]}
+    >
+        {uri ? (
+            <Image
+                source={{ uri }}
+                accessibilityLabel={name ? `${name}'s photo` : 'Photo'}
+                style={[styles.image, { borderRadius: size / 2 }]}
+            />
+        ) : (
+            <Text style={styles.initial}>{getInitial(name)}</Text>
+        )}
+    </View>
+);
+
+// Shown when the small avatar button is tapped, instead of jumping
+// straight into the camera — lets the player see what they currently
+// have before deciding to replace it (bug report: tapping it used to
+// just blast into the camera with no preview, which felt like it came
+// out of nowhere). `busy` swaps the photo for a spinner while a newly
+// taken one is uploading; Close is disabled for that same stretch so the
+// modal can't be dismissed mid-upload. `canEdit` is false once the game
+// has started — the GM reviews every photo before then, so letting a
+// player swap theirs out afterward would undo that review. Still opens
+// to a read-only preview rather than refusing outright, with a line
+// explaining why "Take New Photo" isn't there instead of just not
+// showing it with no explanation.
+//
+// "Edit Photo" is a separate action from "Take New Photo" — a toggle
+// for a colored border around the avatar, not anything to do with the
+// photo's own content, so it stays available even once canEdit is
+// false (the GM reviews the photo itself before the game starts; a
+// border is cosmetic framing on top of it, not a different photo).
+const AvatarPhotoModal = ({
+    isOpen,
+    onClose,
+    playerName,
+    avatarUrl,
+    hasBorder,
+    onToggleBorder,
+    onTakePhoto,
+    busy,
+    canEdit,
+}) => (
+    <Modal visible={isOpen} onRequestClose={onClose} transparent animationType="fade">
+        <View style={styles.overlay}>
+            <View style={styles.content}>
+                <View style={styles.header}>
+                    <Text style={styles.title}>{playerName}</Text>
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Close your photo"
+                        accessibilityState={{ disabled: busy }}
+                        onPress={onClose}
+                        disabled={busy}
+                    >
+                        <Text style={styles.close}>✕</Text>
+                    </Pressable>
+                </View>
+                {busy ? (
+                    <View style={styles.bigCircle}>
+                        <ActivityIndicator testID="avatar-busy" color="#FFFFFF" />
+                    </View>
+                ) : (
+                    <AvatarCircle
+                        uri={avatarUrl}
+                        name={playerName}
+                        size={160}
+                        hasBorder={hasBorder}
+                    />
+                )}
+                {canEdit ? (
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Take new photo"
+                        onPress={onTakePhoto}
+                        disabled={busy}
+                        style={[styles.takePhotoButton, busy && styles.takePhotoButtonDisabled]}
+                    >
+                        <Text style={styles.takePhotoButtonText}>Take New Photo</Text>
+                    </Pressable>
+                ) : (
+                    <Text style={styles.editLockedText}>
+                        Your photo can&apos;t be changed once the game has started.
+                    </Text>
+                )}
+                <View style={styles.editPhotoRow}>
+                    <Text style={styles.editPhotoLabel}>Edit Photo: Border</Text>
+                    <Switch
+                        accessibilityLabel="Toggle avatar border"
+                        value={hasBorder}
+                        onValueChange={onToggleBorder}
+                        trackColor={{ true: '#285E61' }}
+                        thumbColor="#FFFFFF"
+                    />
+                </View>
+            </View>
+        </View>
+    </Modal>
+);
+
+// RN port of src/components/player_game/PlayerGameHeader.js's own-avatar
+// IconButton plus src/pages/PlayerGame.js's handleAvatarChange. Unlike the
+// web's hidden `<input type="file" capture="user">`, this drives
+// expo-image-picker's front camera directly (CameraType.front, matching
+// capture="user"), then the same expo-image-manipulator resize/compress
+// step Task 10 already introduced for kill photos (ChatComposer.js) — same
+// MAX_DIMENSION/JPEG_QUALITY values, imported from there rather than
+// redefined. The upload (storageCalls.uploadPlayerAvatar) and the player-doc
+// write are both this task's own: there is no Cloud Function involved, same
+// as the web — `updateDoc` is called directly against
+// `dbCalls.fetchPlayerReferenceForRoom(playerName, roomID)`, which the
+// existing firestore.rules clause already permits.
+const AvatarButton = ({
+    playerName,
+    roomID,
+    avatarUrl,
+    size = 40,
+    canEdit = true,
+    hasBorder = false,
+}) => {
+    const [busy, setBusy] = useState(false);
+    const [isPhotoOpen, setIsPhotoOpen] = useState(false);
+    // The just-captured { uri, width, height }, awaiting the crop step
+    // below — null the rest of the time. AvatarCropModal and
+    // AvatarPhotoModal are deliberately never both open at once (see
+    // captureAndOpenCrop/handleRetake/handleCancelCrop): a real device
+    // showed that presenting a second native Modal on iOS while one is
+    // already open can silently fail to appear at all (the same bug
+    // already fixed once for the Mystery Box reveal).
+    const [pendingAsset, setPendingAsset] = useState(null);
+
+    // Shared by the initial "Take New Photo" press and by Retake from the
+    // crop screen — both just want a fresh capture to crop.
+    const captureAndOpenCrop = async () => {
+        // launchCameraAsync only checks whether camera permission has
+        // already been granted — if it hasn't, it rejects immediately
+        // without ever showing iOS's native permission dialog (confirmed
+        // from expo-image-picker's own native iOS source,
+        // ImagePickerModule.swift's launchCameraAsync: it guards on
+        // `hasGrantedPermission` and never calls anything that prompts).
+        // requestCameraPermissionsAsync is the function that actually
+        // shows that dialog the first time, and safely returns the
+        // already-decided status on every call after that (it never
+        // re-prompts once the user has answered), so there's no need to
+        // cache the result ourselves — calling it unconditionally here
+        // is as cheap as checking a cached flag would be.
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert(
+                'Camera access needed',
+                'Camera access is needed to take a photo. Enable it in Settings and try again.'
+            );
+            return;
+        }
+        // No allowsEditing here — expo-image-picker's own native crop
+        // screen can only ever show a square on iOS (a hard
+        // UIImagePickerController limitation, not something its options
+        // can override), so AvatarCropModal stands in with an actual
+        // circular guide instead, matching how the photo will really look.
+        const result = await ImagePicker.launchCameraAsync({
+            cameraType: ImagePicker.CameraType.front,
+        });
+        if (result.canceled || !result.assets?.length) return;
+        setIsPhotoOpen(false);
+        setPendingAsset(result.assets[0]);
+    };
+
+    const handleRetake = () => {
+        setPendingAsset(null);
+        captureAndOpenCrop();
+    };
+
+    const handleCancelCrop = () => {
+        setPendingAsset(null);
+        setIsPhotoOpen(true);
+    };
+
+    // Separate from the photo-capture flow entirely, and not gated on
+    // canEdit — this only ever changes a colored ring drawn on top of
+    // the existing photo, not the photo itself, so it stays available
+    // even once the GM has started reviewing (and finishing) the game.
+    // Only ever applies to this player's own avatar for now: nothing
+    // else in the app reads `avatarBorder` back out yet (not
+    // GameScreen's target list, not any other player's own view of this
+    // player), so another player wouldn't see this border on them.
+    // Extending that is a separate, bigger change (threading a new field
+    // through the players subscription and every place an avatar other
+    // than your own renders), not done here.
+    const handleToggleBorder = async (nextValue) => {
+        try {
+            await updateDoc(dbCalls.fetchPlayerReferenceForRoom(playerName, roomID), {
+                avatarBorder: nextValue,
+            });
+        } catch (error) {
+            console.error('Could not update avatar border:', error);
+            Alert.alert('Could not save your border', error.message || 'Please try again.');
+        }
+    };
+
+    const handleUseCroppedPhoto = async (cropRect) => {
+        const asset = pendingAsset;
+        setPendingAsset(null);
+        setIsPhotoOpen(true);
+        setBusy(true);
+        try {
+            // The crop is already square by construction (computeCropRect
+            // always returns width === height) — only a cap on the long
+            // side is needed now, not the portrait-aware math
+            // ChatComposer.js's own capture flow (Task 10) needs for an
+            // uncropped photo.
+            const scale = Math.min(1, MAX_DIMENSION / cropRect.width);
+            const targetSize = Math.round(cropRect.width * scale);
+            const manipulated = await ImageManipulator.manipulateAsync(
+                asset.uri,
+                [{ crop: cropRect }, { resize: { width: targetSize, height: targetSize } }],
+                { compress: JPEG_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            const blob = await (await fetch(manipulated.uri)).blob();
+            const uploadedUrl = await storageCalls.uploadPlayerAvatar(
+                roomID,
+                auth.currentUser.uid,
+                blob
+            );
+            await updateDoc(dbCalls.fetchPlayerReferenceForRoom(playerName, roomID), {
+                avatarUrl: uploadedUrl,
+            });
+            setIsPhotoOpen(false);
+        } catch (error) {
+            console.error('Could not update avatar:', error);
+            Alert.alert('Could not save your photo', error.message || 'Please try again.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <>
+            <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={avatarUrl ? 'Change my photo' : 'Add my photo'}
+                onPress={() => setIsPhotoOpen(true)}
+            >
+                <AvatarCircle uri={avatarUrl} name={playerName} size={size} hasBorder={hasBorder} />
+            </Pressable>
+            <AvatarPhotoModal
+                isOpen={isPhotoOpen}
+                onClose={() => setIsPhotoOpen(false)}
+                playerName={playerName}
+                avatarUrl={avatarUrl}
+                hasBorder={hasBorder}
+                onToggleBorder={handleToggleBorder}
+                onTakePhoto={captureAndOpenCrop}
+                busy={busy}
+                canEdit={canEdit}
+            />
+            <AvatarCropModal
+                asset={pendingAsset}
+                onUsePhoto={handleUseCroppedPhoto}
+                onRetake={handleRetake}
+                onCancel={handleCancelCrop}
+            />
+        </>
+    );
+};
+
+const styles = StyleSheet.create({
+    circle: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.12)', // whiteAlpha.200-ish
+        overflow: 'hidden',
+    },
+    circleBordered: {
+        borderWidth: 3,
+        borderColor: '#38B2AC', // teal.400, matches the map boundary's own accent stroke
+    },
+    image: {
+        width: '100%',
+        height: '100%',
+    },
+    initial: {
+        color: '#FFFFFF',
+        fontWeight: 'bold',
+    },
+    overlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        justifyContent: 'center',
+        padding: 16,
+    },
+    content: {
+        backgroundColor: '#1A202C', // gray.800
+        borderRadius: 8,
+        padding: 16,
+        alignItems: 'center',
+        gap: 16,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        alignSelf: 'stretch',
+    },
+    title: {
+        color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    close: {
+        color: '#FFFFFF',
+        fontSize: 18,
+        paddingHorizontal: 8,
+    },
+    bigCircle: {
+        width: 160,
+        height: 160,
+        borderRadius: 80,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    },
+    takePhotoButton: {
+        backgroundColor: '#285E61', // teal.700
+        borderRadius: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+    },
+    takePhotoButtonDisabled: {
+        opacity: 0.5,
+    },
+    takePhotoButtonText: {
+        color: '#FFFFFF',
+        fontWeight: 'bold',
+    },
+    editLockedText: {
+        color: '#A0AEC0', // gray.400
+        textAlign: 'center',
+        maxWidth: 220,
+    },
+    editPhotoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        alignSelf: 'stretch',
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255, 255, 255, 0.16)', // whiteAlpha.200
+        paddingTop: 12,
+        marginTop: 4,
+    },
+    editPhotoLabel: {
+        color: '#FFFFFF',
+        fontWeight: '600',
+    },
+});
+
+export default AvatarButton;

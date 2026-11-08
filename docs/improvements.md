@@ -2184,6 +2184,27 @@ different UIs to trigger.
 
 ---
 
+### 69. Ending the game navigates the GM away from the room immediately
+
+**Impact: low · Effort: S**
+
+Found during the React Native player app's manual QA pass (player chat
+is deliberately kept open after the game ends, and that part works
+correctly on mobile). `Endgamebutton.js`'s `onYesEnd` calls
+`navigate('/dashboard')` unconditionally right after `endGame` and the
+game-ended broadcasts succeed — the GM is immediately taken off the
+room's page and loses the ability to keep watching the room (chat,
+photo queue, leaderboard) without manually navigating back in. This is
+a GM-console/web issue, not specific to the mobile app — the mobile
+player app has no equivalent navigate-away behavior for players, who
+correctly stay on the game screen with chat still open.
+
+**Not addressed:** out of scope for the mobile player app plan (zero
+web/GM-console changes in that round). Whether this navigation is
+actually wanted (e.g. the GM is done and should land back on the
+dashboard) or should instead leave the GM on the room's page is a
+product decision, not purely a bug — flagged here rather than fixed.
+
 ## Suggested sequencing
 
 If this backlog gets picked up, the dependencies run roughly:
